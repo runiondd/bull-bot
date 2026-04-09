@@ -1,0 +1,25 @@
+[run]
+branch = True
+source =
+    schemas
+    utils
+    clients
+    agents
+    backtest
+    analysis
+    paper_trading
+    strategies
+omit =
+    tests/*
+    */__init__.py
+    scripts/*
+
+[report]
+precision = 1
+show_missing = True
+skip_covered = False
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
