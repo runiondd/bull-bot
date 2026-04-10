@@ -8,10 +8,14 @@ frozen timestamps, temp SQLite dbs, fake LLM clients, etc.
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
 import uuid
+from collections import deque
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -225,3 +229,107 @@ def tmp_db_path(tmp_path: Path) -> Path:
 def backtest_mode(request) -> ExecMode:
     """Parametrize over cheap and hybrid to catch mode-specific regressions."""
     return request.param
+
+
+# ---------- DB fixtures ----------
+
+
+@pytest.fixture
+def db_conn() -> sqlite3.Connection:
+    """Fresh in-memory SQLite connection with the full schema applied."""
+    from bullbot.db import migrations
+
+    conn = sqlite3.connect(":memory:", isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
+    migrations.apply_schema(conn)
+    yield conn
+    conn.close()
+
+
+# ---------- Fake HTTP client (Unusual Whales) ----------
+
+
+@dataclass
+class FakeUWResponse:
+    status: int = 200
+    body: Any = None
+
+
+class FakeUWClient:
+    """Minimal stub for the UW HTTP client.
+
+    Register a path with a (status, body) pair via ``register``, then
+    call the instance like ``client.get(path)`` — it will return a
+    ``FakeUWResponse`` and append an entry to ``call_log``.
+    """
+
+    def __init__(self) -> None:
+        self._routes: dict[str, FakeUWResponse] = {}
+        self.call_log: list[dict] = []
+
+    def register(self, path: str, status: int = 200, body: Any = None) -> None:
+        self._routes[path] = FakeUWResponse(status=status, body=body)
+
+    def get(self, path: str, **kwargs) -> FakeUWResponse:
+        self.call_log.append({"method": "GET", "path": path, **kwargs})
+        return self._routes.get(path, FakeUWResponse(status=404, body=None))
+
+
+@pytest.fixture
+def fake_uw() -> FakeUWClient:
+    return FakeUWClient()
+
+
+# ---------- Fake Anthropic client ----------
+
+
+class FakeAnthropicClient:
+    """Minimal stub that mimics ``anthropic.Anthropic().messages.create()``."""
+
+    @dataclass
+    class _Usage:
+        input_tokens: int = 0
+        output_tokens: int = 0
+
+    @dataclass
+    class _Content:
+        text: str = ""
+
+    @dataclass
+    class _Response:
+        content: list
+        usage: "FakeAnthropicClient._Usage" = field(
+            default_factory=lambda: FakeAnthropicClient._Usage()
+        )
+        model: str = "claude-test"
+        stop_reason: str = "end_turn"
+
+    def __init__(self) -> None:
+        self._queue: deque[str] = deque()
+        self.call_log: list[dict] = []
+        self.messages = self._Messages(self)
+
+    def queue_response(self, text: str) -> None:
+        self._queue.append(text)
+
+    class _Messages:
+        def __init__(self, parent: "FakeAnthropicClient") -> None:
+            self._parent = parent
+
+        def create(self, **kwargs) -> "FakeAnthropicClient._Response":
+            self._parent.call_log.append(kwargs)
+            text = (
+                self._parent._queue.popleft()
+                if self._parent._queue
+                else ""
+            )
+            return FakeAnthropicClient._Response(
+                content=[FakeAnthropicClient._Content(text=text)],
+                usage=FakeAnthropicClient._Usage(),
+            )
+
+
+@pytest.fixture
+def fake_anthropic() -> FakeAnthropicClient:
+    return FakeAnthropicClient()
