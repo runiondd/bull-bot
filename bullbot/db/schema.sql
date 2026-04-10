@@ -109,38 +109,38 @@ CREATE TABLE IF NOT EXISTS ticker_state (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS orders (
     id              INTEGER PRIMARY KEY,
+    run_id          TEXT    NOT NULL DEFAULT 'live',
     ticker          TEXT    NOT NULL,
     strategy_id     INTEGER REFERENCES strategies (id),
     intent          TEXT    NOT NULL CHECK (intent IN ('open', 'close', 'hedge')),
-    side            TEXT    NOT NULL CHECK (side IN ('buy', 'sell')),
-    qty             REAL    NOT NULL,
-    limit_price     REAL,
-    fill_price      REAL,
+    legs            TEXT,           -- JSON array of leg objects
     status          TEXT    NOT NULL CHECK (status IN ('pending', 'filled', 'cancelled', 'rejected')),
-    submitted_at    INTEGER NOT NULL,
-    filled_at       INTEGER
+    commission      REAL    NOT NULL DEFAULT 0.0,
+    pnl_realized    REAL,
+    placed_at       INTEGER NOT NULL
 ) STRICT;
 
-CREATE INDEX IF NOT EXISTS idx_orders_ticker_status ON orders (ticker, status, submitted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_run_id ON orders (run_id, ticker, placed_at DESC);
 
 -- ---------------------------------------------------------------------------
 -- positions: open and closed paper positions
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS positions (
     id              INTEGER PRIMARY KEY,
+    run_id          TEXT    NOT NULL DEFAULT 'live',
     ticker          TEXT    NOT NULL,
     strategy_id     INTEGER REFERENCES strategies (id),
-    open_order_id   INTEGER REFERENCES orders (id),
-    close_order_id  INTEGER REFERENCES orders (id),
-    qty             REAL    NOT NULL,
-    entry_price     REAL    NOT NULL,
-    exit_price      REAL,
+    legs            TEXT,           -- JSON array of leg objects
+    contracts       INTEGER NOT NULL DEFAULT 1,
+    open_price      REAL    NOT NULL,
+    close_price     REAL,
+    mark_to_mkt     REAL    NOT NULL DEFAULT 0.0,
     opened_at       INTEGER NOT NULL,
     closed_at       INTEGER,
-    realized_pnl    REAL
+    pnl_realized    REAL
 ) STRICT;
 
-CREATE INDEX IF NOT EXISTS idx_positions_ticker ON positions (ticker, opened_at DESC);
+CREATE INDEX IF NOT EXISTS idx_positions_run_id ON positions (run_id, ticker, opened_at DESC);
 
 -- ---------------------------------------------------------------------------
 -- cost_ledger: append-only record of all LLM + API costs
@@ -148,12 +148,14 @@ CREATE INDEX IF NOT EXISTS idx_positions_ticker ON positions (ticker, opened_at 
 CREATE TABLE IF NOT EXISTS cost_ledger (
     id          INTEGER PRIMARY KEY,
     ts          INTEGER NOT NULL,
-    category    TEXT    NOT NULL CHECK (category IN ('llm', 'api', 'other')),
-    description TEXT    NOT NULL,
-    amount_usd  REAL    NOT NULL
+    category    TEXT    NOT NULL CHECK (category IN ('llm', 'data_uw', 'data_polygon', 'commission', 'other')),
+    ticker      TEXT,
+    amount_usd  REAL    NOT NULL,
+    details     TEXT    -- JSON blob
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_cost_ledger_ts ON cost_ledger (ts DESC);
+CREATE INDEX IF NOT EXISTS idx_cost_ledger_category ON cost_ledger (category);
 
 -- ---------------------------------------------------------------------------
 -- kill_state: singleton row (id must be 1) for kill-switch state
