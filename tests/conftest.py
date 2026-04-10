@@ -259,21 +259,34 @@ class FakeUWResponse:
 class FakeUWClient:
     """Minimal stub for the UW HTTP client.
 
-    Register a path with a (status, body) pair via ``register``, then
-    call the instance like ``client.get(path)`` — it will return a
-    ``FakeUWResponse`` and append an entry to ``call_log``.
+    Implements the ``_ClientLike`` protocol: ``get()`` returns
+    ``tuple[int, Any]`` so fetchers can unpack ``status, body``.
+
+    ``register`` accepts either:
+      - new style: ``register(path, FakeUWResponse(...))``
+      - old style: ``register(path, status=200, body=None)`` (kwargs only)
     """
 
     def __init__(self) -> None:
         self._routes: dict[str, FakeUWResponse] = {}
         self.call_log: list[dict] = []
 
-    def register(self, path: str, status: int = 200, body: Any = None) -> None:
-        self._routes[path] = FakeUWResponse(status=status, body=body)
+    def register(
+        self,
+        path: str,
+        response: "FakeUWResponse | None" = None,
+        *,
+        status: int = 200,
+        body: Any = None,
+    ) -> None:
+        if response is None:
+            response = FakeUWResponse(status=status, body=body)
+        self._routes[path] = response
 
-    def get(self, path: str, **kwargs) -> FakeUWResponse:
-        self.call_log.append({"method": "GET", "path": path, **kwargs})
-        return self._routes.get(path, FakeUWResponse(status=404, body=None))
+    def get(self, path: str, params: dict | None = None) -> tuple[int, Any]:
+        self.call_log.append({"method": "GET", "path": path, "params": params})
+        resp = self._routes.get(path, FakeUWResponse(status=404, body=None))
+        return resp.status, resp.body
 
 
 @pytest.fixture
