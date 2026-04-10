@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS strategies (
     class_version   INTEGER NOT NULL,
     params          TEXT    NOT NULL,   -- JSON blob
     params_hash     TEXT    NOT NULL,
+    parent_id       INTEGER REFERENCES strategies (id),
     created_at      INTEGER NOT NULL,
     UNIQUE (class_name, class_version, params_hash)
 ) STRICT;
@@ -81,14 +82,20 @@ CREATE INDEX IF NOT EXISTS idx_strategies_class ON strategies (class_name, class
 -- evolver_proposals: LLM-generated strategy proposals per ticker + iteration
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS evolver_proposals (
-    id              INTEGER PRIMARY KEY,
-    ticker          TEXT    NOT NULL,
-    iteration       INTEGER NOT NULL,
-    strategy_id     INTEGER NOT NULL REFERENCES strategies (id),
-    rationale       TEXT,
-    llm_cost_usd    REAL    NOT NULL,
-    passed_gate     INTEGER NOT NULL CHECK (passed_gate IN (0, 1)),
-    created_at      INTEGER NOT NULL,
+    id                  INTEGER PRIMARY KEY,
+    ticker              TEXT    NOT NULL,
+    iteration           INTEGER NOT NULL,
+    strategy_id         INTEGER NOT NULL REFERENCES strategies (id),
+    rationale           TEXT,
+    llm_cost_usd        REAL    NOT NULL,
+    pf_is               REAL,
+    pf_oos              REAL,
+    sharpe_is           REAL,
+    max_dd_pct          REAL,
+    trade_count         INTEGER,
+    regime_breakdown    TEXT,    -- JSON blob
+    passed_gate         INTEGER NOT NULL CHECK (passed_gate IN (0, 1)),
+    created_at          INTEGER NOT NULL,
     UNIQUE (ticker, iteration, strategy_id)
 ) STRICT;
 
@@ -98,10 +105,21 @@ CREATE INDEX IF NOT EXISTS idx_ep_ticker_iter ON evolver_proposals (ticker, iter
 -- ticker_state: current lifecycle phase per ticker
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ticker_state (
-    id          INTEGER PRIMARY KEY,
-    ticker      TEXT    NOT NULL UNIQUE,
-    phase       TEXT    NOT NULL CHECK (phase IN ('idle', 'researching', 'deciding', 'trading', 'paused', 'error')),
-    updated_at  INTEGER NOT NULL
+    id                  INTEGER PRIMARY KEY,
+    ticker              TEXT    NOT NULL UNIQUE,
+    phase               TEXT    NOT NULL CHECK (phase IN ('discovering', 'paper_trial', 'live', 'no_edge', 'killed')),
+    iteration_count     INTEGER NOT NULL DEFAULT 0,
+    plateau_counter     INTEGER NOT NULL DEFAULT 0,
+    best_strategy_id    INTEGER REFERENCES strategies (id),
+    best_pf_is          REAL,
+    best_pf_oos         REAL,
+    cumulative_llm_usd  REAL    NOT NULL DEFAULT 0.0,
+    paper_started_at    INTEGER,
+    paper_trade_count   INTEGER NOT NULL DEFAULT 0,
+    live_started_at     INTEGER,
+    verdict_at          INTEGER,
+    retired             INTEGER NOT NULL DEFAULT 0,
+    updated_at          INTEGER NOT NULL
 ) STRICT;
 
 -- ---------------------------------------------------------------------------
@@ -161,10 +179,11 @@ CREATE INDEX IF NOT EXISTS idx_cost_ledger_category ON cost_ledger (category);
 -- kill_state: singleton row (id must be 1) for kill-switch state
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS kill_state (
-    id          INTEGER PRIMARY KEY CHECK (id = 1),
-    active      INTEGER NOT NULL CHECK (active IN (0, 1)),
-    reason      TEXT,
-    activated_at INTEGER
+    id              INTEGER PRIMARY KEY CHECK (id = 1),
+    active          INTEGER NOT NULL CHECK (active IN (0, 1)),
+    reason          TEXT,
+    trigger_rule    TEXT,
+    tripped_at      INTEGER
 ) STRICT;
 
 -- ---------------------------------------------------------------------------
@@ -172,15 +191,16 @@ CREATE TABLE IF NOT EXISTS kill_state (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS faithfulness_checks (
     id              INTEGER PRIMARY KEY,
-    ts              INTEGER NOT NULL,
-    agent           TEXT    NOT NULL,
-    ticker          TEXT,
-    passed          INTEGER NOT NULL CHECK (passed IN (0, 1)),
-    score           REAL,
-    details         TEXT
+    ticker          TEXT    NOT NULL,
+    checked_at      INTEGER NOT NULL,
+    window_days     INTEGER NOT NULL,
+    paper_pf        REAL    NOT NULL,
+    backtest_pf     REAL    NOT NULL,
+    delta_pct       REAL    NOT NULL,
+    passed          INTEGER NOT NULL CHECK (passed IN (0, 1))
 ) STRICT;
 
-CREATE INDEX IF NOT EXISTS idx_fc_ts ON faithfulness_checks (ts DESC);
+CREATE INDEX IF NOT EXISTS idx_fc_ticker ON faithfulness_checks (ticker, checked_at DESC);
 
 -- ---------------------------------------------------------------------------
 -- iteration_failures: records of failed iteration attempts
@@ -189,9 +209,9 @@ CREATE TABLE IF NOT EXISTS iteration_failures (
     id          INTEGER PRIMARY KEY,
     ts          INTEGER NOT NULL,
     ticker      TEXT,
-    stage       TEXT    NOT NULL,
-    error_type  TEXT    NOT NULL,
-    message     TEXT    NOT NULL,
+    phase       TEXT    NOT NULL,
+    exc_type    TEXT    NOT NULL,
+    exc_message TEXT    NOT NULL,
     traceback   TEXT
 ) STRICT;
 
