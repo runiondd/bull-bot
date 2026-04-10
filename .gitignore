@@ -1,3 +1,6 @@
+# --- Worktrees ---
+.worktrees/
+
 # --- Secrets ---
 .env
 .env.*
