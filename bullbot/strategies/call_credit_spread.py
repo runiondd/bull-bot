@@ -1,0 +1,132 @@
+"""
+Call credit spread strategy — sell a nearer-dated OTM call, buy a further OTM
+call as the long wing for defined risk.
+
+Parameters:
+  - dte: target days-to-expiry for the short leg
+  - short_delta: target absolute delta for the short leg (e.g., 0.25 = 25-delta call)
+  - width: strike distance between short and long legs in dollars
+  - iv_rank_min: minimum IV rank (0-100) required to open
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from bullbot.data.schemas import Leg, Signal
+from bullbot.strategies.base import Strategy, StrategySnapshot
+from bullbot.features.greeks import compute_greeks
+from bullbot import config
+from bullbot.strategies.put_credit_spread import _make_osi
+
+
+class CallCreditSpread(Strategy):
+    CLASS_NAME = "CallCreditSpread"
+    CLASS_VERSION = 1
+
+    def evaluate(
+        self,
+        snapshot: StrategySnapshot,
+        open_positions: list[dict[str, Any]],
+    ) -> Signal | None:
+        if any(p for p in open_positions if p):
+            return None
+
+        iv_rank_min = float(self.params.get("iv_rank_min", 50))
+        if snapshot.iv_rank < iv_rank_min:
+            return None
+
+        target_dte = int(self.params.get("dte", 14))
+        short_delta = float(self.params.get("short_delta", 0.25))
+        width = float(self.params.get("width", 5))
+
+        asof_dt = datetime.fromtimestamp(snapshot.asof_ts, tz=timezone.utc).date()
+        target_exp = asof_dt + timedelta(days=target_dte)
+        candidates_c = [
+            c for c in snapshot.chain
+            if c.kind == "C"
+            and abs((datetime.strptime(c.expiry, "%Y-%m-%d").date() - target_exp).days) <= 3
+        ]
+        if not candidates_c:
+            return None
+
+        by_exp: dict[str, list] = {}
+        for c in candidates_c:
+            by_exp.setdefault(c.expiry, []).append(c)
+        chosen_expiry = min(
+            by_exp.keys(),
+            key=lambda e: abs(
+                (datetime.strptime(e, "%Y-%m-%d").date() - target_exp).days
+            ),
+        )
+        expiry_calls = by_exp[chosen_expiry]
+
+        t_years = (
+            (datetime.strptime(chosen_expiry, "%Y-%m-%d").date() - asof_dt).days / 365.0
+        )
+        if t_years <= 0:
+            return None
+
+        best = None
+        best_gap = float("inf")
+        for c in expiry_calls:
+            if c.iv is None or c.iv <= 0:
+                continue
+            g = compute_greeks(
+                spot=snapshot.spot,
+                strike=c.strike,
+                t_years=t_years,
+                r=config.RISK_FREE_RATE,
+                sigma=c.iv,
+                is_put=False,
+            )
+            gap = abs(g.delta - short_delta)
+            if gap < best_gap:
+                best_gap = gap
+                best = c
+        if best is None:
+            return None
+
+        long_strike = best.strike + width
+        long_leg = next(
+            (c for c in expiry_calls if abs(c.strike - long_strike) < 0.01),
+            None,
+        )
+        if long_leg is None:
+            return None
+
+        short_option = _make_osi(snapshot.ticker, chosen_expiry, best.strike, "C")
+        long_option = _make_osi(snapshot.ticker, chosen_expiry, long_leg.strike, "C")
+
+        return Signal(
+            intent="open",
+            strategy_class=self.CLASS_NAME,
+            legs=[
+                Leg(
+                    option_symbol=short_option,
+                    side="short",
+                    quantity=1,
+                    strike=best.strike,
+                    expiry=chosen_expiry,
+                    kind="C",
+                ),
+                Leg(
+                    option_symbol=long_option,
+                    side="long",
+                    quantity=1,
+                    strike=long_leg.strike,
+                    expiry=chosen_expiry,
+                    kind="C",
+                ),
+            ],
+            max_loss_per_contract=width * 100,
+            rationale=(
+                f"Short {best.strike}C / Long {long_leg.strike}C {chosen_expiry} "
+                f"(width={width}, iv_rank={snapshot.iv_rank:.0f})"
+            ),
+        )
+
+    def max_loss_per_contract(self) -> float:
+        width = float(self.params.get("width", 5))
+        return width * 100
