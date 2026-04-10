@@ -1,0 +1,593 @@
+{
+  "generated": "2026-04-10T01:29:54.828654+00:00",
+  "rps": 2.0,
+  "results": [
+    {
+      "name": "auth",
+      "ok": true,
+      "detail": "stock-state ok; fields: ['close', 'high', 'low', 'open', 'volume', 'total_volume', 'market_time', 'tape_time', 'prev_close']",
+      "meta": {
+        "sample": {
+          "close": "679.28",
+          "high": "680.1",
+          "low": "678.36",
+          "open": "679.96",
+          "volume": 5829256,
+          "total_volume": 57134413,
+          "market_time": "postmarket",
+          "tape_time": "2026-04-09T23:59:48Z",
+          "prev_close": "679.91"
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "spy_daily_10y",
+      "ok": true,
+      "detail": "4572 bars, range=2016-04-11..2026-04-09, span=9.99y, last_bar_age=1d [OK]",
+      "meta": {
+        "ticker": "SPY",
+        "candle_size": "1d",
+        "timeframe": "10Y",
+        "limit": 2500,
+        "end_date": null,
+        "count": 4572,
+        "oldest": "2016-04-11T00:00:00",
+        "newest": "2026-04-09T00:00:00",
+        "span_days": 3650,
+        "span_years": 9.99,
+        "last_bar_age_days": 1,
+        "target_years": 9.5,
+        "first_bar_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "date",
+          "volume",
+          "total_volume",
+          "market_time"
+        ],
+        "first_bar_sample": {
+          "close": "204.02",
+          "high": "206.07",
+          "low": "203.91",
+          "open": "205.25",
+          "date": "2016-04-11",
+          "volume": 83757486,
+          "total_volume": 83757486,
+          "market_time": "r"
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "tsla_4h_3y",
+      "ok": false,
+      "detail": "2500 bars, range=2024-07-25..2026-04-09, span=1.71y, last_bar_age=0d [depth FAIL (got 1.71y, need 2.8y)]",
+      "meta": {
+        "ticker": "TSLA",
+        "candle_size": "4h",
+        "timeframe": "3Y",
+        "limit": 2500,
+        "end_date": null,
+        "count": 2500,
+        "oldest": "2024-07-25T08:00:00+00:00",
+        "newest": "2026-04-09T20:00:00+00:00",
+        "span_days": 623,
+        "span_years": 1.71,
+        "last_bar_age_days": 0,
+        "target_years": 2.8,
+        "first_bar_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "start_time",
+          "volume",
+          "end_time",
+          "total_volume",
+          "market_time"
+        ],
+        "first_bar_sample": {
+          "close": "344.94",
+          "high": "346.25",
+          "low": "344.82",
+          "open": "345.58",
+          "start_time": "2026-04-09T20:00:00Z",
+          "volume": 3472704,
+          "end_time": "2026-04-10T00:00:00Z",
+          "total_volume": 62164004,
+          "market_time": "po"
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "tsla_1h_2y",
+      "ok": false,
+      "detail": "2500 bars, range=2025-08-25..2026-04-09, span=0.62y, last_bar_age=0d [depth FAIL (got 0.62y, need 1.4y)]",
+      "meta": {
+        "ticker": "TSLA",
+        "candle_size": "1h",
+        "timeframe": "2Y",
+        "limit": 2500,
+        "end_date": null,
+        "count": 2500,
+        "oldest": "2025-08-25T09:00:00+00:00",
+        "newest": "2026-04-09T23:00:00+00:00",
+        "span_days": 227,
+        "span_years": 0.62,
+        "last_bar_age_days": 0,
+        "target_years": 1.4,
+        "first_bar_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "start_time",
+          "volume",
+          "end_time",
+          "total_volume",
+          "market_time"
+        ],
+        "first_bar_sample": {
+          "close": "344.94",
+          "high": "345.59",
+          "low": "344.82",
+          "open": "345.42",
+          "start_time": "2026-04-09T23:00:00Z",
+          "volume": 95109,
+          "end_time": "2026-04-10T00:00:00Z",
+          "total_volume": 62164004,
+          "market_time": "po"
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "tsla_15m_1y",
+      "ok": false,
+      "detail": "2500 bars, range=2026-02-12..2026-04-09, span=0.15y, last_bar_age=0d [depth FAIL (got 0.15y, need 0.4y)]",
+      "meta": {
+        "ticker": "TSLA",
+        "candle_size": "15m",
+        "timeframe": "1Y",
+        "limit": 2500,
+        "end_date": null,
+        "count": 2500,
+        "oldest": "2026-02-12T00:00:00+00:00",
+        "newest": "2026-04-09T23:45:00+00:00",
+        "span_days": 56,
+        "span_years": 0.15,
+        "last_bar_age_days": 0,
+        "target_years": 0.4,
+        "first_bar_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "start_time",
+          "volume",
+          "end_time",
+          "total_volume",
+          "market_time"
+        ],
+        "first_bar_sample": {
+          "close": "344.94",
+          "high": "345.28",
+          "low": "344.9",
+          "open": "345.09",
+          "start_time": "2026-04-09T23:45:00Z",
+          "volume": 34426,
+          "end_time": "2026-04-10T00:00:00Z",
+          "total_volume": 62164004,
+          "market_time": "po"
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "spy_daily_10y_narrow",
+      "ok": true,
+      "detail": "got 22 bars at end_date=2016-04-05; newest bar 2016-04-06 (0d from anchor) \u2014 tier DOES support this depth",
+      "meta": {
+        "ticker": "SPY",
+        "candle_size": "1d",
+        "end_date": "2016-04-05",
+        "count": 22,
+        "newest_returned": "2016-04-06T00:00:00+00:00",
+        "distance_days": 0
+      },
+      "error": null
+    },
+    {
+      "name": "tsla_4h_3y_narrow",
+      "ok": true,
+      "detail": "got 10 bars at end_date=2023-04-04; newest bar 2023-04-04 (0d from anchor) \u2014 tier DOES support this depth",
+      "meta": {
+        "ticker": "TSLA",
+        "candle_size": "4h",
+        "end_date": "2023-04-04",
+        "count": 10,
+        "newest_returned": "2023-04-04T20:00:00+00:00",
+        "distance_days": 0
+      },
+      "error": null
+    },
+    {
+      "name": "tsla_1h_2y_narrow",
+      "ok": true,
+      "detail": "got 10 bars at end_date=2024-04-03; newest bar 2024-04-03 (0d from anchor) \u2014 tier DOES support this depth",
+      "meta": {
+        "ticker": "TSLA",
+        "candle_size": "1h",
+        "end_date": "2024-04-03",
+        "count": 10,
+        "newest_returned": "2024-04-03T23:00:00+00:00",
+        "distance_days": 0
+      },
+      "error": null
+    },
+    {
+      "name": "tsla_15m_1y_narrow",
+      "ok": true,
+      "detail": "got 10 bars at end_date=2025-04-03; newest bar 2025-04-03 (0d from anchor) \u2014 tier DOES support this depth",
+      "meta": {
+        "ticker": "TSLA",
+        "candle_size": "15m",
+        "end_date": "2025-04-03",
+        "count": 10,
+        "newest_returned": "2025-04-03T23:45:00+00:00",
+        "distance_days": 0
+      },
+      "error": null
+    },
+    {
+      "name": "tsla_option_chains",
+      "ok": true,
+      "detail": "returned 5734 option symbols (not full contract objects); sample=['TSLA260529P00355000', 'TSLA260417C00230000', 'TSLA260417C00150000']. No IV/bid/ask at this endpoint \u2014 must use atm-chains or option-contract endpoints for quotes.",
+      "meta": {
+        "count": 5734,
+        "response_type": "symbol_list",
+        "sample_symbols": [
+          "TSLA260529P00355000",
+          "TSLA260417C00230000",
+          "TSLA260417C00150000",
+          "TSLA261120C00425000",
+          "TSLA260417C00305000"
+        ],
+        "extracted_expiry": "2026-05-29"
+      },
+      "error": null
+    },
+    {
+      "name": "tsla_greeks",
+      "ok": true,
+      "detail": "expiry=2026-05-29, 29 strikes; populated 10/10 greek fields in first strike",
+      "meta": {
+        "expiry": "2026-05-29",
+        "strike_count": 29,
+        "first_strike_keys": [
+          "date",
+          "expiry",
+          "strike",
+          "call_delta",
+          "put_delta",
+          "call_charm",
+          "call_vanna",
+          "put_charm",
+          "put_vanna",
+          "call_gamma",
+          "put_gamma",
+          "put_volatility",
+          "put_vega",
+          "put_theta",
+          "put_rho",
+          "call_volatility",
+          "call_vega",
+          "call_theta",
+          "call_rho",
+          "call_option_symbol",
+          "put_option_symbol"
+        ],
+        "first_strike_sample": {
+          "date": "2026-04-09",
+          "expiry": "2026-05-29",
+          "strike": "275",
+          "call_delta": "0.877410404930717",
+          "put_delta": "-0.1022364132839988",
+          "call_charm": "-0.01593494309437054",
+          "call_vanna": "-0.01469238101918298",
+          "put_charm": "-0.01060061277711647",
+          "put_vanna": "-0.0623805561271241",
+          "call_gamma": "0.00270988725273213",
+          "put_gamma": "0.00264581814258394",
+          "put_volatility": "0.527002227270021",
+          "put_vega": "0.228126084303868",
+          "put_theta": "-0.1201423936199705",
+          "put_rho": "-0.0532837564502357",
+          "call_volatility": "0.585849289877525",
+          "call_vega": "0.259740477821986",
+          "call_theta": "-0.1520668068155533",
+          "call_rho": "0.311825229627157",
+          "call_option_symbol": "TSLA260529C00275000",
+          "put_option_symbol": "TSLA260529P00275000"
+        },
+        "greek_population": {
+          "call_delta": true,
+          "call_gamma": true,
+          "call_theta": true,
+          "call_vega": true,
+          "put_delta": true,
+          "put_gamma": true,
+          "put_theta": true,
+          "put_vega": true,
+          "call_volatility": true,
+          "put_volatility": true
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "tsla_atm_chains",
+      "ok": true,
+      "detail": "2 ATM contracts; IV=\u2713 bid/ask=\u2713",
+      "meta": {
+        "expiry": "2026-05-29",
+        "count": 2,
+        "first_contract_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "date",
+          "iv",
+          "ask",
+          "bid",
+          "volume",
+          "sector",
+          "open_interest",
+          "option_symbol",
+          "trades",
+          "premium",
+          "tape_time",
+          "mid_volume",
+          "avg_price",
+          "next_earnings_date",
+          "cross_volume",
+          "floor_volume",
+          "neutral_volume",
+          "stock_multi_leg_volume",
+          "sweep_volume",
+          "total_ask_changes",
+          "total_bid_changes",
+          "stock_price",
+          "er_time",
+          "ticker_vol",
+          "ask_side_volume",
+          "bid_side_volume",
+          "multileg_volume",
+          "chain_prev_close"
+        ],
+        "sample_values": {
+          "implied_volatility": "0.486092302478374",
+          "nbbo_bid": "22.85",
+          "nbbo_ask": "27.00",
+          "open_interest": 0,
+          "volume": 86
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "spy_gex",
+      "ok": true,
+      "detail": "249 items; first-item keys=['date', 'call_delta', 'put_delta', 'call_charm', 'call_vanna', 'put_charm', 'put_vanna', 'call_gamma', 'put_gamma']",
+      "meta": {
+        "count": 249,
+        "first_item_keys": [
+          "date",
+          "call_delta",
+          "put_delta",
+          "call_charm",
+          "call_vanna",
+          "put_charm",
+          "put_vanna",
+          "call_gamma",
+          "put_gamma"
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "spy_flow_alerts",
+      "ok": true,
+      "detail": "100 items; first-item keys=['type', 'ticker', 'created_at', 'price', 'volume', 'open_interest', 'expiry', 'strike', 'underlying_price', 'total_premium', 'trade_count', 'iv_end']",
+      "meta": {
+        "count": 100,
+        "first_item_keys": [
+          "type",
+          "ticker",
+          "created_at",
+          "price",
+          "volume",
+          "open_interest",
+          "expiry",
+          "strike",
+          "underlying_price",
+          "total_premium",
+          "trade_count",
+          "iv_end",
+          "iv_start",
+          "has_floor",
+          "has_multileg",
+          "has_sweep",
+          "all_opening_trades",
+          "total_size",
+          "alert_rule",
+          "total_bid_side_prem",
+          "total_ask_side_prem",
+          "volume_oi_ratio",
+          "option_chain",
+          "has_singleleg",
+          "expiry_count"
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "spy_iv_rank",
+      "ok": true,
+      "detail": "4 items; first-item keys=['close', 'date', 'updated_at', 'volatility', 'iv_rank_1y']",
+      "meta": {
+        "count": 4,
+        "first_item_keys": [
+          "close",
+          "date",
+          "updated_at",
+          "volatility",
+          "iv_rank_1y"
+        ]
+      },
+      "error": null
+    }
+  ],
+  "samples": [
+    {
+      "status": 200,
+      "url_path": "/api/stock/SPY/stock-state",
+      "rate_limit_headers": {
+        "x-request-id": "c8b0267d49621d7b81e9ee5b1967b657"
+      },
+      "elapsed_ms": 124.5,
+      "response_bytes": 198
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/SPY/ohlc/1d",
+      "rate_limit_headers": {
+        "x-request-id": "a3ae368d4d941f00b10598b10a90c573"
+      },
+      "elapsed_ms": 271.4,
+      "response_bytes": 667027
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/TSLA/ohlc/4h",
+      "rate_limit_headers": {
+        "x-request-id": "12701ac4dc0116e40b515ce0666c5a18"
+      },
+      "elapsed_ms": 277.5,
+      "response_bytes": 490872
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/TSLA/ohlc/1h",
+      "rate_limit_headers": {
+        "x-request-id": "24a5dd934a29607d7437ec43d0538cae"
+      },
+      "elapsed_ms": 247.9,
+      "response_bytes": 487289
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/TSLA/ohlc/15m",
+      "rate_limit_headers": {
+        "x-request-id": "71d304cb41f55def1da8eaf8862898cd"
+      },
+      "elapsed_ms": 209.9,
+      "response_bytes": 485029
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/SPY/ohlc/1d",
+      "rate_limit_headers": {
+        "x-request-id": "3c334ad18c40cd7aee4d3216365d895b"
+      },
+      "elapsed_ms": 61.3,
+      "response_bytes": 3235
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/TSLA/ohlc/4h",
+      "rate_limit_headers": {
+        "x-request-id": "c25a267e9de290188caa2fb1636762b9"
+      },
+      "elapsed_ms": 75.9,
+      "response_bytes": 2050
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/TSLA/ohlc/1h",
+      "rate_limit_headers": {
+        "x-request-id": "c490008c7c291a12ef93ba78616df86d"
+      },
+      "elapsed_ms": 73.6,
+      "response_bytes": 1977
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/TSLA/ohlc/15m",
+      "rate_limit_headers": {
+        "x-request-id": "2020043d561bd84985391954edad7c37"
+      },
+      "elapsed_ms": 80.8,
+      "response_bytes": 1973
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/TSLA/option-chains",
+      "rate_limit_headers": {
+        "x-request-id": "0eaf5ce57bfe8ecec718246143b6bb23"
+      },
+      "elapsed_ms": 107.6,
+      "response_bytes": 126158
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/TSLA/greeks",
+      "rate_limit_headers": {
+        "x-request-id": "48e76f2dd66ac705c868295925069144"
+      },
+      "elapsed_ms": 66.6,
+      "response_bytes": 19884
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/TSLA/atm-chains",
+      "rate_limit_headers": {
+        "x-request-id": "c10a0c74a96f805361a32a02a31227d3"
+      },
+      "elapsed_ms": 81.1,
+      "response_bytes": 1397
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/SPY/greek-exposure",
+      "rate_limit_headers": {
+        "x-request-id": "25cfbb3b2bd59a4cecc2f67aa0d0ff66"
+      },
+      "elapsed_ms": 93.9,
+      "response_bytes": 64053
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/SPY/flow-alerts",
+      "rate_limit_headers": {
+        "x-request-id": "0acbc84f759161a1b4c8ecaca04fa9e9"
+      },
+      "elapsed_ms": 66.4,
+      "response_bytes": 59169
+    },
+    {
+      "status": 200,
+      "url_path": "/api/stock/SPY/iv-rank",
+      "rate_limit_headers": {
+        "x-request-id": "273af448aadb4959658ce2167d38e698"
+      },
+      "elapsed_ms": 51.8,
+      "response_bytes": 517
+    }
+  ]
+}

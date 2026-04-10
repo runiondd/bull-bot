@@ -1,0 +1,262 @@
+{
+  "generated": "2026-04-10T02:20:22.063335+00:00",
+  "models": [
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5-20251001"
+  ],
+  "n_per_model": 5,
+  "max_tokens": 600,
+  "stats": {
+    "claude-sonnet-4-6": {
+      "model": "claude-sonnet-4-6",
+      "n_calls": 5,
+      "n_success": 5,
+      "n_json_valid": 5,
+      "p50_latency_ms": 7341.4,
+      "p90_latency_ms": 7825.4,
+      "p99_latency_ms": 7835.7,
+      "mean_latency_ms": 7501.7,
+      "mean_input_tokens": 676.0,
+      "mean_output_tokens": 358.2,
+      "mean_cost_usd": 0.007401,
+      "total_cost_usd": 0.037005,
+      "errors": []
+    },
+    "claude-haiku-4-5-20251001": {
+      "model": "claude-haiku-4-5-20251001",
+      "n_calls": 5,
+      "n_success": 5,
+      "n_json_valid": 0,
+      "p50_latency_ms": 3557.5,
+      "p90_latency_ms": 3957.4,
+      "p99_latency_ms": 4133.6,
+      "mean_latency_ms": 3626.1,
+      "mean_input_tokens": 675.0,
+      "mean_output_tokens": 364.4,
+      "mean_cost_usd": 0.002497,
+      "total_cost_usd": 0.012485,
+      "errors": []
+    }
+  },
+  "calls": [
+    {
+      "model": "claude-sonnet-4-6",
+      "call_index": 1,
+      "latency_ms": 7808.3,
+      "input_tokens": 676,
+      "output_tokens": 368,
+      "cache_read_tokens": 0,
+      "cache_creation_tokens": 0,
+      "cost_usd": 0.007548,
+      "response_text_preview": "{\n  \"ticker\": \"TSLA\",\n  \"stance\": \"long\",\n  \"conviction\": 68,\n  \"primary_thesis\": \"TSLA shows multi-timeframe bullish alignment with a daily MACD cross, strong options call flow skew, and price holding above zero-gamma at 340.5, suggesting ",
+      "json_valid": true,
+      "error": null,
+      "stop_reason": "end_turn"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "call_index": 2,
+      "latency_ms": 7836.8,
+      "input_tokens": 676,
+      "output_tokens": 349,
+      "cache_read_tokens": 0,
+      "cache_creation_tokens": 0,
+      "cost_usd": 0.007263,
+      "response_text_preview": "{\n  \"ticker\": \"TSLA\",\n  \"stance\": \"long\",\n  \"conviction\": 68,\n  \"primary_thesis\": \"TSLA shows multi-timeframe bullish alignment with a daily MACD cross, strong call-side options flow, and price holding above zero-gamma at 340.5, suggesting ",
+      "json_valid": true,
+      "error": null,
+      "stop_reason": "end_turn"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "call_index": 3,
+      "latency_ms": 7209.7,
+      "input_tokens": 676,
+      "output_tokens": 348,
+      "cache_read_tokens": 0,
+      "cache_creation_tokens": 0,
+      "cost_usd": 0.007248,
+      "response_text_preview": "{\n  \"ticker\": \"TSLA\",\n  \"stance\": \"long\",\n  \"conviction\": 68,\n  \"primary_thesis\": \"TSLA shows multi-timeframe bullish alignment with a daily MACD cross, strong options call flow skew, and price holding above zero-gamma at 340.5, suggesting ",
+      "json_valid": true,
+      "error": null,
+      "stop_reason": "end_turn"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "call_index": 4,
+      "latency_ms": 7341.4,
+      "input_tokens": 676,
+      "output_tokens": 360,
+      "cache_read_tokens": 0,
+      "cache_creation_tokens": 0,
+      "cost_usd": 0.007428,
+      "response_text_preview": "{\n  \"ticker\": \"TSLA\",\n  \"stance\": \"long\",\n  \"conviction\": 68,\n  \"primary_thesis\": \"TSLA shows multi-timeframe bullish alignment with a daily MACD cross, strong options call flow skew, and price holding above zero-gamma at 340.5, suggesting ",
+      "json_valid": true,
+      "error": null,
+      "stop_reason": "end_turn"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "call_index": 5,
+      "latency_ms": 7312.5,
+      "input_tokens": 676,
+      "output_tokens": 366,
+      "cache_read_tokens": 0,
+      "cache_creation_tokens": 0,
+      "cost_usd": 0.007518,
+      "response_text_preview": "{\n  \"ticker\": \"TSLA\",\n  \"stance\": \"long\",\n  \"conviction\": 68,\n  \"primary_thesis\": \"TSLA shows multi-timeframe bullish alignment with a daily MACD cross, strong options call flow skew, and price holding above zero-gamma at 340.5, supporting ",
+      "json_valid": true,
+      "error": null,
+      "stop_reason": "end_turn"
+    },
+    {
+      "model": "claude-haiku-4-5-20251001",
+      "call_index": 1,
+      "latency_ms": 3352.4,
+      "input_tokens": 675,
+      "output_tokens": 374,
+      "cache_read_tokens": 0,
+      "cache_creation_tokens": 0,
+      "cost_usd": 0.002545,
+      "response_text_preview": "```json\n{\n  \"ticker\": \"TSLA\",\n  \"stance\": \"long\",\n  \"conviction\": 68,\n  \"primary_thesis\": \"Multi-timeframe uptrend with bullish momentum (MACD cross, rising RSI, higher highs/lows) supported by strong call flow and price holding above key s",
+      "json_valid": false,
+      "error": null,
+      "stop_reason": "end_turn"
+    },
+    {
+      "model": "claude-haiku-4-5-20251001",
+      "call_index": 2,
+      "latency_ms": 3663.8,
+      "input_tokens": 675,
+      "output_tokens": 376,
+      "cache_read_tokens": 0,
+      "cache_creation_tokens": 0,
+      "cost_usd": 0.002555,
+      "response_text_preview": "```json\n{\n  \"ticker\": \"TSLA\",\n  \"stance\": \"long\",\n  \"conviction\": 68,\n  \"primary_thesis\": \"Multi-timeframe uptrend with bullish momentum (MACD cross, rising RSI, higher highs/lows) supported by strong call flow and price holding above key s",
+      "json_valid": false,
+      "error": null,
+      "stop_reason": "end_turn"
+    },
+    {
+      "model": "claude-haiku-4-5-20251001",
+      "call_index": 3,
+      "latency_ms": 3403.8,
+      "input_tokens": 675,
+      "output_tokens": 364,
+      "cache_read_tokens": 0,
+      "cache_creation_tokens": 0,
+      "cost_usd": 0.002495,
+      "response_text_preview": "```json\n{\n  \"ticker\": \"TSLA\",\n  \"stance\": \"long\",\n  \"conviction\": 68,\n  \"primary_thesis\": \"Multi-timeframe uptrend with bullish momentum (MACD cross, rising RSI, higher highs/lows) supported by strong call flow and price holding above key s",
+      "json_valid": false,
+      "error": null,
+      "stop_reason": "end_turn"
+    },
+    {
+      "model": "claude-haiku-4-5-20251001",
+      "call_index": 4,
+      "latency_ms": 4153.2,
+      "input_tokens": 675,
+      "output_tokens": 332,
+      "cache_read_tokens": 0,
+      "cache_creation_tokens": 0,
+      "cost_usd": 0.002335,
+      "response_text_preview": "```json\n{\n  \"ticker\": \"TSLA\",\n  \"stance\": \"long\",\n  \"conviction\": 68,\n  \"primary_thesis\": \"Multi-timeframe uptrend with bullish momentum (MACD cross, rising RSI, higher highs/lows) supported by strong call flow and price holding above key s",
+      "json_valid": false,
+      "error": null,
+      "stop_reason": "end_turn"
+    },
+    {
+      "model": "claude-haiku-4-5-20251001",
+      "call_index": 5,
+      "latency_ms": 3557.5,
+      "input_tokens": 675,
+      "output_tokens": 376,
+      "cache_read_tokens": 0,
+      "cache_creation_tokens": 0,
+      "cost_usd": 0.002555,
+      "response_text_preview": "```json\n{\n  \"ticker\": \"TSLA\",\n  \"stance\": \"long\",\n  \"conviction\": 68,\n  \"primary_thesis\": \"Multi-timeframe uptrend with bullish momentum (MACD cross, rising RSI, higher highs/lows) supported by strong call flow and price holding above key s",
+      "json_valid": false,
+      "error": null,
+      "stop_reason": "end_turn"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "Per-call sample (1 sonnet research + 1 sonnet decision)",
+      "description": "avg cost from 5 samples",
+      "sonnet_calls": 2,
+      "haiku_calls": 0,
+      "cost_usd": 0.014802
+    },
+    {
+      "name": "Tier 1 \u2014 1d research bootstrap (Haiku)",
+      "description": "34,020 Haiku calls = 1,260 trading days \u00d7 27 tickers",
+      "sonnet_calls": 0,
+      "haiku_calls": 34020,
+      "cost_usd": 84.95
+    },
+    {
+      "name": "Tier 2 \u2014 1w research bootstrap (Sonnet)",
+      "description": "14,040 Sonnet calls = 520 weeks \u00d7 27 tickers",
+      "sonnet_calls": 14040,
+      "haiku_calls": 0,
+      "cost_usd": 103.91
+    },
+    {
+      "name": "Decision agent bootstrap sample (Sonnet)",
+      "description": "6,300 Sonnet calls = 5/day \u00d7 1,260 days",
+      "sonnet_calls": 6300,
+      "haiku_calls": 0,
+      "cost_usd": 46.63
+    },
+    {
+      "name": "\u2705 APPROVED BOOTSTRAP (Tier 1 + Tier 2 + decision)",
+      "description": "The one-time spend authorized in \u00a76.5; intraday research deferred",
+      "sonnet_calls": 20340,
+      "haiku_calls": 34020,
+      "cost_usd": 235.48
+    },
+    {
+      "name": "Tier 3 \u2014 Intraday research (DEFERRED, fills from live)",
+      "description": "391,500 Haiku calls if run upfront",
+      "sonnet_calls": 0,
+      "haiku_calls": 391500,
+      "cost_usd": 977.58
+    },
+    {
+      "name": "Full bootstrap (all tiers \u2014 for reference, NOT approved)",
+      "description": "Worst-case if Tier 3 were also paid upfront",
+      "sonnet_calls": 20340,
+      "haiku_calls": 425520,
+      "cost_usd": 1213.06
+    },
+    {
+      "name": "Daily live ops (Tier 1+2 only \u2014 first ~3 months)",
+      "description": "~27 Haiku/day (1d research) + ~3.9 Sonnet/day (1w research, amortized) + 5 Sonnet/day (decision)",
+      "sonnet_calls": 9,
+      "haiku_calls": 27,
+      "cost_usd": 0.133
+    },
+    {
+      "name": "Daily live ops (steady state \u2014 all tiers)",
+      "description": "~338 Haiku + ~8.9 Sonnet calls/day (incl. intraday research)",
+      "sonnet_calls": 9,
+      "haiku_calls": 338,
+      "cost_usd": 0.9088
+    },
+    {
+      "name": "Annual live ops (steady state, ~252 trading days)",
+      "description": "Daily steady-state \u00d7 252",
+      "sonnet_calls": 2232,
+      "haiku_calls": 85104,
+      "cost_usd": 229.02
+    },
+    {
+      "name": "Avg evolver proposal (CHEAP mode + targeted FULL replay)",
+      "description": "Numeric proposals near-zero; prompt-changing proposals re-replay ~1 month worth",
+      "sonnet_calls": 0,
+      "haiku_calls": 0,
+      "cost_usd": 40.44
+    }
+  ]
+}
