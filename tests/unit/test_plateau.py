@@ -1,0 +1,84 @@
+"""
+Plateau classifier tests — the state-machine function that decides whether
+an iteration outcome means 'continue', 'no_edge', or 'edge_found'.
+"""
+from dataclasses import dataclass
+
+import pytest
+
+from bullbot.evolver import plateau
+
+
+@dataclass
+class FakeState:
+    iteration_count: int = 0
+    plateau_counter: int = 0
+    best_pf_oos: float = 0.0
+
+
+@dataclass
+class FakeMetrics:
+    pf_is: float
+    pf_oos: float
+    trade_count: int = 40
+
+
+def test_edge_found_when_all_gates_pass():
+    state = FakeState(iteration_count=5, plateau_counter=1, best_pf_oos=1.1)
+    metrics = FakeMetrics(pf_is=1.55, pf_oos=1.35, trade_count=35)
+    result = plateau.classify(state, metrics)
+    assert result.verdict == "edge_found"
+
+
+def test_not_edge_found_when_trade_count_too_low():
+    state = FakeState()
+    metrics = FakeMetrics(pf_is=1.55, pf_oos=1.35, trade_count=29)
+    result = plateau.classify(state, metrics)
+    assert result.verdict != "edge_found"
+
+
+def test_no_edge_when_plateau_counter_maxes_out():
+    state = FakeState(iteration_count=16, plateau_counter=2, best_pf_oos=1.00)
+    metrics = FakeMetrics(pf_is=1.20, pf_oos=1.05, trade_count=35)
+    result = plateau.classify(state, metrics)
+    assert result.verdict == "no_edge"
+    assert result.new_plateau_counter == 3
+
+
+def test_no_edge_when_iteration_cap_hit():
+    state = FakeState(iteration_count=50, plateau_counter=0, best_pf_oos=0.8)
+    metrics = FakeMetrics(pf_is=1.00, pf_oos=0.90, trade_count=40)
+    result = plateau.classify(state, metrics)
+    assert result.verdict == "no_edge"
+
+
+def test_continue_on_small_improvement_resets_plateau():
+    state = FakeState(iteration_count=8, plateau_counter=2, best_pf_oos=1.00)
+    metrics = FakeMetrics(pf_is=1.20, pf_oos=1.15, trade_count=40)
+    result = plateau.classify(state, metrics)
+    assert result.verdict == "continue"
+    assert result.new_plateau_counter == 0
+    assert result.improved is True
+
+
+def test_continue_on_insufficient_improvement_increments_plateau():
+    state = FakeState(iteration_count=8, plateau_counter=1, best_pf_oos=1.00)
+    metrics = FakeMetrics(pf_is=1.20, pf_oos=1.05, trade_count=40)
+    result = plateau.classify(state, metrics)
+    assert result.verdict == "continue"
+    assert result.new_plateau_counter == 2
+
+
+def test_improved_means_new_best_pf():
+    state = FakeState(iteration_count=1, plateau_counter=0, best_pf_oos=0.8)
+    metrics = FakeMetrics(pf_is=1.10, pf_oos=1.05, trade_count=40)
+    result = plateau.classify(state, metrics)
+    assert result.improved is True
+    assert result.new_best_pf_oos == 1.05
+
+
+def test_first_iteration_never_triggers_no_edge_on_iteration_cap():
+    state = FakeState(iteration_count=0)
+    metrics = FakeMetrics(pf_is=1.0, pf_oos=0.9, trade_count=40)
+    result = plateau.classify(state, metrics)
+    assert result.verdict == "continue"
