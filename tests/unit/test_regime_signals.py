@@ -178,3 +178,72 @@ class TestTickerSignalsIndexNoSector:
         assert result is not None
         assert result.sector_etf is None
         assert result.sector_relative == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Additional TickerSignals tests
+# ---------------------------------------------------------------------------
+
+def test_ticker_signals_basic():
+    """Basic ticker signals with known IV data."""
+    ticker_bars = _make_bars_rows([100.0 + i * 0.2 for i in range(252)], "AAPL")
+    iv_history = [20.0 + i * (20.0 / 251) for i in range(252)]
+    current_iv = 35.0
+    sector_bars = _make_bars_rows([150.0 + i * 0.1 for i in range(252)], "XLK")
+
+    signals = compute_ticker_signals(
+        ticker="AAPL",
+        ticker_bars=ticker_bars,
+        iv_history=iv_history,
+        current_iv=current_iv,
+        sector_etf_bars=sector_bars,
+    )
+    assert signals is not None
+    assert signals.ticker == "AAPL"
+    assert signals.iv_rank > 50.0
+    assert signals.sector_etf == "XLK"
+    assert signals.vol_regime in ("low", "moderate", "high")
+
+
+def test_ticker_signals_no_iv_defaults_to_50():
+    """Missing IV data → iv_rank and iv_percentile default to 50."""
+    ticker_bars = _make_bars_rows([100.0] * 60, "AAPL")
+    sector_bars = _make_bars_rows([100.0] * 60, "XLK")
+    signals = compute_ticker_signals(
+        ticker="AAPL",
+        ticker_bars=ticker_bars,
+        iv_history=[],
+        current_iv=None,
+        sector_etf_bars=sector_bars,
+    )
+    assert signals is not None
+    assert signals.iv_rank == 50.0
+    assert signals.iv_percentile == 50.0
+
+
+def test_ticker_signals_insufficient_data():
+    """Less than 20 bars → returns None."""
+    ticker_bars = _make_bars_rows([100.0] * 10, "AAPL")
+    result = compute_ticker_signals(
+        ticker="AAPL",
+        ticker_bars=ticker_bars,
+        iv_history=[],
+        current_iv=None,
+        sector_etf_bars=None,
+    )
+    assert result is None
+
+
+def test_ticker_signals_index_has_no_sector():
+    """SPY maps to None sector → sector_relative = 0.0."""
+    ticker_bars = _make_bars_rows([400.0 + i * 0.3 for i in range(252)], "SPY")
+    signals = compute_ticker_signals(
+        ticker="SPY",
+        ticker_bars=ticker_bars,
+        iv_history=[20.0] * 252,
+        current_iv=20.0,
+        sector_etf_bars=None,
+    )
+    assert signals is not None
+    assert signals.sector_etf is None
+    assert signals.sector_relative == 0.0
