@@ -1,29 +1,29 @@
-# Session Handoff — Bull-Bot
-**Updated:** 2026-04-10 (Session 5 closed → Session 6)
+# Context Handoff
+**Updated:** 2026-04-11 (Session 6 closed → Session 7)
 
 ## Current State
 
-**Main branch (`main`):** Stage 1 complete. All T1-T30 merged via fast-forward. 185 tests passing in ~18s. NOT pushed to GitHub yet.
+**Main branch (`main`):** Stage 1 complete + Stage 2 market regime agent merged. 218 tests passing in ~19s. Pushed to GitHub. Working tree clean (two untracked report files from earlier sessions, ignorable).
 
-## What Was Done (Session 5)
+## What Was Done (Session 6)
 
-- **T29: Tier 3 regression test** — Built SPY regression fixture (251 bars + 71,910 option contracts from real UW API), wrote determinism test and full-segment nonzero-trades test. Key adaptations from plan:
-  - UW only serves ~1 year of trailing bars (not 2023 data as plan assumed)
-  - Fixture builder samples every 3rd Friday for year-wide expiry coverage with dense $5 strikes
-  - Test anchors walkforward folds to fixture date range via datetime patching
-  - Full-segment test replaces walkforward OOS test (sparse sampled expiries don't reliably hit the ±3 day DTE window in short OOS folds)
+- **Phase 0 artifacts committed and pushed** — spec, plan, validation reports, scripts
+- **Market regime agent designed and built** (T1-T12):
+  - Two-stage pipeline: quantitative signals (VIX, breadth, sector momentum, risk appetite) + Sonnet LLM synthesis into strategy briefs
+  - Briefs cached in `regime_briefs` table (once per day per scope), injected into proposer prompt
+  - IV rank computed from `iv_surface` table (replaced hardcoded 50.0)
+  - Scheduler calls regime refresh before evolver loop (non-fatal on failure)
+  - Code reviewed: fixed INSERT OR REPLACE → INSERT OR IGNORE, type annotations, percentage formatting
 
-- **T30: Smoke test** — 3 real evolver iterations on SPY against sandbox DB. PASS ($0.06 LLM spend, phase=no_edge).
+## Key Context
 
-- **Bugs found and fixed:**
-  - `options_backfill.run()` wrote `nbbo_bid`/`nbbo_ask` + `C`/`P` but schema has `bid`/`ask` + `call`/`put`
-  - `bars` INSERT referenced nonexistent `source` column
-  - UW client retry too weak (3 attempts, 30s max) — bumped to 5 attempts, 60s max
-
-- **Branch merged:** `stage1/v3-build` fast-forwarded into `main`, worktree cleaned up.
+- **Schwab/ToS API:** Dan has accounts but is waiting for developer sandbox approval. Broker integration is blocked on this.
+- **Layer 2 (web research):** Designed as extension point in the regime agent spec — feeds additional signals into the same Sonnet synthesis step. Not yet built.
+- **No real strategy results exist yet.** The evolver has never been run long enough to find edge. T30 smoke test ran 3 iterations → `no_edge`.
 
 ## Pending Work
 
-1. Commit Phase 0 artifacts + spec + plan on main (listed in Session 3 handoff)
-2. Push main to GitHub
-3. Stage 2 planning and implementation
+1. **Run the evolver for real** — let it discover on SPY (and other tickers) to get actual strategy results to evaluate
+2. **Schwab broker integration** — design + build once API access is granted (PRD §15 lists IBKR but Dan chose Schwab/ToS)
+3. **Layer 2 web research** — enrich regime agent with financial news/analysis (spec §13)
+4. **Backfill regime data tickers** — first evolver run needs 252 days of VIX + sector ETF bars for percentile calculations
