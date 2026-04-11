@@ -87,9 +87,14 @@ def run(
     start: date,
     end: date,
     rate_limit_sleep: float = 0.1,
+    strike_range_fraction: float = 0.20,
+    strike_step: float = 1.0,
 ) -> dict[str, int]:
     """Backfill option history for a ticker across a date window."""
-    symbols = build_candidate_symbols(ticker=ticker, spot=spot, backfill_start=start, backfill_end=end)
+    symbols = build_candidate_symbols(
+        ticker=ticker, spot=spot, backfill_start=start, backfill_end=end,
+        strike_range_fraction=strike_range_fraction, strike_step=strike_step,
+    )
     log.info("backfill %s: %d candidate symbols", ticker, len(symbols))
 
     tried = 0

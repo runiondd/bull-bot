@@ -91,6 +91,7 @@ def backfill_options(conn: sqlite3.Connection, client: fetchers._ClientLike) -> 
     result = options_backfill.run(
         conn=conn, client=client, ticker="SPY",
         spot=spot, start=start, end=end,
+        strike_range_fraction=0.10, strike_step=1.0,
     )
     conn.commit()
 
