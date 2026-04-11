@@ -1,0 +1,74 @@
+{
+  "model": "claude-opus-4-6",
+  "generated_at": "2026-04-10 04:33:03Z",
+  "pass": true,
+  "calls": [
+    {
+      "call_index": 1,
+      "ok": true,
+      "latency_ms": 8164.0,
+      "input_tokens": 1285,
+      "output_tokens": 241,
+      "cost_usd": 0.03735,
+      "json_valid": true,
+      "response_preview": "{\"class_name\":\"LongCall\",\"params\":{\"dte\":30,\"delta\":0.55,\"exit_dte\":7,\"profit_target\":1.5,\"stop_loss\":0.5,\"sma_filter\":\"close_above_sma20\",\"rsi_min\":50,\"rsi_max\":70},\"rationale\":\"All four prior iterations used short-premium strategies (credit spreads, iron condors) that degraded OOS, especially in bull regimes where upside moves erode short call legs or leave insufficient premium. With a confirmed",
+      "error": null
+    },
+    {
+      "call_index": 2,
+      "ok": true,
+      "latency_ms": 7968.9,
+      "input_tokens": 1285,
+      "output_tokens": 241,
+      "cost_usd": 0.03735,
+      "json_valid": true,
+      "response_preview": "{\"class_name\":\"LongCall\",\"params\":{\"dte\":30,\"delta\":0.55,\"exit_dte\":7,\"profit_target\":1.5,\"stop_loss\":0.5,\"sma_filter\":\"close_above_sma20\",\"rsi_min\":50,\"rsi_max\":70},\"rationale\":\"All four prior iterations used short-premium strategies (credit spreads, iron condors) that degraded OOS, especially in bull regimes where upside moves erode short call legs or leave insufficient premium. Given the confir",
+      "error": null
+    },
+    {
+      "call_index": 3,
+      "ok": true,
+      "latency_ms": 7916.1,
+      "input_tokens": 1285,
+      "output_tokens": 241,
+      "cost_usd": 0.03735,
+      "json_valid": true,
+      "response_preview": "{\"class_name\":\"LongCall\",\"params\":{\"dte\":30,\"delta\":0.55,\"exit_dte\":7,\"profit_target\":1.5,\"stop_loss\":0.5,\"sma_filter\":\"close_above_sma20\",\"rsi_min\":50,\"rsi_max\":70},\"rationale\":\"All four prior iterations used short-premium strategies (credit spreads, iron condors) that degraded OOS, especially in bull regimes where upside moves erode short call legs or leave insufficient premium. With a confirmed",
+      "error": null
+    },
+    {
+      "call_index": 4,
+      "ok": true,
+      "latency_ms": 8213.8,
+      "input_tokens": 1285,
+      "output_tokens": 253,
+      "cost_usd": 0.03825,
+      "json_valid": true,
+      "response_preview": "{\"class_name\":\"LongCall\",\"params\":{\"dte\":30,\"delta\":0.55,\"exit_dte\":7,\"profit_target\":1.5,\"stop_loss\":0.5,\"sma_filter\":\"close_above_sma20\",\"rsi_min\":50,\"rsi_max\":70},\"rationale\":\"All four prior iterations used short-premium strategies (credit spreads, iron condors) that degraded OOS, especially in bull regimes where upside moves erode short call legs or leave insufficient premium. Given the confir",
+      "error": null
+    },
+    {
+      "call_index": 5,
+      "ok": true,
+      "latency_ms": 8461.5,
+      "input_tokens": 1285,
+      "output_tokens": 240,
+      "cost_usd": 0.037275,
+      "json_valid": true,
+      "response_preview": "{\"class_name\":\"LongCall\",\"params\":{\"dte\":30,\"delta\":0.55,\"take_profit\":1.5,\"stop_loss\":0.5,\"rsi_entry_min\":45,\"rsi_entry_max\":65,\"sma_filter\":\"close_above_sma20\",\"iv_rank_max\":45},\"rationale\":\"All four prior iterations used short-premium strategies (credit spreads, iron condors) that degraded OOS, especially in bull regimes where upside moves erode short call legs or leave put spreads with thin ed",
+      "error": null
+    }
+  ],
+  "summary": {
+    "n_calls": 5,
+    "n_success": 5,
+    "n_json_valid": 5,
+    "p50_latency_ms": 8164.0,
+    "p90_latency_ms": 8362.42,
+    "mean_latency_ms": 8144.860000000001,
+    "mean_input_tokens": 1285.0,
+    "mean_output_tokens": 243.2,
+    "mean_cost_usd": 0.037515,
+    "total_cost_usd": 0.18757500000000002
+  }
+}

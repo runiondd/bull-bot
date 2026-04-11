@@ -1,0 +1,8 @@
+{
+  "tripped_at": 1775873766,
+  "reason": "nightly_recompute",
+  "daily_loss_usd": 2000.0,
+  "drawdown_usd": 2000.0,
+  "llm_spend_usd": 0.0,
+  "live_tickers_at_trip": 0
+}
