@@ -28,6 +28,8 @@ class StrategySnapshot:
     iv_rank: float
     regime: str   # 'bull' | 'bear' | 'chop'
     chain: list[OptionContract]
+    market_brief: str = ""   # Daily market regime brief (empty during backtesting)
+    ticker_brief: str = ""   # Daily per-ticker brief (empty during backtesting)
 
 
 class Strategy(ABC):
