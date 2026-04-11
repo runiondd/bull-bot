@@ -63,8 +63,8 @@ class UWHttpClient:
 
     @retry(
         retry=retry_if_exception_type((UWRateLimited, UWTransient, requests.RequestException)),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1.5, min=1, max=30),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=2, min=2, max=60),
         reraise=True,
     )
     def get(self, path: str, params: dict[str, Any] | None = None) -> tuple[int, Any]:

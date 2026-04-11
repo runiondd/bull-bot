@@ -54,9 +54,9 @@ def main() -> int:
     print(f"  → got {len(bars)} bars")
     for b in bars:
         conn.execute(
-            "INSERT OR REPLACE INTO bars (ticker, timeframe, ts, open, high, low, close, volume, source) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (b.ticker, b.timeframe, b.ts, b.open, b.high, b.low, b.close, b.volume, b.source),
+            "INSERT OR REPLACE INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (b.ticker, b.timeframe, b.ts, b.open, b.high, b.low, b.close, b.volume),
         )
 
     print("Backfilling SPY option contracts (small window, 60 days)...")
@@ -66,7 +66,7 @@ def main() -> int:
         conn=conn, client=uw_client, ticker="SPY", spot=spot,
         start=date.today() - timedelta(days=60),
         end=date.today() + timedelta(days=45),
-        rate_limit_sleep=0.05,
+        rate_limit_sleep=0.3,
     )
     print(f"  → {summary}")
     assert summary["rows_written"] > 0, "backfill produced no rows"

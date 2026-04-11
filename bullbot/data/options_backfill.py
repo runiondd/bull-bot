@@ -105,12 +105,13 @@ def run(
         if contracts:
             with_data += 1
             for c in contracts:
+                db_kind = "call" if c.kind == "C" else "put"
                 conn.execute(
                     "INSERT OR REPLACE INTO option_contracts "
-                    "(ticker, expiry, strike, kind, ts, nbbo_bid, nbbo_ask, last, volume, open_interest, iv) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (c.ticker, c.expiry, c.strike, c.kind, c.ts,
-                     c.nbbo_bid, c.nbbo_ask, c.last, c.volume, c.open_interest, c.iv),
+                    "(ticker, expiry, strike, kind, ts, bid, ask, iv, volume, open_interest) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (c.ticker, c.expiry, c.strike, db_kind, c.ts,
+                     c.nbbo_bid, c.nbbo_ask, c.iv, c.volume, c.open_interest),
                 )
                 rows_written += 1
         time.sleep(rate_limit_sleep)
