@@ -141,3 +141,60 @@ def test_build_snapshot_computes_iv_rank(db_conn):
     assert snap is not None
     # IV at day 251 is 35.0. Range is 15-35. Rank should be ~100.
     assert snap.iv_rank > 80.0  # Not hardcoded 50.0
+
+
+def test_build_snapshot_includes_briefs_when_available(db_conn):
+    """Snapshot should include regime briefs from regime_briefs table."""
+    from bullbot.engine.step import _build_snapshot
+
+    ticker = "SPY"
+    base_ts = 1700000000
+
+    for i in range(100):
+        ts = base_ts + i * 86400
+        db_conn.execute(
+            "INSERT INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
+            "VALUES (?, '1d', ?, 400.0, 401.0, 399.0, 400.0, 1000000)",
+            (ticker, ts),
+        )
+
+    # Insert regime briefs for today
+    today_ts = base_ts - (base_ts % 86400)
+    db_conn.execute(
+        "INSERT INTO regime_briefs (scope, ts, signals_json, brief_text, model, cost_usd, source, created_at) "
+        "VALUES ('market', ?, '{}', 'Bull regime.', 'claude-sonnet-4-6', 0.003, 'llm', ?)",
+        (today_ts, base_ts),
+    )
+    db_conn.execute(
+        "INSERT INTO regime_briefs (scope, ts, signals_json, brief_text, model, cost_usd, source, created_at) "
+        "VALUES ('SPY', ?, '{}', 'SPY trending up.', 'claude-sonnet-4-6', 0.003, 'llm', ?)",
+        (today_ts, base_ts),
+    )
+
+    cursor = base_ts + 99 * 86400
+    snap = _build_snapshot(db_conn, ticker, cursor)
+    assert snap is not None
+    assert snap.market_brief == "Bull regime."
+    assert snap.ticker_brief == "SPY trending up."
+
+
+def test_build_snapshot_empty_briefs_when_no_regime_data(db_conn):
+    """Snapshot should have empty briefs when no regime_briefs exist."""
+    from bullbot.engine.step import _build_snapshot
+
+    ticker = "SPY"
+    base_ts = 1700000000
+
+    for i in range(100):
+        ts = base_ts + i * 86400
+        db_conn.execute(
+            "INSERT INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
+            "VALUES (?, '1d', ?, 400.0, 401.0, 399.0, 400.0, 1000000)",
+            (ticker, ts),
+        )
+
+    cursor = base_ts + 99 * 86400
+    snap = _build_snapshot(db_conn, ticker, cursor)
+    assert snap is not None
+    assert snap.market_brief == ""
+    assert snap.ticker_brief == ""

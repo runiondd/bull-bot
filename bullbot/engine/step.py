@@ -128,6 +128,16 @@ def _compute_iv_rank(conn: sqlite3.Connection, ticker: str, cursor: int) -> floa
     return indicators.iv_rank(current_iv, ivs[1:])
 
 
+def _load_brief(conn: sqlite3.Connection, scope: str, cursor: int) -> str:
+    """Load the most recent regime brief for scope on or before cursor's day."""
+    day_ts = cursor - (cursor % 86400)
+    row = conn.execute(
+        "SELECT brief_text FROM regime_briefs WHERE scope=? AND ts<=? ORDER BY ts DESC LIMIT 1",
+        (scope, day_ts),
+    ).fetchone()
+    return row["brief_text"] if row else ""
+
+
 def _build_snapshot(conn: sqlite3.Connection, ticker: str, cursor: int) -> StrategySnapshot | None:
     bars = _load_bars_at_cursor(conn, ticker, cursor, limit=400)
     if len(bars) < 60:
@@ -136,6 +146,8 @@ def _build_snapshot(conn: sqlite3.Connection, ticker: str, cursor: int) -> Strat
     ind = _compute_indicators(bars)
     regime = regime_mod.classify([b.close for b in bars[-60:]])
     iv_rank = _compute_iv_rank(conn, ticker, cursor)
+    market_brief = _load_brief(conn, "market", cursor)
+    ticker_brief = _load_brief(conn, ticker, cursor)
     return StrategySnapshot(
         ticker=ticker,
         asof_ts=cursor,
@@ -146,6 +158,8 @@ def _build_snapshot(conn: sqlite3.Connection, ticker: str, cursor: int) -> Strat
         iv_rank=iv_rank,
         regime=regime,
         chain=chain,
+        market_brief=market_brief,
+        ticker_brief=ticker_brief,
     )
 
 
