@@ -203,6 +203,24 @@ CREATE TABLE IF NOT EXISTS faithfulness_checks (
 CREATE INDEX IF NOT EXISTS idx_fc_ticker ON faithfulness_checks (ticker, checked_at DESC);
 
 -- ---------------------------------------------------------------------------
+-- regime_briefs: cached market and per-ticker regime analysis
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS regime_briefs (
+    id              INTEGER PRIMARY KEY,
+    scope           TEXT NOT NULL,       -- 'market' or ticker symbol (e.g. 'AAPL')
+    ts              INTEGER NOT NULL,    -- trading day as midnight UTC epoch
+    signals_json    TEXT NOT NULL,       -- raw quantitative signals (JSON)
+    brief_text      TEXT NOT NULL,       -- LLM-synthesized brief
+    model           TEXT NOT NULL,       -- model used (e.g. 'claude-sonnet-4-6')
+    cost_usd        REAL NOT NULL,       -- LLM cost for this synthesis
+    source          TEXT NOT NULL DEFAULT 'llm',  -- 'llm' or 'fallback'
+    created_at      INTEGER NOT NULL,
+    UNIQUE(scope, ts)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_regime_briefs_scope_ts ON regime_briefs (scope, ts DESC);
+
+-- ---------------------------------------------------------------------------
 -- iteration_failures: records of failed iteration attempts
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS iteration_failures (
