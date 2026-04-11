@@ -32,6 +32,20 @@ BARS_TICKERS = list(dict.fromkeys(BARS_TICKERS))  # dedupe preserving order
 BARS_LIMIT = 2500
 
 
+def _backfill_vix_yahoo(conn: sqlite3.Connection) -> int:
+    """Fetch VIX from Yahoo Finance and persist to bars table."""
+    log.info("  -> Falling back to Yahoo Finance for VIX...")
+    bars = fetchers.fetch_vix_bars_yahoo(limit=BARS_LIMIT)
+    for b in bars:
+        conn.execute(
+            "INSERT OR REPLACE INTO bars "
+            "(ticker, timeframe, ts, open, high, low, close, volume) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (b.ticker, b.timeframe, b.ts, b.open, b.high, b.low, b.close, b.volume),
+        )
+    return len(bars)
+
+
 def backfill_bars(conn: sqlite3.Connection, client: fetchers._ClientLike) -> None:
     log.info("=== BACKFILLING DAILY BARS (%d tickers) ===", len(BARS_TICKERS))
     for i, ticker in enumerate(BARS_TICKERS, 1):
@@ -40,7 +54,14 @@ def backfill_bars(conn: sqlite3.Connection, client: fetchers._ClientLike) -> Non
             bars = cache.get_daily_bars(conn, client, ticker, limit=BARS_LIMIT)
             log.info("  -> %s: %d bars loaded", ticker, len(bars))
         except Exception as e:
-            log.error("  -> %s FAILED: %s", ticker, e)
+            if ticker == "VIX":
+                try:
+                    count = _backfill_vix_yahoo(conn)
+                    log.info("  -> VIX: %d bars loaded (Yahoo Finance)", count)
+                except Exception as e2:
+                    log.error("  -> VIX Yahoo fallback also FAILED: %s", e2)
+            else:
+                log.error("  -> %s FAILED: %s", ticker, e)
     conn.commit()
 
     log.info("=== BARS COVERAGE REPORT ===")

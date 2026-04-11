@@ -143,6 +143,36 @@ def fetch_daily_ohlc(client: _ClientLike, ticker: str, limit: int = 2500) -> lis
     raise DataFetchError(f"unexpected status {status}")
 
 
+def fetch_vix_bars_yahoo(limit: int = 2500) -> list[Bar]:
+    """Fetch VIX daily bars from Yahoo Finance (fallback for UW index restriction)."""
+    import yfinance as yf
+
+    vix = yf.Ticker("^VIX")
+    # yfinance max period for daily data
+    df = vix.history(period="max", interval="1d")
+    if df.empty:
+        raise DataFetchError("empty VIX response from Yahoo Finance")
+    # Take last `limit` rows
+    df = df.tail(limit)
+    bars: list[Bar] = []
+    for idx, row in df.iterrows():
+        ts = int(idx.timestamp())
+        bars.append(
+            Bar(
+                ticker="VIX",
+                timeframe="1d",
+                ts=ts,
+                open=float(row["Open"]),
+                high=float(row["High"]),
+                low=float(row["Low"]),
+                close=float(row["Close"]),
+                volume=max(int(row.get("Volume", 0)), 0),
+                source="yahoo",
+            )
+        )
+    return bars
+
+
 def fetch_chains_snapshot(client: _ClientLike, ticker: str, date: str | None = None) -> list[str]:
     """Fetch list of option symbols that existed on `date` (or today)."""
     params: dict[str, Any] = {}

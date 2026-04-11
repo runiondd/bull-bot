@@ -27,7 +27,7 @@ class Bar(BaseModel):
     low: float = Field(gt=0)
     close: float = Field(gt=0)
     volume: int = Field(ge=0)
-    source: Literal["uw", "polygon"]
+    source: Literal["uw", "polygon", "yahoo"]
 
     @field_validator("ticker")
     @classmethod
