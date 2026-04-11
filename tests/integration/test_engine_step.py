@@ -108,3 +108,36 @@ def test_step_insufficient_bars_returns_none(db_conn):
     )
     assert result.signal is None
     assert result.filled is False
+
+
+def test_build_snapshot_computes_iv_rank(db_conn):
+    """iv_rank should be computed from iv_surface, not hardcoded to 50.0."""
+    from bullbot.engine.step import _build_snapshot
+
+    ticker = "SPY"
+    base_ts = 1700000000
+
+    # Insert 252 daily bars
+    for i in range(252):
+        ts = base_ts + i * 86400
+        db_conn.execute(
+            "INSERT INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
+            "VALUES (?, '1d', ?, 400.0, 401.0, 399.0, 400.0, 1000000)",
+            (ticker, ts),
+        )
+
+    # Insert 252 days of IV surface data: IV ranges from 15 to 35
+    for i in range(252):
+        ts = base_ts + i * 86400
+        iv = 15.0 + (20.0 * i / 251)
+        db_conn.execute(
+            "INSERT INTO iv_surface (ticker, ts, expiry, strike, iv) "
+            "VALUES (?, ?, '2026-06-20', 400.0, ?)",
+            (ticker, ts, iv),
+        )
+
+    cursor = base_ts + 251 * 86400
+    snap = _build_snapshot(db_conn, ticker, cursor)
+    assert snap is not None
+    # IV at day 251 is 35.0. Range is 15-35. Rank should be ~100.
+    assert snap.iv_rank > 80.0  # Not hardcoded 50.0

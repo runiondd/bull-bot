@@ -104,6 +104,30 @@ def _compute_indicators(bars: list[Bar]) -> dict[str, float]:
     return out
 
 
+def _compute_iv_rank(conn: sqlite3.Connection, ticker: str, cursor: int) -> float:
+    """Compute IV rank from iv_surface table.
+
+    Uses the most recent IV observation at each day as the daily IV.
+    Falls back to 50.0 if insufficient data.
+    """
+    rows = conn.execute(
+        "SELECT ts, iv FROM iv_surface "
+        "WHERE ticker=? AND ts<=? "
+        "ORDER BY ts DESC LIMIT 252",
+        (ticker, cursor),
+    ).fetchall()
+
+    if len(rows) < 20:
+        return 50.0
+
+    ivs = [float(r["iv"]) for r in rows if r["iv"] is not None]
+    if len(ivs) < 20:
+        return 50.0
+
+    current_iv = ivs[0]
+    return indicators.iv_rank(current_iv, ivs[1:])
+
+
 def _build_snapshot(conn: sqlite3.Connection, ticker: str, cursor: int) -> StrategySnapshot | None:
     bars = _load_bars_at_cursor(conn, ticker, cursor, limit=400)
     if len(bars) < 60:
@@ -111,7 +135,7 @@ def _build_snapshot(conn: sqlite3.Connection, ticker: str, cursor: int) -> Strat
     chain = _load_chain_at_cursor(conn, ticker, cursor)
     ind = _compute_indicators(bars)
     regime = regime_mod.classify([b.close for b in bars[-60:]])
-    iv_rank = 50.0  # v1 simplification
+    iv_rank = _compute_iv_rank(conn, ticker, cursor)
     return StrategySnapshot(
         ticker=ticker,
         asof_ts=cursor,
