@@ -82,17 +82,30 @@ def backfill_options(conn: sqlite3.Connection, client: fetchers._ClientLike) -> 
         return
     spot = row[0]
 
-    end = date.today()
-    start = end - timedelta(days=config.WF_WINDOW_MONTHS * 30 + 60)
+    # Align options window with bar data: need expiries from bar_start+7d to bar_end+60d
+    bar_range = conn.execute(
+        "SELECT MIN(date(ts, 'unixepoch')), MAX(date(ts, 'unixepoch')) "
+        "FROM bars WHERE ticker='SPY' AND timeframe='1d'"
+    ).fetchone()
+    start = date.fromisoformat(bar_range[0]) + timedelta(days=7)
+    end = date.fromisoformat(bar_range[1]) + timedelta(days=60)
 
     log.info("=== BACKFILLING SPY OPTIONS ===")
-    log.info("  spot=%.2f  window=%s -> %s", spot, start, end)
+    log.info("  spot=%.2f  expiry_window=%s -> %s", spot, start, end)
+
+    # Build symbols and process recent expiries first (most useful for backtest)
+    symbols = options_backfill.build_candidate_symbols(
+        ticker="SPY", spot=spot, backfill_start=start, backfill_end=end,
+        strike_range_fraction=0.10, strike_step=1.0,
+    )
+    symbols.reverse()  # newest expiries first
 
     result = options_backfill.run(
         conn=conn, client=client, ticker="SPY",
         spot=spot, start=start, end=end,
         strike_range_fraction=0.10, strike_step=1.0,
         rate_limit_sleep=0.2,
+        _presorted_symbols=symbols,
     )
     conn.commit()
 

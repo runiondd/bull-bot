@@ -89,9 +89,10 @@ def run(
     rate_limit_sleep: float = 0.1,
     strike_range_fraction: float = 0.20,
     strike_step: float = 1.0,
+    _presorted_symbols: list[str] | None = None,
 ) -> dict[str, int]:
     """Backfill option history for a ticker across a date window."""
-    symbols = build_candidate_symbols(
+    symbols = _presorted_symbols or build_candidate_symbols(
         ticker=ticker, spot=spot, backfill_start=start, backfill_end=end,
         strike_range_fraction=strike_range_fraction, strike_step=strike_step,
     )
