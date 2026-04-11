@@ -100,11 +100,20 @@ def run(
     tried = 0
     with_data = 0
     rows_written = 0
+    consecutive_429 = 0
     for sym in symbols:
         tried += 1
         try:
             contracts = fetchers.fetch_option_historic(client, sym)
-        except fetchers.DataFetchError as e:
+            consecutive_429 = 0
+        except fetchers.UWRateLimited:
+            consecutive_429 += 1
+            backoff = min(30, 2 ** consecutive_429)
+            log.warning("rate limited on %s, backing off %ds (%d consecutive)",
+                        sym, backoff, consecutive_429)
+            time.sleep(backoff)
+            continue
+        except (fetchers.DataFetchError, fetchers.UWTransient, Exception) as e:
             log.warning("fetch error on %s: %s", sym, e)
             continue
         if contracts:
@@ -119,6 +128,11 @@ def run(
                      c.nbbo_bid, c.nbbo_ask, c.iv, c.volume, c.open_interest),
                 )
                 rows_written += 1
+        # Periodic commit every 500 symbols
+        if tried % 500 == 0:
+            conn.commit()
+            log.info("backfill %s progress: tried=%d with_data=%d rows=%d",
+                     ticker, tried, with_data, rows_written)
         time.sleep(rate_limit_sleep)
 
     log.info("backfill %s done: tried=%d with_data=%d rows_written=%d",
