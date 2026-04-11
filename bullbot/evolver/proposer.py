@@ -129,6 +129,13 @@ def build_user_prompt(
         else "No best strategy identified yet."
     )
 
+    # Regime context — only include if briefs are non-empty
+    regime_block = ""
+    if snapshot.market_brief:
+        regime_block += f"\n=== Market Regime Analysis ===\n{snapshot.market_brief}\n"
+    if snapshot.ticker_brief:
+        regime_block += f"\n=== Ticker Analysis ({snapshot.ticker}) ===\n{snapshot.ticker_brief}\n"
+
     return f"""=== Market Snapshot ===
 Ticker:     {snapshot.ticker}
 As-of Unix: {snapshot.asof_ts}
@@ -137,7 +144,7 @@ Regime:     {snapshot.regime}
 IV Rank:    {snapshot.iv_rank}
 Indicators: {json.dumps(snapshot.indicators)}
 ATM Greeks: {json.dumps(snapshot.atm_greeks)}
-
+{regime_block}
 === Evolver History ===
 {history_block}
 
