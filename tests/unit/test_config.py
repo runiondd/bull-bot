@@ -72,3 +72,15 @@ def test_paths_are_absolute():
     assert config.DB_PATH.is_absolute()
     assert config.REPORTS_DIR.is_absolute()
     assert config.LOGS_DIR.is_absolute()
+
+def test_regime_config_constants_exist():
+    from bullbot import config
+    assert isinstance(config.REGIME_DATA_TICKERS, list)
+    assert "VIX" in config.REGIME_DATA_TICKERS
+    assert len(config.REGIME_DATA_TICKERS) == 14
+    assert config.REGIME_SYNTHESIS_MODEL == "claude-sonnet-4-6"
+    assert config.REGIME_MARKET_BRIEF_MAX_TOKENS == 300
+    assert config.REGIME_TICKER_BRIEF_MAX_TOKENS == 200
+    assert isinstance(config.TICKER_SECTOR_MAP, dict)
+    assert config.TICKER_SECTOR_MAP["AAPL"] == "XLK"
+    assert config.TICKER_SECTOR_MAP["SPY"] is None

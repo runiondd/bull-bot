@@ -83,3 +83,45 @@ TICK_INTERVAL_OFFHOURS_SEC = 5
 MARKET_TIMEZONE = "America/New_York"
 
 RISK_FREE_RATE = 0.045
+
+# --- Regime agent ---
+
+REGIME_DATA_TICKERS: list[str] = [
+    "VIX",   # Volatility index (use UVXY as fallback if UW doesn't serve VIX)
+    "XLK",   # Technology
+    "XLF",   # Financials
+    "XLE",   # Energy
+    "XLV",   # Healthcare
+    "XLI",   # Industrials
+    "XLC",   # Communication services
+    "XLY",   # Consumer discretionary
+    "XLP",   # Consumer staples
+    "XLU",   # Utilities
+    "XLRE",  # Real estate
+    "XLB",   # Materials
+    "TLT",   # Treasury bonds (rate/risk proxy)
+    "HYG",   # High-yield credit (risk appetite proxy)
+]
+
+REGIME_SYNTHESIS_MODEL = "claude-sonnet-4-6"
+REGIME_MARKET_BRIEF_MAX_TOKENS = 300
+REGIME_TICKER_BRIEF_MAX_TOKENS = 200
+
+TICKER_SECTOR_MAP: dict[str, str | None] = {
+    "SPY": None,    # Index — uses breadth_score instead
+    "QQQ": "XLK",
+    "IWM": None,    # Index
+    "AAPL": "XLK",
+    "MSFT": "XLK",
+    "NVDA": "XLK",
+    "TSLA": "XLY",
+    "AMD": "XLK",
+    "META": "XLC",
+    "GOOGL": "XLC",
+}
+
+# Sector ETFs used for breadth calculation (all 11 GICS sectors)
+SECTOR_ETFS: list[str] = [
+    "XLK", "XLF", "XLE", "XLV", "XLI",
+    "XLC", "XLY", "XLP", "XLU", "XLRE", "XLB",
+]
