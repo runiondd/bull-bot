@@ -201,7 +201,7 @@ def refresh_market_brief(conn, client, signals: MarketSignals, ts: int) -> str:
     created_at = int(time.time())
 
     conn.execute(
-        """INSERT OR REPLACE INTO regime_briefs
+        """INSERT OR IGNORE INTO regime_briefs
            (scope, ts, signals_json, brief_text, model, cost_usd, source, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         (
@@ -247,7 +247,7 @@ def refresh_ticker_brief(
     created_at = int(time.time())
 
     conn.execute(
-        """INSERT OR REPLACE INTO regime_briefs
+        """INSERT OR IGNORE INTO regime_briefs
            (scope, ts, signals_json, brief_text, model, cost_usd, source, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         (

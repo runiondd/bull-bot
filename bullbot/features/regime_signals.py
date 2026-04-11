@@ -68,7 +68,7 @@ def _rate_of_change(closes: list[float], period: int) -> float | None:
     """Percent rate of change over `period` bars."""
     if len(closes) < period + 1:
         return None
-    return (closes[-1] - closes[-(period + 1)]) / closes[-(period + 1)]
+    return ((closes[-1] - closes[-(period + 1)]) / closes[-(period + 1)]) * 100.0
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +183,7 @@ def compute_ticker_signals(
     ticker_bars: list[dict],
     iv_history: list[float],
     current_iv: float | None,
-    sector_etf_bars: list[dict],
+    sector_etf_bars: list[dict] | None,
 ) -> TickerSignals | None:
     """Compute per-ticker regime signals.
 
