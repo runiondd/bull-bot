@@ -92,3 +92,6 @@ class Signal(BaseModel):
     max_loss_per_contract: float = Field(ge=0)
     rationale: str
     position_id_to_close: int | None = None   # set when intent='close'
+    profit_target_pct: float | None = None
+    stop_loss_mult: float | None = None
+    min_dte_close: int | None = None

@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS positions (
     open_price      REAL    NOT NULL,
     close_price     REAL,
     mark_to_mkt     REAL    NOT NULL DEFAULT 0.0,
+    exit_rules      TEXT,           -- JSON: {"profit_target_pct": 0.5, ...}
     opened_at       INTEGER NOT NULL,
     closed_at       INTEGER,
     pnl_realized    REAL
