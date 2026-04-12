@@ -16,14 +16,14 @@ def test_capital_and_timeline():
 def test_edge_gate_thresholds():
     assert config.EDGE_PF_IS_MIN == 1.5
     assert config.EDGE_PF_OOS_MIN == 1.3
-    assert config.EDGE_TRADE_COUNT_MIN == 30
+    assert config.EDGE_TRADE_COUNT_MIN == 10
 
 def test_walkforward_config():
     assert config.WF_TRAIN_FRAC == 0.70
     assert config.WF_WINDOW_MONTHS == 24
     assert config.WF_STEP_DAYS == 30
     assert config.WF_MIN_FOLDS == 3
-    assert config.WF_MAX_FOLDS == 5
+    assert config.WF_MAX_FOLDS == 8
 
 def test_plateau_thresholds():
     assert config.PLATEAU_IMPROVEMENT_MIN == 0.10

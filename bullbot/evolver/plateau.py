@@ -8,6 +8,7 @@ or (c) mark it as edge_found (promote to paper_trial).
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -53,10 +54,12 @@ def classify(state: _StateLike, metrics: _MetricsLike) -> ClassifyResult:
             new_best_pf_oos=max(state.best_pf_oos, metrics.pf_oos),
         )
 
+    # inf > inf + 0.10 is False, so treat inf-vs-inf as not degraded
+    both_inf = math.isinf(metrics.pf_oos) and math.isinf(state.best_pf_oos)
     improved = metrics.pf_oos > state.best_pf_oos + config.PLATEAU_IMPROVEMENT_MIN
     new_best = max(state.best_pf_oos, metrics.pf_oos)
 
-    if improved:
+    if improved or both_inf:
         new_plateau = 0
     else:
         new_plateau = state.plateau_counter + 1
