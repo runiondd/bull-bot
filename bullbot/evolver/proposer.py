@@ -81,13 +81,19 @@ The JSON must have exactly these three keys:
   "params"      — a flat dict of strategy parameters (all numeric values)
   "rationale"   — 1-3 sentence justification for this proposal
 
+The params dict should include BOTH entry params (dte, delta, width, iv_rank_min, etc.)
+AND exit params:
+  - profit_target_pct: fraction of max profit to close at (e.g. 0.50 = 50%)
+  - stop_loss_mult: multiple of credit/debit to stop at (e.g. 2.0 = 2x loss)
+  - min_dte_close: close position at this many days to expiry (e.g. 7)
+
 Registered strategies: {strategy_names}
 
 Example response:
 {{
   "class_name": "PutCreditSpread",
-  "params": {{"dte": 21, "short_delta": 0.30, "width": 5, "iv_rank_min": 50}},
-  "rationale": "Selling premium with defined risk. IV rank above 50 confirms edge."
+  "params": {{"dte": 21, "short_delta": 0.30, "width": 5, "iv_rank_min": 50, "profit_target_pct": 0.50, "stop_loss_mult": 2.0, "min_dte_close": 7}},
+  "rationale": "Selling premium with defined risk. 50% profit target captures theta decay efficiently."
 }}
 """
 
