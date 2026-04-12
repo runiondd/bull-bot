@@ -120,7 +120,7 @@ def _execute_close(
     net_close, _ = fill_model.simulate_close_multi_leg(
         legs, chain_rows, pos["contracts"],
     )
-    pnl = pos["open_price"] - net_close
+    pnl = -(pos["open_price"] + net_close)
     comm = fill_model.commission(pos["contracts"], len(legs))
 
     conn.execute(

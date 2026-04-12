@@ -277,7 +277,7 @@ def step(
     except fill_model.FillRejected:
         return StepResult(signal=signal, filled=False)
 
-    pnl = pos_row["open_price"] - net_close
+    pnl = -(pos_row["open_price"] + net_close)
     comm = fill_model.commission(pos_row["contracts"], len(legs))
     conn.execute(
         "UPDATE positions SET closed_at=?, close_price=?, pnl_realized=?, mark_to_mkt=0.0 WHERE id=?",
