@@ -14,7 +14,7 @@ from typing import Any
 
 from bullbot import config
 from bullbot.data.schemas import Bar, Leg, OptionContract, Signal
-from bullbot.engine import fill_model, position_sizer
+from bullbot.engine import exit_manager, fill_model, position_sizer
 from bullbot.features import greeks as greeks_mod
 from bullbot.features import indicators, regime as regime_mod
 from bullbot.strategies.base import Strategy, StrategySnapshot
@@ -209,6 +209,9 @@ def step(
     if snap is None:
         return StepResult(signal=None, filled=False)
 
+    chain_rows = _build_chain_rows(snap.chain)
+    exit_manager.check_exits(conn, run_id, ticker, cursor, chain_rows)
+
     open_positions = _load_open_positions(conn, run_id, ticker)
     signal = strategy.evaluate(snap, open_positions)
     if signal is None:
@@ -222,8 +225,6 @@ def step(
         )
         if contracts <= 0:
             return StepResult(signal=signal, filled=False)
-
-        chain_rows = _build_chain_rows(snap.chain)
 
         try:
             net_cash, filled_legs = fill_model.simulate_open_multi_leg(
@@ -240,12 +241,19 @@ def step(
             (run_id, ticker, strategy_id, cursor,
              json.dumps([l.model_dump() for l in signal.legs]), comm),
         )
+        exit_rules = json.dumps({
+            k: v for k, v in {
+                "profit_target_pct": signal.profit_target_pct,
+                "stop_loss_mult": signal.stop_loss_mult,
+                "min_dte_close": signal.min_dte_close,
+            }.items() if v is not None
+        }) or None
         cur = conn.execute(
-            "INSERT INTO positions (run_id, ticker, strategy_id, opened_at, legs, contracts, open_price, mark_to_mkt) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO positions (run_id, ticker, strategy_id, opened_at, legs, contracts, open_price, mark_to_mkt, exit_rules) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (run_id, ticker, strategy_id, cursor,
              json.dumps([l.model_dump() for l in signal.legs]),
-             contracts, net_cash, net_cash),
+             contracts, net_cash, net_cash, exit_rules),
         )
         pos_id = cur.lastrowid
         return StepResult(
@@ -262,8 +270,6 @@ def step(
     ).fetchone()
     if not pos_row:
         return StepResult(signal=signal, filled=False)
-
-    chain_rows = _build_chain_rows(snap.chain)
 
     legs = [Leg(**l) for l in json.loads(pos_row["legs"])]
     try:
