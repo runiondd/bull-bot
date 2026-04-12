@@ -161,6 +161,9 @@ class IronCondor(Strategy):
                 f"{long_put.strike}P/{short_put.strike}P/{short_call.strike}C/{long_call.strike}C "
                 f"(width={wing_width}, iv_rank={snapshot.iv_rank:.0f})"
             ),
+            profit_target_pct=self.params.get("profit_target_pct", config.DEFAULT_PROFIT_TARGET_PCT),
+            stop_loss_mult=self.params.get("stop_loss_mult", config.DEFAULT_STOP_LOSS_MULT),
+            min_dte_close=int(self.params.get("min_dte_close", config.DEFAULT_MIN_DTE_CLOSE)),
         )
 
     def max_loss_per_contract(self) -> float:

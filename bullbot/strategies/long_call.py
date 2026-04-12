@@ -14,6 +14,7 @@ from typing import Any
 
 from bullbot.data.schemas import Leg, Signal
 from bullbot.strategies.base import Strategy, StrategySnapshot
+from bullbot import config
 from bullbot.strategies.iron_condor import _pick_by_delta
 from bullbot.strategies.put_credit_spread import _make_osi
 
@@ -85,6 +86,9 @@ class LongCall(Strategy):
                 f"Long {best.strike}C {chosen_expiry} "
                 f"(delta~{target_delta}, regime={snapshot.regime})"
             ),
+            profit_target_pct=self.params.get("profit_target_pct", config.DEFAULT_PROFIT_TARGET_PCT),
+            stop_loss_mult=self.params.get("stop_loss_mult", config.DEFAULT_STOP_LOSS_MULT),
+            min_dte_close=int(self.params.get("min_dte_close", config.DEFAULT_MIN_DTE_CLOSE)),
         )
 
     def max_loss_per_contract(self) -> float:
