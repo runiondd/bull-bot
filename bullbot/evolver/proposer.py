@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -181,10 +182,16 @@ def _extract_text(response: Any) -> str:
     return ""
 
 
+def _strip_code_fences(raw: str) -> str:
+    """Remove markdown code fences if present."""
+    m = re.search(r"```(?:json)?\s*\n?(.*?)```", raw, re.DOTALL)
+    return m.group(1).strip() if m else raw.strip()
+
+
 def _parse_json(raw: str) -> dict | None:
     """Try to parse *raw* as JSON dict; return None on failure."""
     try:
-        data = json.loads(raw.strip())
+        data = json.loads(_strip_code_fences(raw))
         if isinstance(data, dict):
             return data
     except json.JSONDecodeError:
