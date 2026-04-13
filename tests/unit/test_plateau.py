@@ -21,6 +21,9 @@ class FakeMetrics:
     pf_is: float
     pf_oos: float
     trade_count: int = 40
+    cagr_oos: float | None = None
+    sortino_oos: float | None = None
+    max_dd_pct: float = 0.0
 
 
 def test_edge_found_when_all_gates_pass():
@@ -107,3 +110,45 @@ def test_inf_pf_oos_passes_gate_with_enough_trades():
     metrics = FakeMetrics(pf_is=float("inf"), pf_oos=float("inf"), trade_count=15)
     result = plateau.classify(state, metrics)
     assert result.verdict == "edge_found"
+
+
+# ---------- Growth gate tests ----------
+
+
+@dataclass
+class FakeGrowthMetrics:
+    pf_is: float = 0.0
+    pf_oos: float = 0.0
+    trade_count: int = 10
+    cagr_oos: float | None = 0.25
+    sortino_oos: float | None = 1.5
+    max_dd_pct: float = 0.20
+
+
+def test_growth_edge_found_when_all_gates_pass():
+    state = FakeState(iteration_count=3, plateau_counter=1, best_pf_oos=0.10)
+    metrics = FakeGrowthMetrics(cagr_oos=0.25, sortino_oos=1.5, max_dd_pct=0.20, trade_count=8)
+    result = plateau.classify(state, metrics, category="growth")
+    assert result.verdict == "edge_found"
+
+
+def test_growth_no_edge_low_cagr():
+    state = FakeState(iteration_count=3, plateau_counter=2, best_pf_oos=0.15)
+    metrics = FakeGrowthMetrics(cagr_oos=0.10, sortino_oos=1.5, max_dd_pct=0.20, trade_count=8)
+    result = plateau.classify(state, metrics, category="growth")
+    assert result.verdict != "edge_found"
+
+
+def test_growth_no_edge_high_drawdown():
+    state = FakeState(iteration_count=3, plateau_counter=2, best_pf_oos=0.15)
+    metrics = FakeGrowthMetrics(cagr_oos=0.30, sortino_oos=2.0, max_dd_pct=0.40, trade_count=8)
+    result = plateau.classify(state, metrics, category="growth")
+    assert result.verdict != "edge_found"
+
+
+def test_growth_uses_cagr_for_plateau_tracking():
+    state = FakeState(iteration_count=3, plateau_counter=0, best_pf_oos=0.15)
+    metrics = FakeGrowthMetrics(cagr_oos=0.30, sortino_oos=0.5, trade_count=3)
+    result = plateau.classify(state, metrics, category="growth")
+    assert result.new_best_pf_oos == 0.30
+    assert result.improved is True
