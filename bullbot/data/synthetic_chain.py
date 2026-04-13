@@ -54,3 +54,63 @@ def bs_price(
     if kind == "C":
         return spot * _norm_cdf(d1) - strike * math.exp(-r * t_years) * _norm_cdf(d2)
     return strike * math.exp(-r * t_years) * _norm_cdf(-d2) - spot * _norm_cdf(-d1)
+
+
+_DTE_TARGETS = [30, 60, 90, 180, 270, 365]
+
+
+def _strike_step(spot: float) -> float:
+    if spot < 50:
+        return 2.50
+    if spot <= 200:
+        return 5.0
+    return 10.0
+
+
+def generate_synthetic_chain(
+    ticker: str,
+    spot: float,
+    cursor: int,
+    bars: list[Bar],
+    risk_free_rate: float = config.RISK_FREE_RATE,
+) -> list[OptionContract]:
+    """Generate a synthetic option chain using Black-Scholes and realized vol."""
+    vol = realized_vol(bars)
+    step = _strike_step(spot)
+
+    low_strike = math.floor(spot * 0.80 / step) * step
+    high_strike = math.ceil(spot * 1.20 / step) * step
+    strikes = []
+    s = low_strike
+    while s <= high_strike:
+        strikes.append(round(s, 2))
+        s += step
+
+    expiries: list[tuple[str, float]] = []
+    for dte in _DTE_TARGETS:
+        exp_ts = cursor + dte * 86400
+        exp_dt = datetime.fromtimestamp(exp_ts, tz=timezone.utc)
+        expiry_str = exp_dt.strftime("%Y-%m-%d")
+        t_years = dte / 365.0
+        expiries.append((expiry_str, t_years))
+
+    contracts: list[OptionContract] = []
+    for expiry_str, t_years in expiries:
+        for strike in strikes:
+            for kind in ("C", "P"):
+                price = bs_price(spot, strike, t_years, vol, risk_free_rate, kind)
+                bid = max(0.01, round(price * 0.95, 2))
+                ask = round(max(price * 1.05, bid + 0.01), 2)
+                contracts.append(OptionContract(
+                    ticker=ticker,
+                    expiry=expiry_str,
+                    strike=strike,
+                    kind=kind,
+                    ts=cursor,
+                    nbbo_bid=bid,
+                    nbbo_ask=ask,
+                    volume=100,
+                    open_interest=1000,
+                    iv=round(vol, 4),
+                ))
+    return contracts

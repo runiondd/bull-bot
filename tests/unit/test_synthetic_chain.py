@@ -63,3 +63,60 @@ def test_bs_zero_time():
     assert abs(call_itm - 10.0) < 0.01
     put_itm = bs_price(spot=100.0, strike=110.0, t_years=0.0, vol=0.30, r=0.045, kind="P")
     assert abs(put_itm - 10.0) < 0.01
+
+
+def test_generate_chain_produces_contracts():
+    from bullbot.data.synthetic_chain import generate_synthetic_chain
+    from bullbot.data.schemas import OptionContract
+    closes = [250.0 + i * 0.5 for i in range(31)]
+    bars = _make_bars(closes)
+    chain = generate_synthetic_chain(
+        ticker="TSLA", spot=265.0, cursor=bars[-1].ts, bars=bars,
+    )
+    assert len(chain) > 0
+    assert all(isinstance(c, OptionContract) for c in chain)
+
+
+def test_generate_chain_has_calls_and_puts():
+    from bullbot.data.synthetic_chain import generate_synthetic_chain
+    closes = [250.0 + i * 0.5 for i in range(31)]
+    bars = _make_bars(closes)
+    chain = generate_synthetic_chain(
+        ticker="TSLA", spot=265.0, cursor=bars[-1].ts, bars=bars,
+    )
+    kinds = {c.kind for c in chain}
+    assert "C" in kinds
+    assert "P" in kinds
+
+
+def test_generate_chain_has_multiple_expiries():
+    from bullbot.data.synthetic_chain import generate_synthetic_chain
+    closes = [250.0 + i * 0.5 for i in range(31)]
+    bars = _make_bars(closes)
+    chain = generate_synthetic_chain(
+        ticker="TSLA", spot=265.0, cursor=bars[-1].ts, bars=bars,
+    )
+    expiries = {c.expiry for c in chain}
+    assert len(expiries) >= 4
+
+
+def test_generate_chain_bid_ask_valid():
+    from bullbot.data.synthetic_chain import generate_synthetic_chain
+    closes = [250.0 + i * 0.5 for i in range(31)]
+    bars = _make_bars(closes)
+    chain = generate_synthetic_chain(
+        ticker="TSLA", spot=265.0, cursor=bars[-1].ts, bars=bars,
+    )
+    for c in chain:
+        assert c.nbbo_bid >= 0.01
+        assert c.nbbo_ask > c.nbbo_bid
+        assert c.iv is not None and c.iv > 0
+
+
+def test_generate_chain_works_with_short_bars():
+    from bullbot.data.synthetic_chain import generate_synthetic_chain
+    bars = _make_bars([100.0] * 5)
+    chain = generate_synthetic_chain(
+        ticker="TSLA", spot=100.0, cursor=bars[-1].ts, bars=bars,
+    )
+    assert len(chain) > 0
