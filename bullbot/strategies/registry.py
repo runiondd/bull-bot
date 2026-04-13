@@ -13,8 +13,11 @@ from bullbot.strategies.call_credit_spread import CallCreditSpread
 from bullbot.strategies.cash_secured_put import CashSecuredPut
 from bullbot.strategies.iron_condor import IronCondor
 from bullbot.strategies.long_call import LongCall
+from bullbot.strategies.growth_equity import GrowthEquity
+from bullbot.strategies.growth_leaps import GrowthLEAPS
 from bullbot.strategies.long_put import LongPut
 from bullbot.strategies.put_credit_spread import PutCreditSpread
+from bullbot.strategies.bear_put_spread import BearPutSpread
 
 
 class UnknownStrategyError(KeyError):
@@ -22,8 +25,11 @@ class UnknownStrategyError(KeyError):
 
 
 _REGISTRY: dict[str, type[Strategy]] = {
+    "BearPutSpread": BearPutSpread,
+    "GrowthEquity": GrowthEquity,
     "PutCreditSpread": PutCreditSpread,
     "CallCreditSpread": CallCreditSpread,
+    "GrowthLEAPS": GrowthLEAPS,
     "IronCondor": IronCondor,
     "CashSecuredPut": CashSecuredPut,
     "LongCall": LongCall,
