@@ -188,7 +188,7 @@ def _load_open_positions(conn: sqlite3.Connection, run_id: str, ticker: str) -> 
     return [dict(r) for r in rows]
 
 
-def _compute_equity(conn: sqlite3.Connection, run_id: str) -> float:
+def _compute_equity(conn: sqlite3.Connection, run_id: str, category: str = "income") -> float:
     realized = conn.execute(
         "SELECT COALESCE(SUM(pnl_realized), 0) FROM positions "
         "WHERE run_id=? AND closed_at IS NOT NULL",
@@ -199,7 +199,8 @@ def _compute_equity(conn: sqlite3.Connection, run_id: str) -> float:
         "WHERE run_id=? AND closed_at IS NULL",
         (run_id,),
     ).fetchone()[0]
-    return config.INITIAL_CAPITAL_USD + float(realized) + float(mark)
+    base = config.GROWTH_CAPITAL_USD if category == "growth" else config.INITIAL_CAPITAL_USD
+    return base + float(realized) + float(mark)
 
 
 def _build_chain_rows(chain: list[OptionContract]) -> dict[str, dict[str, Any]]:
@@ -285,8 +286,8 @@ def step(
         return StepResult(signal=None, filled=False)
 
     if signal.intent == "open":
-        equity = _compute_equity(conn, run_id)
         category = config.TICKER_CATEGORY.get(ticker, "income")
+        equity = _compute_equity(conn, run_id, category=category)
         contracts = position_sizer.size_position(
             equity=equity,
             max_loss_per_contract=signal.max_loss_per_contract,

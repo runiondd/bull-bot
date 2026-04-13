@@ -1,12 +1,21 @@
-"""Position sizer — contract count from equity, risk budget, and capital pool."""
+"""Position sizer — contract count from equity, risk budget, and capital pool.
+
+Income and growth strategies size against separate accounts:
+  - Income: INITIAL_CAPITAL_USD ($50k taxable)
+  - Growth: GROWTH_CAPITAL_USD ($215k tax-sheltered)
+
+During backtesting, full account equity is used so the evolver can discover
+edge without regime constraints.  For paper/live growth trades, a regime-based
+utilization factor scales down exposure in chop/bear markets.
+"""
 from __future__ import annotations
 
 from bullbot import config
 
-_GROWTH_FRAC = {
-    "bull": config.GROWTH_FRAC_BULL,
-    "chop": config.GROWTH_FRAC_CHOP,
-    "bear": config.GROWTH_FRAC_BEAR,
+_GROWTH_REGIME_UTIL = {
+    "bull": 1.00,
+    "chop": 0.50,
+    "bear": 0.25,
 }
 
 
@@ -17,23 +26,17 @@ def size_position(
     regime: str = "bull",
     run_id: str = "",
 ) -> int:
-    """Return the contract count for this position, or 0 if it can't be sized.
-
-    During backtesting (run_id starts with "bt:"), uses full equity with flat
-    risk fraction so the evolver can discover edge without regime-driven
-    allocation constraints. Regime-based pool sizing applies to paper/live only.
-    """
+    """Return the contract count for this position, or 0 if it can't be sized."""
     if max_loss_per_contract <= 0:
         return 0
 
     if run_id.startswith("bt:"):
         pool = equity
+    elif category == "growth":
+        util = _GROWTH_REGIME_UTIL.get(regime, 0.50)
+        pool = equity * util
     else:
-        growth_frac = _GROWTH_FRAC.get(regime, config.GROWTH_FRAC_CHOP)
-        if category == "growth":
-            pool = equity * growth_frac
-        else:
-            pool = equity * (1.0 - growth_frac)
+        pool = equity
 
     risk_budget = config.POSITION_RISK_FRAC * pool
     raw = int(risk_budget // max_loss_per_contract)

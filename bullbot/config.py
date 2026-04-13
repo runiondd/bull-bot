@@ -32,7 +32,8 @@ UNIVERSE: list[str] = [
 ]
 UNIVERSE_RETIRED: list[str] = []
 
-INITIAL_CAPITAL_USD = 50_000
+INITIAL_CAPITAL_USD = 50_000       # Income account (taxable)
+GROWTH_CAPITAL_USD = 215_000       # Growth account (tax-sheltered)
 TARGET_MONTHLY_PNL_USD = 10_000
 TARGET_DATE = "2026-07-10"
 
