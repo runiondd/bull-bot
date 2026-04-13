@@ -219,9 +219,12 @@ def step(
 
     if signal.intent == "open":
         equity = _compute_equity(conn, run_id)
+        category = config.TICKER_CATEGORY.get(ticker, "income")
         contracts = position_sizer.size_position(
             equity=equity,
             max_loss_per_contract=signal.max_loss_per_contract,
+            category=category,
+            regime=snap.regime,
         )
         if contracts <= 0:
             return StepResult(signal=signal, filled=False)
