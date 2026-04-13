@@ -103,3 +103,27 @@ def iv_percentile(current_iv: float, history: list[float]) -> float:
         return 0.0
     count = sum(1 for h in history if h <= current_iv)
     return 100.0 * count / len(history)
+
+
+def cagr(equity_curve: list[float], days: int) -> float:
+    """Compound annual growth rate over `days` calendar days."""
+    if len(equity_curve) < 2 or days <= 0:
+        return 0.0
+    start, end = equity_curve[0], equity_curve[-1]
+    if start <= 0:
+        return 0.0
+    years = days / 365.0
+    return (end / start) ** (1.0 / years) - 1.0
+
+
+def sortino(returns: list[float], risk_free_rate: float = 0.0) -> float:
+    """Sortino ratio: excess return divided by downside deviation."""
+    if len(returns) < 2:
+        return 0.0
+    excess = [r - risk_free_rate for r in returns]
+    mean_excess = sum(excess) / len(excess)
+    downside = [min(0.0, e) ** 2 for e in excess]
+    downside_dev = (sum(downside) / len(downside)) ** 0.5
+    if downside_dev == 0:
+        return float("inf") if mean_excess > 0 else 0.0
+    return mean_excess / downside_dev
