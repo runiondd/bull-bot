@@ -19,6 +19,7 @@ from bullbot.engine import step as engine_step
 from bullbot.evolver import plateau, proposer
 from bullbot.risk import cost_ledger
 from bullbot.strategies import registry
+from bullbot import config
 
 log = logging.getLogger("bullbot.evolver.iteration")
 
@@ -94,6 +95,7 @@ def run(
     # 1. ticker state
     state = _load_or_create_ticker_state(conn, ticker)
     iteration_num = state["iteration_count"] + 1
+    category = config.TICKER_CATEGORY.get(ticker, "income")
 
     # 2. history
     history = _load_history(conn, ticker)
@@ -111,6 +113,7 @@ def run(
         snapshot=snapshot,
         history=history,
         best_strategy_id=state.get("best_strategy_id"),
+        category=category,
     )
 
     # 5. cost
@@ -199,7 +202,7 @@ def run(
             self.plateau_counter = s["plateau_counter"]
             self.best_pf_oos = s["best_pf_oos"] or 0.0
 
-    result = plateau.classify(_State(state), metrics)
+    result = plateau.classify(_State(state), metrics, category=category)
 
     passed_gate = 1 if result.verdict == "edge_found" else 0
 

@@ -72,6 +72,19 @@ class Proposal:
 # System prompt
 # ---------------------------------------------------------------------------
 
+_GROWTH_GUIDANCE = """
+This ticker is categorized as GROWTH. Emphasize directional strategies with longer
+holding periods. Consider both bullish (GrowthLEAPS, LongCall) and bearish
+(BearPutSpread, LongPut) strategies depending on the regime context.
+Growth strategies can use regime_filter (list of regimes to trade in, e.g. ["bull", "chop"]).
+"""
+
+_INCOME_GUIDANCE = """
+This ticker is categorized as INCOME. Focus on premium-selling strategies
+(PutCreditSpread, CallCreditSpread, IronCondor, CashSecuredPut) that profit from
+time decay.
+"""
+
 _SYSTEM_PROMPT = """You are an expert algorithmic options trader and quantitative researcher.
 Your job is to propose a *single* options strategy variant for the Bull-Bot evolver.
 
@@ -209,6 +222,7 @@ def propose(
     snapshot: StrategySnapshot,
     history: list[dict],
     best_strategy_id: str | None,
+    category: str = "income",
 ) -> Proposal:
     """Call the LLM and return a parsed, validated ``Proposal``.
 
@@ -223,9 +237,10 @@ def propose(
     ProposerApiError
         On unexpected API errors.
     """
+    guidance = _GROWTH_GUIDANCE if category == "growth" else _INCOME_GUIDANCE
     system_prompt = _SYSTEM_PROMPT.format(
         strategy_names=", ".join(registry.list_all_names())
-    )
+    ) + guidance
     user_prompt = build_user_prompt(snapshot, history, best_strategy_id)
 
     total_input_tokens = 0
