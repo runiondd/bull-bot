@@ -74,13 +74,17 @@ class BearPutSpread(Strategy):
         if best_long is None:
             return None
 
-        # Find short put at long_strike - width
-        short_strike = best_long.strike - width
+        # Find short put near long_strike - width (nearest available strike at or below target)
+        target_short = best_long.strike - width
         short_put = None
+        best_short_diff = float("inf")
         for c in expiry_puts:
-            if abs(c.strike - short_strike) < 1.0:
+            if c.strike >= best_long.strike:
+                continue
+            diff = abs(c.strike - target_short)
+            if diff < best_short_diff:
+                best_short_diff = diff
                 short_put = c
-                break
 
         if short_put is None:
             return None
