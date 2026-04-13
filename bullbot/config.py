@@ -51,6 +51,33 @@ PLATEAU_COUNTER_MAX = 3
 ITERATION_CAP = 50
 HISTORY_BLOCK_SIZE = 15
 
+# --- Growth strategy ---
+
+TICKER_CATEGORY: dict[str, str] = {
+    "SPY": "income",
+    "QQQ": "income",
+    "IWM": "income",
+    "AAPL": "income",
+    "MSFT": "income",
+    "NVDA": "growth",
+    "TSLA": "growth",
+    "AMD": "income",
+    "META": "income",
+    "GOOGL": "income",
+}
+
+GROWTH_FRAC_BULL = 0.40
+GROWTH_FRAC_CHOP = 0.20
+GROWTH_FRAC_BEAR = 0.10
+
+GROWTH_WF_WINDOW_MONTHS = 60
+GROWTH_WF_STEP_DAYS = 90
+
+GROWTH_EDGE_CAGR_MIN = 0.20
+GROWTH_EDGE_SORTINO_MIN = 1.0
+GROWTH_EDGE_MAX_DD_PCT = 0.35
+GROWTH_EDGE_TRADE_COUNT_MIN = 5
+
 PAPER_TRIAL_DAYS = 21
 PAPER_TRADE_COUNT_MIN = 10
 FAITHFULNESS_MIN_DAYS = 5

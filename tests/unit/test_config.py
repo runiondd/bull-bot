@@ -84,3 +84,16 @@ def test_regime_config_constants_exist():
     assert isinstance(config.TICKER_SECTOR_MAP, dict)
     assert config.TICKER_SECTOR_MAP["AAPL"] == "XLK"
     assert config.TICKER_SECTOR_MAP["SPY"] is None
+
+def test_growth_config():
+    assert config.TICKER_CATEGORY["TSLA"] == "growth"
+    assert config.TICKER_CATEGORY["SPY"] == "income"
+    assert config.GROWTH_FRAC_BULL == 0.40
+    assert config.GROWTH_FRAC_CHOP == 0.20
+    assert config.GROWTH_FRAC_BEAR == 0.10
+    assert config.GROWTH_WF_WINDOW_MONTHS == 60
+    assert config.GROWTH_WF_STEP_DAYS == 90
+    assert config.GROWTH_EDGE_CAGR_MIN == 0.20
+    assert config.GROWTH_EDGE_SORTINO_MIN == 1.0
+    assert config.GROWTH_EDGE_MAX_DD_PCT == 0.35
+    assert config.GROWTH_EDGE_TRADE_COUNT_MIN == 5
