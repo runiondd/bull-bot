@@ -78,8 +78,8 @@ def generate_synthetic_chain(
     vol = realized_vol(bars)
     step = _strike_step(spot)
 
-    low_strike = math.floor(spot * 0.80 / step) * step
-    high_strike = math.ceil(spot * 1.20 / step) * step
+    low_strike = math.floor(spot * 0.60 / step) * step
+    high_strike = math.ceil(spot * 1.40 / step) * step
     strikes = []
     s = low_strike
     while s <= high_strike:
