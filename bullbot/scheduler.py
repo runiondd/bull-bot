@@ -1,11 +1,13 @@
 """Scheduler — the outer loop."""
 from __future__ import annotations
-import logging, sqlite3, time, traceback
+import json, logging, sqlite3, time, traceback
 from typing import Any
 from bullbot import clock, config, nightly
+from bullbot.engine import step as engine_step
 from bullbot.evolver import iteration as evolver_iteration
 from bullbot.features import regime_agent, regime_signals
 from bullbot.risk import kill_switch
+from bullbot.strategies import registry
 
 log = logging.getLogger("bullbot.scheduler")
 
@@ -96,6 +98,44 @@ def _record_iteration_failure(conn, ticker, phase, exc):
     )
 
 
+def _dispatch_paper_trial(conn, anthropic_client, ticker, state):
+    """Execute one paper-trading step for a ticker in paper_trial phase."""
+    strategy_id = state["best_strategy_id"]
+    if strategy_id is None:
+        log.warning("paper_trial ticker %s has no best_strategy_id — skipping", ticker)
+        return
+
+    strat_row = conn.execute(
+        "SELECT class_name, params FROM strategies WHERE id=?", (strategy_id,)
+    ).fetchone()
+    if strat_row is None:
+        log.warning("strategy %d not found for paper_trial ticker %s", strategy_id, ticker)
+        return
+
+    strategy = registry.materialize(strat_row["class_name"], json.loads(strat_row["params"]))
+    cursor = _today_ts()
+
+    now = int(time.time())
+    if state["paper_started_at"] is None:
+        conn.execute(
+            "UPDATE ticker_state SET paper_started_at=?, updated_at=? WHERE ticker=?",
+            (now, now, ticker),
+        )
+
+    result = engine_step.step(
+        conn, anthropic_client, cursor, ticker, strategy, strategy_id, run_id="paper",
+    )
+
+    if result.filled and result.signal and result.signal.intent == "open":
+        conn.execute(
+            "UPDATE ticker_state SET paper_trade_count = paper_trade_count + 1, updated_at=? WHERE ticker=?",
+            (int(time.time()), ticker),
+        )
+        log.info("paper_trial %s: opened position %s (trade_count +1)", ticker, result.position_id)
+    elif result.filled:
+        log.info("paper_trial %s: closed position %s", ticker, result.position_id)
+
+
 def _dispatch_ticker(conn, ticker, anthropic_client, data_client):
     row = conn.execute("SELECT * FROM ticker_state WHERE ticker=?", (ticker,)).fetchone()
     if row is None:
@@ -110,7 +150,9 @@ def _dispatch_ticker(conn, ticker, anthropic_client, data_client):
     if phase == "discovering":
         evolver_iteration.run(conn, anthropic_client, data_client, ticker)
         return
-    # paper_trial/live: dispatch to engine.step (skipped in v1 scheduler tests)
+    if phase == "paper_trial":
+        _dispatch_paper_trial(conn, anthropic_client, ticker, row)
+        return
 
 
 def tick(conn, anthropic_client, data_client, universe=None):
