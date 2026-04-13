@@ -37,4 +37,6 @@ def size_position(
 
     risk_budget = config.POSITION_RISK_FRAC * pool
     raw = int(risk_budget // max_loss_per_contract)
+    if raw == 0 and category == "growth" and max_loss_per_contract <= pool * 0.50:
+        raw = 1
     return max(0, min(raw, config.MAX_POSITIONS_PER_TICKER))

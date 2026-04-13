@@ -22,9 +22,16 @@ def test_growth_sizes_against_growth_pool():
 
 def test_growth_pool_shrinks_in_bear():
     # Bear regime: growth_frac=0.10, growth pool = 10% of 50k = 5k
-    # 2% of 5k = $100 risk budget, max_loss=300 -> 0 contracts
+    # 2% of 5k = $100 risk budget, max_loss=300 -> risk budget says 0,
+    # but growth override allows 1 since 300 <= 50% of 5k pool
     result = position_sizer.size_position(
         equity=50_000, max_loss_per_contract=300, category="growth", regime="bear",
+    )
+    assert result == 1
+
+    # max_loss exceeds 50% of bear growth pool -> truly 0 contracts
+    result = position_sizer.size_position(
+        equity=50_000, max_loss_per_contract=3000, category="growth", regime="bear",
     )
     assert result == 0
 

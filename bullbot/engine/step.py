@@ -21,6 +21,9 @@ from bullbot.strategies.base import Strategy, StrategySnapshot
 
 log = logging.getLogger("bullbot.engine")
 
+# Used for BS fallback pricing when position legs are missing from chain
+_RISK_FREE_RATE: float = config.RISK_FREE_RATE
+
 # Map DB kind values to model kind values
 _DB_KIND_TO_MODEL: dict[str, str] = {"call": "C", "put": "P"}
 _MODEL_KIND_TO_DB: dict[str, str] = {"C": "call", "P": "put"}
@@ -209,6 +212,52 @@ def _build_chain_rows(chain: list[OptionContract]) -> dict[str, dict[str, Any]]:
     return chain_rows
 
 
+def _enrich_chain_rows_for_positions(
+    chain_rows: dict[str, dict[str, Any]],
+    positions: list[dict[str, Any]],
+    spot: float,
+    bars: list[Bar],
+    cursor: int,
+) -> None:
+    """Add BS-priced entries to chain_rows for any position legs not already present.
+
+    When a position's option symbols are missing from chain_rows (e.g., the
+    synthetic chain's expiry dates shifted between bars), the exit manager
+    can't price the position and the position gets stuck open.  This fills
+    the gap with Black-Scholes fair-value prices so exits always work.
+    """
+    from bullbot.data.synthetic_chain import bs_price, realized_vol
+
+    missing_legs: list[Leg] = []
+    for pos in positions:
+        legs = [Leg(**l) for l in json.loads(pos["legs"])]
+        for leg in legs:
+            if leg.option_symbol not in chain_rows:
+                missing_legs.append(leg)
+
+    if not missing_legs:
+        return
+
+    vol = realized_vol(bars)
+    cursor_dt = datetime.fromtimestamp(cursor, tz=timezone.utc).date()
+
+    for leg in missing_legs:
+        if leg.option_symbol in chain_rows:
+            continue  # already enriched by an earlier leg in this loop
+        expiry_date = datetime.strptime(leg.expiry, "%Y-%m-%d").date()
+        dte = (expiry_date - cursor_dt).days
+        t_years = max(dte, 0) / 365.0
+
+        price = bs_price(spot, leg.strike, t_years, vol, _RISK_FREE_RATE, leg.kind)
+        bid = max(0.05, round(price * 0.975, 2))
+        ask = round(max(price * 1.025, bid + 0.01), 2)
+        chain_rows[leg.option_symbol] = {"nbbo_bid": bid, "nbbo_ask": ask}
+        log.debug(
+            "enriched chain_rows with fallback BS price for %s: bid=%.2f ask=%.2f (spot=%.2f, vol=%.2f, dte=%d)",
+            leg.option_symbol, bid, ask, spot, vol, dte,
+        )
+
+
 def step(
     conn: sqlite3.Connection,
     client: Any,
@@ -224,9 +273,13 @@ def step(
         return StepResult(signal=None, filled=False)
 
     chain_rows = _build_chain_rows(snap.chain)
-    exit_manager.check_exits(conn, run_id, ticker, cursor, chain_rows)
 
+    # Load open positions BEFORE exit check so we can enrich chain_rows
+    # with fallback BS prices for any legs missing from the current chain.
     open_positions = _load_open_positions(conn, run_id, ticker)
+    _enrich_chain_rows_for_positions(chain_rows, open_positions, snap.spot, snap.bars_1d, cursor)
+
+    exit_manager.check_exits(conn, run_id, ticker, cursor, chain_rows)
     signal = strategy.evaluate(snap, open_positions)
     if signal is None:
         return StepResult(signal=None, filled=False)
