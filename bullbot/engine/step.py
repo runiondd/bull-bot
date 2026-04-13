@@ -239,6 +239,7 @@ def step(
             max_loss_per_contract=signal.max_loss_per_contract,
             category=category,
             regime=snap.regime,
+            run_id=run_id,
         )
         if contracts <= 0:
             return StepResult(signal=signal, filled=False)
