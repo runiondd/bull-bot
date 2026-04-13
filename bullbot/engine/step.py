@@ -59,7 +59,11 @@ def _load_bars_at_cursor(conn: sqlite3.Connection, ticker: str, cursor: int, lim
 
 
 def _load_chain_at_cursor(conn: sqlite3.Connection, ticker: str, cursor: int) -> list[OptionContract]:
-    """Load option chain as it looked on/before cursor."""
+    """Load option chain as it looked on/before cursor.
+
+    Falls back to synthetic chain (Black-Scholes + realized vol) when
+    no real options data exists in the database.
+    """
     rows = conn.execute("""
         SELECT oc.*
         FROM option_contracts oc
@@ -71,22 +75,32 @@ def _load_chain_at_cursor(conn: sqlite3.Connection, ticker: str, cursor: int) ->
         ) m ON oc.ticker=m.ticker AND oc.expiry=m.expiry
             AND oc.strike=m.strike AND oc.kind=m.kind AND oc.ts=m.max_ts
     """, (ticker, cursor)).fetchall()
-    return [
-        OptionContract(
-            ticker=r["ticker"],
-            expiry=r["expiry"],
-            strike=r["strike"],
-            kind=_DB_KIND_TO_MODEL.get(r["kind"], r["kind"]),
-            ts=r["ts"],
-            nbbo_bid=r["bid"],
-            nbbo_ask=r["ask"],
-            last=None,
-            volume=int(r["volume"]) if r["volume"] is not None else None,
-            open_interest=int(r["open_interest"]) if r["open_interest"] is not None else None,
-            iv=r["iv"],
-        )
-        for r in rows
-    ]
+
+    if rows:
+        return [
+            OptionContract(
+                ticker=r["ticker"],
+                expiry=r["expiry"],
+                strike=r["strike"],
+                kind=_DB_KIND_TO_MODEL.get(r["kind"], r["kind"]),
+                ts=r["ts"],
+                nbbo_bid=r["bid"],
+                nbbo_ask=r["ask"],
+                last=None,
+                volume=int(r["volume"]) if r["volume"] is not None else None,
+                open_interest=int(r["open_interest"]) if r["open_interest"] is not None else None,
+                iv=r["iv"],
+            )
+            for r in rows
+        ]
+
+    bars = _load_bars_at_cursor(conn, ticker, cursor, limit=60)
+    if len(bars) < 2:
+        return []
+    from bullbot.data.synthetic_chain import generate_synthetic_chain
+    return generate_synthetic_chain(
+        ticker=ticker, spot=bars[-1].close, cursor=cursor, bars=bars,
+    )
 
 
 def _compute_indicators(bars: list[Bar]) -> dict[str, float]:
