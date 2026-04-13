@@ -54,11 +54,11 @@ def _snap(
 # ---------------------------------------------------------------------------
 
 def test_opens_in_bear_regime_with_sufficient_iv():
-    # long_delta=0.08: the strategy's estimator gives delta=0.08 at strike=210
-    # (formula: (250-210)/(2*250)=0.08). Short put at width=10 below => strike=200.
+    # long_delta=0.42: the strategy's estimator gives delta=0.42 at strike=210
+    # (formula: (210-250)/(2*250)+0.50=0.42). Short put at width=10 below => strike=200.
     strategy = BearPutSpread(params={
         "dte": 30,
-        "long_delta": 0.08,
+        "long_delta": 0.42,
         "width": 10,
         "iv_rank_min": 30,
         "regime_filter": ["bear"],
@@ -98,7 +98,7 @@ def test_skips_when_iv_rank_below_min():
 def test_respects_regime_filter_bull_blocked():
     strategy = BearPutSpread(params={
         "dte": 30,
-        "long_delta": 0.08,
+        "long_delta": 0.42,
         "width": 10,
         "regime_filter": ["bear"],
     })
@@ -109,7 +109,7 @@ def test_respects_regime_filter_bull_blocked():
 def test_respects_regime_filter_bear_allowed():
     strategy = BearPutSpread(params={
         "dte": 30,
-        "long_delta": 0.08,
+        "long_delta": 0.42,
         "width": 10,
         "regime_filter": ["bear"],
     })
@@ -120,7 +120,7 @@ def test_respects_regime_filter_bear_allowed():
 def test_no_regime_filter_allows_all_regimes():
     strategy = BearPutSpread(params={
         "dte": 30,
-        "long_delta": 0.08,
+        "long_delta": 0.42,
         "width": 10,
     })
     # Should open in bull regime too when no filter is set
@@ -164,7 +164,7 @@ def test_skips_when_open_positions_exist():
 def test_signal_max_loss_at_least_width_times_100():
     strategy = BearPutSpread(params={
         "dte": 30,
-        "long_delta": 0.08,
+        "long_delta": 0.42,
         "width": 10,
     })
     signal = strategy.evaluate(_snap(), open_positions=[])

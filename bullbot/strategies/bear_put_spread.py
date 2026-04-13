@@ -65,7 +65,7 @@ class BearPutSpread(Strategy):
         best_long = None
         best_diff = float("inf")
         for c in expiry_puts:
-            est_delta = max(0.01, min(0.99, (snapshot.spot - c.strike) / (2 * snapshot.spot)))
+            est_delta = max(0.01, min(0.99, (c.strike - snapshot.spot) / (2 * snapshot.spot) + 0.50))
             diff = abs(est_delta - long_delta)
             if diff < best_diff:
                 best_diff = diff

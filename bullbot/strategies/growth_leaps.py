@@ -47,7 +47,7 @@ class GrowthLEAPS(Strategy):
             if c.nbbo_bid <= 0 or c.nbbo_ask <= 0:
                 continue
 
-            est_delta = max(0.01, min(0.99, 1.0 - (c.strike - snapshot.spot) / (2 * snapshot.spot)))
+            est_delta = max(0.01, min(0.99, 0.50 + (snapshot.spot - c.strike) / (2 * snapshot.spot)))
             delta_diff = abs(est_delta - target_delta)
             if delta_diff < best_delta_diff:
                 best_delta_diff = delta_diff
