@@ -73,10 +73,19 @@ class Proposal:
 # ---------------------------------------------------------------------------
 
 _GROWTH_GUIDANCE = """
-This ticker is categorized as GROWTH. Emphasize directional strategies with longer
-holding periods. Consider both bullish (GrowthLEAPS, LongCall) and bearish
-(BearPutSpread, LongPut) strategies depending on the regime context.
-Growth strategies can use regime_filter (list of regimes to trade in, e.g. ["bull", "chop"]).
+This ticker is categorized as GROWTH. The growth gate requires:
+  CAGR >= 20%, Sortino >= 1.0, max drawdown <= 35%, trade count >= 5.
+
+IMPORTANT: Bearish strategies (BearPutSpread, LongPut) typically produce NEGATIVE
+CAGR on growth stocks because the underlying trends upward over time. To pass the
+growth gate you almost certainly need a BULLISH strategy.
+
+Strongly prefer GrowthLEAPS (long-dated calls) — it has the best chance of
+producing positive CAGR. Key params: target_delta (0.50-0.70), min_dte (180+),
+max_dte (365), profit_target_pct, stop_loss_mult, min_dte_close (21-30).
+
+Only propose bearish strategies if the regime is clearly "bear" AND prior bullish
+attempts have been exhausted.
 """
 
 _INCOME_GUIDANCE = """
