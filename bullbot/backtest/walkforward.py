@@ -35,6 +35,7 @@ class FoldMetrics:
     trade_count_is: int
     trade_count_oos: int
     max_dd_pct: float
+    oos_pnls: list[float] = field(default_factory=list)
 
 
 @dataclass
@@ -46,6 +47,8 @@ class BacktestMetrics:
     trade_count: int
     regime_breakdown: dict[str, float] = field(default_factory=dict)
     fold_metrics: list[FoldMetrics] = field(default_factory=list)
+    cagr_oos: float | None = None
+    sortino_oos: float | None = None
 
 
 def compute_folds(
@@ -102,7 +105,7 @@ def max_drawdown_pct(equity_curve: list[float]) -> float:
     return max_dd
 
 
-def aggregate(fold_metrics: list[FoldMetrics]) -> BacktestMetrics:
+def aggregate(fold_metrics: list[FoldMetrics], category: str = "income") -> BacktestMetrics:
     if not fold_metrics:
         return BacktestMetrics(pf_is=0, pf_oos=0, sharpe_is=0, max_dd_pct=0, trade_count=0, fold_metrics=[])
     total_is = sum(f.trade_count_is for f in fold_metrics)
@@ -116,10 +119,28 @@ def aggregate(fold_metrics: list[FoldMetrics]) -> BacktestMetrics:
     else:
         pf_oos = 0.0
     max_dd = max(f.max_dd_pct for f in fold_metrics)
-    return BacktestMetrics(
+    metrics = BacktestMetrics(
         pf_is=pf_is, pf_oos=pf_oos, sharpe_is=0.0, max_dd_pct=max_dd,
         trade_count=total_oos, fold_metrics=fold_metrics,
     )
+
+    if category == "growth":
+        from bullbot.features.indicators import cagr as calc_cagr, sortino as calc_sortino
+
+        all_oos_pnls: list[float] = []
+        for f in fold_metrics:
+            all_oos_pnls.extend(f.oos_pnls)
+
+        starting = 10000.0
+        equity_curve = [starting]
+        for pnl in all_oos_pnls:
+            equity_curve.append(equity_curve[-1] + pnl)
+        total_oos_days = len(all_oos_pnls) * 30  # approximate
+        metrics.cagr_oos = calc_cagr(equity_curve, days=int(total_oos_days))
+        returns = [pnl / max(eq, 1.0) for pnl, eq in zip(all_oos_pnls, equity_curve[:-1])]
+        metrics.sortino_oos = calc_sortino(returns, risk_free_rate=config.RISK_FREE_RATE / 252)
+
+    return metrics
 
 
 def run_walkforward(
@@ -128,10 +149,18 @@ def run_walkforward(
     strategy_id: int,
     ticker: str,
 ) -> BacktestMetrics:
-    total_days = int(config.WF_WINDOW_MONTHS * 30)
+    category = config.TICKER_CATEGORY.get(ticker, "income")
+    if category == "growth":
+        window_months = config.GROWTH_WF_WINDOW_MONTHS  # 60
+        step_days = config.GROWTH_WF_STEP_DAYS  # 90
+    else:
+        window_months = config.WF_WINDOW_MONTHS  # 24
+        step_days = config.WF_STEP_DAYS  # 30
+
+    total_days = window_months * 30
     folds = compute_folds(
         total_days=total_days, train_frac=config.WF_TRAIN_FRAC,
-        step_days=config.WF_STEP_DAYS, min_folds=config.WF_MIN_FOLDS,
+        step_days=step_days, min_folds=config.WF_MIN_FOLDS,
         max_folds=config.WF_MAX_FOLDS,
     )
     fold_results: list[FoldMetrics] = []
@@ -146,9 +175,10 @@ def run_walkforward(
                 trade_count_is=len([p for p in is_pnls if p != 0]),
                 trade_count_oos=len([p for p in oos_pnls if p != 0]),
                 max_dd_pct=max_drawdown_pct(_cumulative(oos_pnls)),
+                oos_pnls=oos_pnls,
             )
         )
-    return aggregate(fold_results)
+    return aggregate(fold_results, category=category)
 
 
 def _run_segment(conn, strategy, strategy_id, ticker, start, end, tag) -> list[float]:

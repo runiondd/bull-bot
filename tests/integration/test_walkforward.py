@@ -49,3 +49,31 @@ def test_aggregate_metrics_combines_folds():
     agg = walkforward.aggregate(fold_metrics)
     assert agg.trade_count == 22
     assert agg.pf_oos > 0
+
+
+def test_aggregate_growth_computes_cagr_and_sortino():
+    folds = [
+        walkforward.FoldMetrics(
+            pf_is=2.0, pf_oos=1.8, trade_count_is=10, trade_count_oos=5,
+            max_dd_pct=0.05, oos_pnls=[100.0, 50.0, -30.0, 80.0, 60.0],
+        ),
+        walkforward.FoldMetrics(
+            pf_is=1.5, pf_oos=1.3, trade_count_is=8, trade_count_oos=4,
+            max_dd_pct=0.08, oos_pnls=[40.0, -20.0, 70.0, 30.0],
+        ),
+    ]
+    result = walkforward.aggregate(folds, category="growth")
+    assert result.cagr_oos is not None
+    assert result.sortino_oos is not None
+
+
+def test_aggregate_income_skips_growth_metrics():
+    folds = [
+        walkforward.FoldMetrics(
+            pf_is=2.0, pf_oos=1.8, trade_count_is=10, trade_count_oos=5,
+            max_dd_pct=0.05,
+        ),
+    ]
+    result = walkforward.aggregate(folds, category="income")
+    assert result.cagr_oos is None
+    assert result.sortino_oos is None
