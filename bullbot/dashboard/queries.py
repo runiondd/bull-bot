@@ -189,6 +189,11 @@ def positions_list(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             (d["ticker"], d["opened_at"]),
         ).fetchone()
         d["entry_spot"] = float(bar["close"]) if bar else None
+        proposal = conn.execute(
+            "SELECT rationale FROM evolver_proposals WHERE strategy_id=? ORDER BY iteration DESC LIMIT 1",
+            (d.get("strategy_id"),),
+        ).fetchone()
+        d["rationale"] = proposal["rationale"] if proposal else None
         result.append(d)
     return result
 

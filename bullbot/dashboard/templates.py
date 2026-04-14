@@ -85,6 +85,22 @@ def _category_badge(ticker: str) -> str:
     return '<span style="font-size:10px;padding:1px 5px;border-radius:2px;background:#1a2a3e;color:#4cc9f0;margin-left:6px">income</span>'
 
 
+_STRATEGY_DESCRIPTION: dict[str, str] = {
+    "PutCreditSpread": "Sell a put spread to collect premium — profits if the stock stays above the short strike.",
+    "CallCreditSpread": "Sell a call spread to collect premium — profits if the stock stays below the short strike.",
+    "IronCondor": "Sell both a put spread and a call spread — profits if the stock stays in a range.",
+    "CashSecuredPut": "Sell a put backed by cash — profits if the stock stays above the strike, or you buy shares at a discount.",
+    "GrowthLEAPS": "Buy a long-dated call option — profits if the stock rises significantly over time.",
+    "BearPutSpread": "Buy a put spread — profits if the stock drops below the long strike.",
+    "LongPut": "Buy a put option — profits if the stock drops.",
+    "GrowthEquity": "Buy shares directly for long-term growth.",
+}
+
+
+def _strategy_description(class_name: str) -> str:
+    return _STRATEGY_DESCRIPTION.get(class_name, "")
+
+
 def _phase_color(phase: str) -> str:
     """Return CSS color for a pipeline phase."""
     return {
@@ -383,7 +399,8 @@ def positions_section(positions: list[dict]) -> str:
             f'<strong>{ticker} — {class_name}</strong>{_category_badge(ticker)}'
             f'{badge}'
             f'</div>'
-            f'<div style="font-size:12px;color:#888;margin:4px 0">Entered {entry_date} · {ticker} at {entry_spot_str}</div>'
+            f'<div style="font-size:12px;color:#aaa;margin:4px 0;font-style:italic">{html.escape(_strategy_description(class_name))}</div>'
+            f'<div style="font-size:12px;color:#888;margin:2px 0">Entered {entry_date} · {ticker} at {entry_spot_str}</div>'
             f'<div class="metric-row">'
         )
         if open_price is not None:
@@ -397,6 +414,12 @@ def positions_section(positions: list[dict]) -> str:
         if rules_html:
             lines.append(f'<div style="font-size:12px;color:#888">{html.escape(rules_html)}</div>')
         lines.append(f'<div style="font-size:12px;color:#aaa;margin-top:4px">{legs_html}</div>')
+        rationale = pos.get("rationale")
+        if rationale and not is_open:
+            lines.append(
+                f'<blockquote style="font-size:12px;margin-top:6px;color:#999">'
+                f'Evolver\'s thesis: {html.escape(rationale)}</blockquote>'
+            )
         lines.append('</div>')
 
     return "\n".join(lines)
@@ -414,15 +437,16 @@ def transactions_section(orders: list[dict]) -> str:
         '<button class="filter-btn" onclick="toggleFilter(\'backtest\')">Backtest</button>',
         '</div>',
         '<table>',
-        '<thead><tr><th>Date</th><th>Ticker</th><th>Intent</th><th>Status</th><th>Legs</th><th>P&L</th><th>Commission</th></tr></thead>',
+        '<thead><tr><th>Date</th><th>Ticker</th><th>Strategy</th><th>Intent</th><th>Legs</th><th>P&L</th><th>Commission</th></tr></thead>',
         '<tbody>',
     ]
     total_pnl = 0.0
     total_comm = 0.0
     for o in orders:
         ticker = html.escape(o.get("ticker", ""))
+        class_name = html.escape(o.get("class_name", ""))
+        strat_desc = html.escape(_strategy_description(class_name))
         intent = html.escape(o.get("intent", ""))
-        status = html.escape(o.get("status", ""))
         legs = _abbreviate_legs(o.get("legs", []))
         pnl = o.get("pnl")
         comm = o.get("commission", 0) or 0
@@ -438,8 +462,8 @@ def transactions_section(orders: list[dict]) -> str:
             f'<tr data-ticker="{ticker}" data-backtest="{str(is_bt).lower()}" data-filter-target{hide}>'
             f'<td>{placed}</td>'
             f'<td>{ticker}{_category_badge(ticker)}</td>'
+            f'<td style="font-size:12px">{class_name}<br><span style="color:#888;font-size:10px">{strat_desc}</span></td>'
             f'<td>{intent}</td>'
-            f'<td>{status}</td>'
             f'<td style="font-size:11px">{html.escape(legs)}</td>'
             f'<td>{pnl_html}</td>'
             f'<td>${comm:,.2f}</td>'
