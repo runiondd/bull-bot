@@ -6,6 +6,7 @@ from typing import Any
 
 from bullbot import config
 from bullbot.data.schemas import Leg, Signal
+from bullbot.data.synthetic_chain import bs_delta, realized_vol
 from bullbot.strategies.base import Strategy, StrategySnapshot
 
 
@@ -47,7 +48,8 @@ class GrowthLEAPS(Strategy):
             if c.nbbo_bid <= 0 or c.nbbo_ask <= 0:
                 continue
 
-            est_delta = max(0.01, min(0.99, 0.50 + (snapshot.spot - c.strike) / (2 * snapshot.spot)))
+            vol = c.iv if c.iv else realized_vol(snapshot.bars_1d)
+            est_delta = bs_delta(snapshot.spot, c.strike, dte / 365.0, vol, config.RISK_FREE_RATE, "C")
             delta_diff = abs(est_delta - target_delta)
             if delta_diff < best_delta_diff:
                 best_delta_diff = delta_diff

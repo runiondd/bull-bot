@@ -57,6 +57,21 @@ def bs_price(
     return strike * math.exp(-r * t_years) * _norm_cdf(-d2) - spot * _norm_cdf(-d1)
 
 
+def bs_delta(
+    spot: float, strike: float, t_years: float, vol: float, r: float, kind: str,
+) -> float:
+    """Black-Scholes delta. Returns N(d1) for calls, N(d1)-1 for puts."""
+    if t_years <= 0 or vol <= 0:
+        if kind == "C":
+            return 1.0 if spot > strike else 0.0
+        return -1.0 if spot < strike else 0.0
+    sqrt_t = math.sqrt(t_years)
+    d1 = (math.log(spot / strike) + (r + vol * vol / 2) * t_years) / (vol * sqrt_t)
+    if kind == "C":
+        return _norm_cdf(d1)
+    return _norm_cdf(d1) - 1.0
+
+
 _DTE_TARGETS = [30, 60, 90, 180, 270, 365]
 
 

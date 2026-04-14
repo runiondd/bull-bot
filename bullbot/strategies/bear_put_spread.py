@@ -6,6 +6,7 @@ from typing import Any
 
 from bullbot import config
 from bullbot.data.schemas import Leg, Signal
+from bullbot.data.synthetic_chain import bs_delta, realized_vol
 from bullbot.strategies.base import Strategy, StrategySnapshot
 
 
@@ -64,8 +65,11 @@ class BearPutSpread(Strategy):
         # Find long put near target delta
         best_long = None
         best_diff = float("inf")
+        exp_dt = datetime.strptime(best_expiry, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        expiry_dte = max((exp_dt - now_dt).days, 1)
         for c in expiry_puts:
-            est_delta = max(0.01, min(0.99, (c.strike - snapshot.spot) / (2 * snapshot.spot) + 0.50))
+            vol = c.iv if c.iv else realized_vol(snapshot.bars_1d)
+            est_delta = abs(bs_delta(snapshot.spot, c.strike, expiry_dte / 365.0, vol, config.RISK_FREE_RATE, "P"))
             diff = abs(est_delta - long_delta)
             if diff < best_diff:
                 best_diff = diff
