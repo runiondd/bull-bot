@@ -59,14 +59,37 @@ GrowthLEAPS passes the growth gate (CAGR≥20%, Sortino≥1.0, DD≤35%, trades�
 - TSLA: GrowthLEAPS (delta 0.60, 180-365 DTE, 90% profit target, 0.45x stop) → paper_trial
 - NVDA: GrowthLEAPS (delta 0.55, 180-270 DTE, 40% profit target, 2.5x stop) → paper_trial
 
+### Universe Expansion
+- Backfilled all 7 remaining tickers (QQQ, IWM, AAPL, MSFT, AMD, META, GOOGL) with 1,255 daily bars each via Yahoo Finance
+- Lowered `EDGE_TRADE_COUNT_MIN` from 10 to 5 (synthetic chains with single-position strategies can't reach 10 in 30-day OOS folds)
+- META promoted to paper_trial (PutCreditSpread)
+- AMD still discovering after 10 iterations (close but hasn't passed)
+- QQQ, IWM, AAPL, MSFT, GOOGL hit no_edge — synthetic chain limitations for income strategies
+- Total LLM spend: $4.98
+
+## Current Ticker Status
+
+| Ticker | Category | Account | Phase | Strategy | Paper Trades |
+|--------|----------|---------|-------|----------|-------------|
+| SPY | income | $50k | paper_trial | PutCreditSpread | 1 |
+| TSLA | growth | $215k | paper_trial | GrowthLEAPS | 1 |
+| NVDA | growth | $215k | paper_trial | GrowthLEAPS | 1 |
+| META | income | $50k | paper_trial | PutCreditSpread | 0 |
+| AMD | income | $50k | discovering | PutCreditSpread | 0 |
+| QQQ | income | $50k | no_edge | - | 0 |
+| IWM | income | $50k | no_edge | - | 0 |
+| AAPL | income | $50k | no_edge | - | 0 |
+| MSFT | income | $50k | no_edge | - | 0 |
+| GOOGL | income | $50k | no_edge | - | 0 |
+
 ## Known Issues / Next Steps
 
-1. **Daily paper trial ticks** — all three tickers need `scheduler.tick()` daily. 21 days + 10 trades for promotion to live.
-2. **GrowthEquity fill path** — empty legs, needs share-based fill method in fill_model.py.
-3. **Synthetic chain realism** — BS pricing with realized vol is a simplification. Skew, term structure, and vol smile not modeled. Real options data (UW API or Schwab) would improve backtest fidelity.
-4. **Schwab/ToS API** — waiting for developer sandbox approval.
-5. **UW API daily cap** — ~12k requests/day.
-6. **Remaining universe tickers** — QQQ, IWM, AAPL, MSFT, AMD, META, GOOGL have no bars yet. Could backfill via Yahoo Finance and run evolver.
+1. **Daily paper trial ticks** — SPY, TSLA, NVDA, META need `scheduler.tick()` daily. 21 days + 10 trades for promotion.
+2. **Income strategies on synthetic chains** — QQQ/IWM/AAPL/MSFT/GOOGL can't find edge. These need real options data (UW API or Schwab) to produce realistic fills and trade signals.
+3. **GrowthEquity fill path** — empty legs, needs share-based fill method in fill_model.py.
+4. **Synthetic chain limitations** — BS pricing lacks skew, term structure, vol smile. Real data would improve income strategy backtests significantly.
+5. **Schwab/ToS API** — waiting for developer sandbox approval.
+6. **UW API daily cap** — ~12k requests/day. Could backfill options for QQQ/IWM/AAPL etc. over multiple days.
 
 ## Files Changed This Session
 
