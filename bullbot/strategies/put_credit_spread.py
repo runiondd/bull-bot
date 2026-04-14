@@ -28,6 +28,7 @@ class PutCreditSpread(Strategy):
         self,
         snapshot: StrategySnapshot,
         open_positions: list[dict[str, Any]],
+        **kwargs: Any,
     ) -> Signal | None:
         if any(p for p in open_positions if p):
             return None

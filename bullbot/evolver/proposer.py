@@ -80,12 +80,14 @@ IMPORTANT: Bearish strategies (BearPutSpread, LongPut) typically produce NEGATIV
 CAGR on growth stocks because the underlying trends upward over time. To pass the
 growth gate you almost certainly need a BULLISH strategy.
 
-Strongly prefer GrowthLEAPS (long-dated calls) — it has the best chance of
-producing positive CAGR. Key params: target_delta (0.50-0.70), min_dte (180+),
-max_dte (365), profit_target_pct, stop_loss_mult, min_dte_close (21-30).
+If the ticker has entries in the long_inventory table (existing LEAPS/shares),
+consider CoveredCallOverlay — it sells short-dated calls against those positions
+to generate income. Key params: short_delta (0.15-0.40), dte_min (14-30),
+dte_max (30-60), coverage_ratio (0.5-1.0), min_rsi (40-55), min_day_return
+(0.01-0.03). This works well for generating premium income on beaten-down stocks
+where you want to sell into strength.
 
-Only propose bearish strategies if the regime is clearly "bear" AND prior bullish
-attempts have been exhausted.
+Otherwise prefer GrowthLEAPS for pure directional exposure.
 """
 
 _INCOME_GUIDANCE = """

@@ -18,6 +18,7 @@ from bullbot.strategies.growth_leaps import GrowthLEAPS
 from bullbot.strategies.long_put import LongPut
 from bullbot.strategies.put_credit_spread import PutCreditSpread
 from bullbot.strategies.bear_put_spread import BearPutSpread
+from bullbot.strategies.covered_call_overlay import CoveredCallOverlay
 
 
 class UnknownStrategyError(KeyError):
@@ -34,6 +35,7 @@ _REGISTRY: dict[str, type[Strategy]] = {
     "CashSecuredPut": CashSecuredPut,
     "LongCall": LongCall,
     "LongPut": LongPut,
+    "CoveredCallOverlay": CoveredCallOverlay,
 }
 
 

@@ -46,6 +46,7 @@ class Strategy(ABC):
         self,
         snapshot: StrategySnapshot,
         open_positions: list[dict[str, Any]],
+        **kwargs: Any,
     ) -> Signal | None:
         """Return a Signal to open/close a position, or None to stand pat."""
 

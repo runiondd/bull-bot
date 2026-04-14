@@ -281,7 +281,7 @@ def step(
     _enrich_chain_rows_for_positions(chain_rows, open_positions, snap.spot, snap.bars_1d, cursor)
 
     exit_manager.check_exits(conn, run_id, ticker, cursor, chain_rows)
-    signal = strategy.evaluate(snap, open_positions)
+    signal = strategy.evaluate(snap, open_positions, conn=conn)
     if signal is None:
         return StepResult(signal=None, filled=False)
 

@@ -15,6 +15,7 @@ class GrowthEquity(Strategy):
         self,
         snapshot: StrategySnapshot,
         open_positions: list[dict[str, Any]],
+        **kwargs: Any,
     ) -> Signal | None:
         if open_positions:
             return None
