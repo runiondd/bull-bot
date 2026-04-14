@@ -105,12 +105,13 @@ def page_shell(updated_at: str, body: str) -> str:
 </div>
 <script>
 function switchTab(tabName) {{
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(function(el) {{ el.style.display = 'none'; }});
+  document.querySelectorAll('.tab-btn').forEach(function(el) {{ el.classList.remove('active'); }});
   var tab = document.getElementById('tab-' + tabName);
-  if (tab) tab.classList.add('active');
-  var btn = document.querySelector('[data-tab="' + tabName + '"]');
-  if (btn) btn.classList.add('active');
+  if (tab) tab.style.display = 'block';
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {{
+    if (btn.textContent.trim() === tabName) btn.classList.add('active');
+  }});
 }}
 function filterTicker(ticker) {{
   document.querySelectorAll('[data-ticker]').forEach(function(el) {{
