@@ -241,11 +241,11 @@ def evolver_section(proposals: list[dict]) -> str:
 
             class_name = html.escape(p.get("class_name", ""))
             rationale = html.escape(p.get("rationale", ""))
-            pf_is = p.get("pf_is", 0)
-            pf_oos = p.get("pf_oos", 0)
+            pf_is = p.get("pf_is") or 0
+            pf_oos = p.get("pf_oos") or 0
             pf_is_str = "inf" if pf_is == float("inf") else f"{pf_is:.2f}"
             pf_oos_str = "inf" if pf_oos == float("inf") else f"{pf_oos:.2f}"
-            max_dd = p.get("max_dd_pct", 0)
+            max_dd = p.get("max_dd_pct") or 0
             max_dd_str = f"{max_dd:.1%}"
             trade_count = p.get("trade_count", 0)
             params = p.get("params", {})

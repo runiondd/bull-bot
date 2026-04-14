@@ -176,3 +176,8 @@ def tick(conn, anthropic_client, data_client, universe=None):
             except Exception:
                 log.exception("failed to record iteration_failure")
             continue
+    try:
+        from bullbot.dashboard import generator
+        generator.generate(conn)
+    except Exception:
+        log.exception("dashboard generation failed")
