@@ -32,14 +32,42 @@ def _fmt_ts(epoch: float | int | None) -> str:
 
 
 def _abbreviate_legs(legs: list[dict]) -> str:
-    """Return abbreviated leg summary like 'L 1x SYM / S 1x SYM'."""
+    """Return human-readable leg summary like 'Short 1x 500P May-15 / Long 1x 490P May-15'."""
     parts = []
     for leg in legs:
-        side_letter = "L" if leg.get("side") == "long" else "S"
+        side = "Long" if leg.get("side") == "long" else "Short"
         qty = leg.get("quantity", 1)
-        sym = leg.get("option_symbol", "???")
-        parts.append(f"{side_letter} {qty}x {sym}")
+        strike = leg.get("strike", 0)
+        kind = leg.get("kind", "?")
+        expiry = leg.get("expiry", "")
+        if expiry:
+            try:
+                dt = datetime.strptime(expiry, "%Y-%m-%d")
+                expiry_str = dt.strftime("%b-%d")
+            except ValueError:
+                expiry_str = expiry
+        else:
+            expiry_str = "?"
+        strike_str = f"{strike:g}" if strike == int(strike) else f"{strike:.2f}"
+        parts.append(f"{side} {qty}x {strike_str}{kind} {expiry_str}")
     return " / ".join(parts)
+
+
+def _format_exit_rules(rules: dict) -> str:
+    """Return human-readable exit rules like 'Close at 50% profit, 2x stop, or 8 DTE'."""
+    if not rules:
+        return ""
+    parts = []
+    pt = rules.get("profit_target_pct")
+    if pt is not None:
+        parts.append(f"{pt:.0%} profit target")
+    sl = rules.get("stop_loss_mult")
+    if sl is not None:
+        parts.append(f"{sl}x stop loss")
+    dte = rules.get("min_dte_close")
+    if dte is not None:
+        parts.append(f"close at {dte} DTE")
+    return "Exit: " + ", ".join(parts) if parts else ""
 
 
 def _phase_color(phase: str) -> str:
@@ -345,10 +373,10 @@ def positions_section(positions: list[dict]) -> str:
         if pnl_realized is not None:
             lines.append(f'<span>P&L: {_fmt_pnl(pnl_realized)}</span>')
         lines.append('</div>')
-        if exit_rules:
-            rules_str = ", ".join(f"{k}={v}" for k, v in exit_rules.items())
-            lines.append(f'<div style="font-size:12px;color:#888">Exit: {html.escape(rules_str)}</div>')
-        lines.append(f'<div style="font-size:12px;color:#aaa;margin-top:4px">Legs: {html.escape(legs_html)}</div>')
+        rules_html = _format_exit_rules(exit_rules)
+        if rules_html:
+            lines.append(f'<div style="font-size:12px;color:#888">{html.escape(rules_html)}</div>')
+        lines.append(f'<div style="font-size:12px;color:#aaa;margin-top:4px">{legs_html}</div>')
         lines.append('</div>')
 
     return "\n".join(lines)
