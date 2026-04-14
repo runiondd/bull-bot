@@ -3,7 +3,13 @@
 
 ## Current State
 
-**Main branch (`main`):** TSLA zero-trades blocker resolved. Growth strategy framework fully functional. Both GrowthLEAPS and BearPutSpread generate and close trades via synthetic chains. SPY in `paper_trial` with PutCreditSpread. 288 tests passing.
+**Main branch (`main`):** All three active tickers in `paper_trial`. Growth framework fully operational with separate account sizing ($50k income / $215k growth). 290 tests passing.
+
+| Ticker | Category | Account | Phase | Strategy | Key Params |
+|--------|----------|---------|-------|----------|------------|
+| SPY | income | $50k taxable | paper_trial | PutCreditSpread | 0.25 delta, 30 DTE, $5 wide |
+| TSLA | growth | $215k sheltered | paper_trial | GrowthLEAPS | 0.60 delta, 180-365 DTE |
+| NVDA | growth | $215k sheltered | paper_trial | GrowthLEAPS | 0.55 delta, 180-270 DTE |
 
 ## What Was Done (Session 9)
 
@@ -34,15 +40,33 @@ GrowthLEAPS passes the growth gate (CAGR≥20%, Sortino≥1.0, DD≤35%, trades�
 
 **Note:** The inf PF/Sortino values indicate all OOS trades were profitable — optimistic due to synthetic chain limitations. Real options data would introduce realistic slippage and pricing gaps.
 
+### Account Split and Capital Sizing
+- Separate accounts: $50k income (taxable), $215k growth (tax-sheltered)
+- Position sizer uses dedicated equity base per category
+- Growth account has regime-based utilization (100% bull / 50% chop / 25% bear)
+- Growth 1-contract minimum override when max_loss fits within 50% of pool
+
+### NVDA Data Backfill
+- 1,255 daily bars via Yahoo Finance (2021-04-14 to 2026-04-13)
+- No options data — uses synthetic chain (same as TSLA)
+
+### Proposer Improvement
+- Growth guidance now includes gate criteria (CAGR, Sortino, DD, trade count)
+- Steers proposer toward bullish strategies (GrowthLEAPS) for growth tickers
+- TSLA passed gate on first iteration; NVDA on third
+
+### TSLA and NVDA Evolver Results
+- TSLA: GrowthLEAPS (delta 0.60, 180-365 DTE, 90% profit target, 0.45x stop) → paper_trial
+- NVDA: GrowthLEAPS (delta 0.55, 180-270 DTE, 40% profit target, 2.5x stop) → paper_trial
+
 ## Known Issues / Next Steps
 
-1. **Run TSLA evolver with LLM proposer** — strategies validated manually; needs live proposer iteration to discover optimal params. Reset TSLA to `discovering` phase and run with Anthropic client.
-2. **SPY paper trial** — needs daily `scheduler.tick()` calls. 21 days + 10 trades for promotion.
-3. **GrowthEquity fill path** — empty legs, needs share-based fill method in fill_model.py.
-4. **NVDA growth** — categorized as growth but no bars or options data yet.
-5. **Synthetic chain realism** — BS pricing with realized vol is a simplification. Skew, term structure, and vol smile not modeled. Real options data (UW API or Schwab) would improve backtest fidelity.
-6. **Schwab/ToS API** — waiting for developer sandbox approval.
-7. **UW API daily cap** — ~12k requests/day.
+1. **Daily paper trial ticks** — all three tickers need `scheduler.tick()` daily. 21 days + 10 trades for promotion to live.
+2. **GrowthEquity fill path** — empty legs, needs share-based fill method in fill_model.py.
+3. **Synthetic chain realism** — BS pricing with realized vol is a simplification. Skew, term structure, and vol smile not modeled. Real options data (UW API or Schwab) would improve backtest fidelity.
+4. **Schwab/ToS API** — waiting for developer sandbox approval.
+5. **UW API daily cap** — ~12k requests/day.
+6. **Remaining universe tickers** — QQQ, IWM, AAPL, MSFT, AMD, META, GOOGL have no bars yet. Could backfill via Yahoo Finance and run evolver.
 
 ## Files Changed This Session
 
