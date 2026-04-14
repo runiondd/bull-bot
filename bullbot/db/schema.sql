@@ -235,3 +235,21 @@ CREATE TABLE IF NOT EXISTS iteration_failures (
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_if_ts ON iteration_failures (ts DESC);
+
+-- ---------------------------------------------------------------------------
+-- long_inventory: tracked long positions (shares + calls) for overlay strategies
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS long_inventory (
+    id              INTEGER PRIMARY KEY,
+    account         TEXT    NOT NULL,
+    ticker          TEXT    NOT NULL,
+    kind            TEXT    NOT NULL,
+    strike          REAL,
+    expiry          TEXT,
+    quantity        REAL    NOT NULL,
+    cost_basis_per  REAL,
+    added_at        INTEGER NOT NULL,
+    removed_at      INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_long_inv_ticker ON long_inventory (ticker, removed_at);
