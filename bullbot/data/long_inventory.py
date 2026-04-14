@@ -11,9 +11,14 @@ from pathlib import Path
 from typing import Optional
 
 # Fidelity account number -> internal name
-_ACCOUNT_MAP = {
+_ACCOUNT_MAP_BY_NUMBER = {
     "233084385": "ira",
     "X59844055": "taxable",
+}
+
+_ACCOUNT_MAP_BY_NAME = {
+    "Dan's Brokerage": "taxable",
+    "Rollover IRA": "ira",
 }
 
 # Symbols to skip during CSV import
@@ -90,14 +95,15 @@ def seed_from_fidelity_csv(conn: sqlite3.Connection, csv_path: str | Path) -> in
     with open(csv_path, newline="") as fh:
         reader = csv.DictReader(fh)
         for row in reader:
-            symbol = row.get("Symbol", "").strip()
-            acct_num = row.get("Account Number", "").strip()
-            desc = row.get("Description", "").strip()
-            qty_str = row.get("Quantity", "0").strip()
-            avg_cost_str = row.get("Average Cost Basis", "").strip()
+            symbol = (row.get("Symbol") or "").strip()
+            acct_num = (row.get("Account Number") or "").strip()
+            desc = (row.get("Description") or "").strip()
+            qty_str = (row.get("Quantity") or "0").strip()
+            avg_cost_str = (row.get("Average Cost Basis") or "").strip()
 
-            # Resolve account
-            account = _ACCOUNT_MAP.get(acct_num)
+            # Resolve account by number or name
+            acct_name = (row.get("Account Name") or "").strip()
+            account = _ACCOUNT_MAP_BY_NUMBER.get(acct_num) or _ACCOUNT_MAP_BY_NAME.get(acct_name)
             if account is None:
                 continue
 
