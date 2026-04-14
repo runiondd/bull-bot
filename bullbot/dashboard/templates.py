@@ -185,7 +185,7 @@ def ticker_grid(rows: list[dict]) -> str:
         ticker = html.escape(r["ticker"])
         phase = html.escape(r["phase"])
         color = _phase_color(r["phase"])
-        strategy = html.escape(r.get("strategy", "—"))
+        strategy = html.escape(r.get("strategy") or "—")
         trades = r.get("paper_trade_count", 0)
         lines.append(
             f'<tr data-ticker="{ticker}" onclick="filterTicker(\'{ticker}\')" style="cursor:pointer">'
