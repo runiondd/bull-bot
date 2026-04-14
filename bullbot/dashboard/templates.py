@@ -521,6 +521,37 @@ def transactions_section(orders: list[dict]) -> str:
 # 8. Costs section
 # ---------------------------------------------------------------------------
 
+def inventory_section(inventory: list[dict]) -> str:
+    if not inventory:
+        return '<div class="card">No long inventory positions.</div>'
+    lines = [
+        '<table>',
+        '<thead><tr><th>Account</th><th>Ticker</th><th>Type</th><th>Strike</th><th>Expiry</th><th>Qty</th><th>Cost Basis</th></tr></thead>',
+        '<tbody>',
+    ]
+    for row in inventory:
+        account = html.escape(str(row.get("account", "")))
+        ticker = html.escape(str(row.get("ticker", "")))
+        kind = html.escape(str(row.get("kind", "")))
+        strike = f"${row['strike']:,.0f}" if row.get("strike") else "—"
+        expiry = row.get("expiry") or "—"
+        qty = row.get("quantity", 0)
+        qty_str = f"{qty:g}"
+        cost = f"${row['cost_basis_per']:,.2f}" if row.get("cost_basis_per") else "—"
+        lines.append(
+            f'<tr data-ticker="{ticker}">'
+            f'<td>{account}</td><td>{ticker}{_category_badge(ticker)}</td>'
+            f'<td>{kind}</td><td>{strike}</td><td>{expiry}</td>'
+            f'<td>{qty_str}</td><td>{cost}</td></tr>'
+        )
+    lines.append('</tbody></table>')
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# 9. Costs section
+# ---------------------------------------------------------------------------
+
 def costs_section(costs: dict) -> str:
     llm_per_ticker = costs.get("llm_per_ticker", {})
     llm_total = costs.get("llm_ledger_total", 0)

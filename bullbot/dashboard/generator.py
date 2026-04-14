@@ -22,12 +22,14 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
     positions = queries.positions_list(conn)
     orders = queries.orders_list(conn)
     costs = queries.cost_breakdown(conn)
+    inventory = queries.long_inventory_summary(conn)
 
     overview_html = templates.ticker_grid(grid) + templates.activity_feed(activity)
     evolver_html = templates.evolver_section(proposals)
     positions_html = templates.positions_section(positions)
     transactions_html = templates.transactions_section(orders)
     costs_html = templates.costs_section(costs)
+    inventory_html = templates.inventory_section(inventory)
 
     tabs = {
         "Overview": overview_html,
@@ -35,6 +37,7 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
         "Positions": positions_html,
         "Transactions": transactions_html,
         "Costs": costs_html,
+        "Inventory": inventory_html,
     }
 
     body_parts = [templates.summary_cards(metrics)]

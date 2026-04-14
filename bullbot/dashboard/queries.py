@@ -224,6 +224,22 @@ def orders_list(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
+def long_inventory_summary(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Return active long inventory positions for dashboard display."""
+    try:
+        rows = conn.execute(
+            "SELECT * FROM long_inventory WHERE removed_at IS NULL ORDER BY account, ticker, kind, expiry"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# cost_breakdown
+# ---------------------------------------------------------------------------
+
+
 def cost_breakdown(conn: sqlite3.Connection) -> dict[str, Any]:
     """Return cost breakdown: LLM per ticker, ledger total, commissions."""
     # LLM costs per ticker from ticker_state
