@@ -152,6 +152,21 @@ def summary_cards(metrics: dict) -> str:
     llm = metrics.get("llm_spend", 0.0)
 
     pnl_html = _fmt_pnl(pnl)
+
+    pnl_breakdown = ""
+    pnl_by_ticker = metrics.get("pnl_by_ticker", [])
+    if pnl_by_ticker:
+        rows = []
+        for t in pnl_by_ticker:
+            total = t["realized"] + t["unrealized"]
+            if total == 0:
+                continue
+            rows.append(
+                f'<span style="margin-right:12px">{t["ticker"]}: {_fmt_pnl(total)}</span>'
+            )
+        if rows:
+            pnl_breakdown = f'<div style="font-size:11px;margin-top:4px">{"".join(rows)}</div>'
+
     return f"""<div class="summary-row">
   <div class="summary-card">
     <div class="label">Total Equity</div>
@@ -163,7 +178,7 @@ def summary_cards(metrics: dict) -> str:
   </div>
   <div class="summary-card">
     <div class="label">Paper P&amp;L</div>
-    <div class="value">{pnl_html}</div>
+    <div class="value">{pnl_html}</div>{pnl_breakdown}
   </div>
   <div class="summary-card">
     <div class="label">LLM Spend</div>
@@ -282,10 +297,10 @@ def evolver_section(proposals: list[dict]) -> str:
 def positions_section(positions: list[dict]) -> str:
     lines = [
         '<div style="margin-bottom:8px">',
-        '<button class="filter-btn active" onclick="toggleFilter(\'all\')">All</button>',
+        '<button class="filter-btn" onclick="toggleFilter(\'all\')">All</button>',
         '<button class="filter-btn" onclick="toggleFilter(\'open\')">Open</button>',
         '<button class="filter-btn" onclick="toggleFilter(\'closed\')">Closed</button>',
-        '<button class="filter-btn" onclick="toggleFilter(\'paper\')">Paper</button>',
+        '<button class="filter-btn active" onclick="toggleFilter(\'paper\')">Paper</button>',
         '<button class="filter-btn" onclick="toggleFilter(\'backtest\')">Backtest</button>',
         '</div>',
     ]
@@ -313,8 +328,9 @@ def positions_section(positions: list[dict]) -> str:
         legs = pos.get("legs", [])
         legs_html = _abbreviate_legs(legs)
 
+        hide = "display:none;" if is_bt else ""
         lines.append(
-            f'<div class="card{dim}" style="{border}" '
+            f'<div class="card{dim}" style="{hide}{border}" '
             f'data-ticker="{ticker}" data-open="{str(is_open).lower()}" '
             f'data-backtest="{str(is_bt).lower()}" data-filter-target>'
             f'<div style="display:flex;justify-content:space-between;align-items:center">'
@@ -345,8 +361,8 @@ def positions_section(positions: list[dict]) -> str:
 def transactions_section(orders: list[dict]) -> str:
     lines = [
         '<div style="margin-bottom:8px">',
-        '<button class="filter-btn active" onclick="toggleFilter(\'all\')">All</button>',
-        '<button class="filter-btn" onclick="toggleFilter(\'paper\')">Paper</button>',
+        '<button class="filter-btn" onclick="toggleFilter(\'all\')">All</button>',
+        '<button class="filter-btn active" onclick="toggleFilter(\'paper\')">Paper</button>',
         '<button class="filter-btn" onclick="toggleFilter(\'backtest\')">Backtest</button>',
         '</div>',
         '<table>',
@@ -369,8 +385,9 @@ def transactions_section(orders: list[dict]) -> str:
             total_pnl += pnl
         total_comm += comm
 
+        hide = ' style="display:none"' if is_bt else ""
         lines.append(
-            f'<tr data-ticker="{ticker}" data-backtest="{str(is_bt).lower()}" data-filter-target>'
+            f'<tr data-ticker="{ticker}" data-backtest="{str(is_bt).lower()}" data-filter-target{hide}>'
             f'<td>{placed}</td>'
             f'<td>{ticker}</td>'
             f'<td>{intent}</td>'

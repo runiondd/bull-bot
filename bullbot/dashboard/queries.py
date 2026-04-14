@@ -45,7 +45,7 @@ def _abbreviate_legs(legs: list[dict] | None) -> str:
 def summary_metrics(conn: sqlite3.Connection) -> dict[str, Any]:
     """Return high-level dashboard summary.
 
-    Keys: open_positions, paper_pnl, llm_spend.
+    Keys: open_positions, paper_pnl, llm_spend, pnl_by_ticker.
     Excludes backtest positions (run_id LIKE 'bt:%').
     """
     row = conn.execute(
@@ -60,10 +60,25 @@ def summary_metrics(conn: sqlite3.Connection) -> dict[str, Any]:
         "SELECT COALESCE(SUM(cumulative_llm_usd), 0) AS llm_spend FROM ticker_state"
     ).fetchone()
 
+    pnl_by_ticker: list[dict[str, Any]] = []
+    for r in conn.execute("""
+        SELECT ticker,
+               SUM(CASE WHEN closed_at IS NOT NULL THEN COALESCE(pnl_realized, 0) ELSE 0 END) AS realized,
+               SUM(CASE WHEN closed_at IS NULL THEN COALESCE(mark_to_mkt, 0) ELSE 0 END) AS unrealized
+        FROM positions WHERE run_id NOT LIKE 'bt:%'
+        GROUP BY ticker ORDER BY ticker
+    """).fetchall():
+        pnl_by_ticker.append({
+            "ticker": r["ticker"],
+            "realized": float(r["realized"]),
+            "unrealized": float(r["unrealized"]),
+        })
+
     return {
         "open_positions": row["open_positions"],
         "paper_pnl": row["paper_pnl"],
         "llm_spend": llm_row["llm_spend"],
+        "pnl_by_ticker": pnl_by_ticker,
     }
 
 
