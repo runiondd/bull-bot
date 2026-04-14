@@ -30,7 +30,12 @@ def _fmt_ts(epoch: float | int | None) -> str:
     if epoch is None:
         return "—"
     dt = datetime.fromtimestamp(epoch, tz=timezone.utc)
-    return dt.strftime("%Y-%m-%d %H:%M UTC")
+    day = dt.day
+    if 11 <= day <= 13:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    return dt.strftime(f"%B {day}{suffix}, %Y")
 
 
 def _abbreviate_legs(legs: list[dict]) -> str:
