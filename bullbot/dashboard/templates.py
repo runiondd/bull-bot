@@ -43,7 +43,7 @@ def _abbreviate_legs(legs: list[dict]) -> str:
         if expiry:
             try:
                 dt = datetime.strptime(expiry, "%Y-%m-%d")
-                expiry_str = dt.strftime("%b-%d")
+                expiry_str = dt.strftime("%b-%d-%y")
             except ValueError:
                 expiry_str = expiry
         else:

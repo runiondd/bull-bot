@@ -96,7 +96,7 @@ def test_position_card_open():
     }])
     assert "TSLA" in html
     assert "OPEN" in html
-    assert "Long 1x 260C Jan-19" in html
+    assert "Long 1x 260C Jan-19-27" in html
 
 
 def test_transactions_table():
