@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from itertools import groupby
 from operator import itemgetter
 
+from bullbot import config
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -68,6 +70,14 @@ def _format_exit_rules(rules: dict) -> str:
     if dte is not None:
         parts.append(f"close at {dte} DTE")
     return "Exit: " + ", ".join(parts) if parts else ""
+
+
+def _category_badge(ticker: str) -> str:
+    """Return a small 'income' or 'growth' badge for the ticker."""
+    cat = config.TICKER_CATEGORY.get(ticker, "income")
+    if cat == "growth":
+        return '<span style="font-size:10px;padding:1px 5px;border-radius:2px;background:#2a1a4e;color:#b388ff;margin-left:6px">growth</span>'
+    return '<span style="font-size:10px;padding:1px 5px;border-radius:2px;background:#1a2a3e;color:#4cc9f0;margin-left:6px">income</span>'
 
 
 def _phase_color(phase: str) -> str:
@@ -355,6 +365,9 @@ def positions_section(positions: list[dict]) -> str:
         exit_rules = pos.get("exit_rules", {})
         legs = pos.get("legs", [])
         legs_html = _abbreviate_legs(legs)
+        entry_date = _fmt_ts(pos.get("opened_at"))
+        entry_spot = pos.get("entry_spot")
+        entry_spot_str = f"${entry_spot:,.2f}" if entry_spot else "—"
 
         hide = "display:none;" if is_bt else ""
         lines.append(
@@ -362,12 +375,14 @@ def positions_section(positions: list[dict]) -> str:
             f'data-ticker="{ticker}" data-open="{str(is_open).lower()}" '
             f'data-backtest="{str(is_bt).lower()}" data-filter-target>'
             f'<div style="display:flex;justify-content:space-between;align-items:center">'
-            f'<strong>{ticker} — {class_name}</strong>'
+            f'<strong>{ticker} — {class_name}</strong>{_category_badge(ticker)}'
             f'{badge}'
             f'</div>'
+            f'<div style="font-size:12px;color:#888;margin:4px 0">Entered {entry_date} · {ticker} at {entry_spot_str}</div>'
             f'<div class="metric-row">'
-            f'<span>Open: ${open_price:,.2f}</span>' if open_price is not None else ''
         )
+        if open_price is not None:
+            lines.append(f'<span>Open: ${open_price:,.2f}</span>')
         if mark is not None:
             lines.append(f'<span>Mark: ${mark:,.2f}</span>')
         if pnl_realized is not None:
@@ -417,7 +432,7 @@ def transactions_section(orders: list[dict]) -> str:
         lines.append(
             f'<tr data-ticker="{ticker}" data-backtest="{str(is_bt).lower()}" data-filter-target{hide}>'
             f'<td>{placed}</td>'
-            f'<td>{ticker}</td>'
+            f'<td>{ticker}{_category_badge(ticker)}</td>'
             f'<td>{intent}</td>'
             f'<td>{status}</td>'
             f'<td style="font-size:11px">{html.escape(legs)}</td>'

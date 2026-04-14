@@ -184,6 +184,11 @@ def positions_list(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         d["is_open"] = d["closed_at"] is None
         d["is_backtest"] = d["run_id"].startswith("bt:")
         d["legs_abbrev"] = _abbreviate_legs(d["legs"])
+        bar = conn.execute(
+            "SELECT close FROM bars WHERE ticker=? AND timeframe='1d' AND ts<=? ORDER BY ts DESC LIMIT 1",
+            (d["ticker"], d["opened_at"]),
+        ).fetchone()
+        d["entry_spot"] = float(bar["close"]) if bar else None
         result.append(d)
     return result
 
