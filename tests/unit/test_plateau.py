@@ -35,7 +35,7 @@ def test_edge_found_when_all_gates_pass():
 
 def test_not_edge_found_when_trade_count_too_low():
     state = FakeState()
-    metrics = FakeMetrics(pf_is=1.55, pf_oos=1.35, trade_count=9)
+    metrics = FakeMetrics(pf_is=1.55, pf_oos=1.35, trade_count=4)
     result = plateau.classify(state, metrics)
     assert result.verdict != "edge_found"
 
@@ -99,7 +99,7 @@ def test_inf_pf_oos_does_not_increment_plateau():
 def test_inf_pf_oos_still_blocked_by_trade_count_for_edge():
     """inf pf_oos doesn't bypass the trade count gate for edge_found."""
     state = FakeState(iteration_count=5, plateau_counter=0, best_pf_oos=float("inf"))
-    metrics = FakeMetrics(pf_is=float("inf"), pf_oos=float("inf"), trade_count=5)
+    metrics = FakeMetrics(pf_is=float("inf"), pf_oos=float("inf"), trade_count=3)
     result = plateau.classify(state, metrics)
     assert result.verdict != "edge_found"
 

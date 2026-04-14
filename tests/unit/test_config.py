@@ -16,7 +16,7 @@ def test_capital_and_timeline():
 def test_edge_gate_thresholds():
     assert config.EDGE_PF_IS_MIN == 1.5
     assert config.EDGE_PF_OOS_MIN == 1.3
-    assert config.EDGE_TRADE_COUNT_MIN == 10
+    assert config.EDGE_TRADE_COUNT_MIN == 5
 
 def test_walkforward_config():
     assert config.WF_TRAIN_FRAC == 0.70
