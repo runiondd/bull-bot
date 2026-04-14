@@ -101,6 +101,40 @@ def _strategy_description(class_name: str) -> str:
     return _STRATEGY_DESCRIPTION.get(class_name, "")
 
 
+def _exit_reason_plain(exit_rules: dict, pnl: float | None) -> str:
+    """Describe why a position closed in plain English."""
+    if pnl is None:
+        return "Position closed."
+    if pnl > 0:
+        pt = exit_rules.get("profit_target_pct")
+        if pt is not None:
+            return f"Closed at the {pt:.0%} profit target — the trade worked as expected."
+        return "Closed profitably."
+    else:
+        sl = exit_rules.get("stop_loss_mult")
+        dte = exit_rules.get("min_dte_close")
+        if sl is not None and abs(pnl) > 0:
+            return f"Hit the {sl}x stop loss — the trade moved against the thesis."
+        if dte is not None:
+            return f"Closed at {dte} days to expiration to avoid assignment risk."
+        return "Closed at a loss."
+
+
+def _closed_position_analysis(pos: dict) -> str:
+    """Return HTML block analyzing a closed position's outcome."""
+    pnl = pos.get("pnl_realized") or 0
+    exit_rules = pos.get("exit_rules", {})
+    reason = _exit_reason_plain(exit_rules, pnl)
+    pnl_str = f"+${pnl:,.2f}" if pnl >= 0 else f"-${abs(pnl):,.2f}"
+    color = "#53d769" if pnl >= 0 else "#ff6b6b"
+
+    return (
+        f'<div style="background:#1a1a2e;border-radius:4px;padding:8px;margin-top:6px;font-size:12px">'
+        f'<strong style="color:{color}">Result: {pnl_str}</strong> — {html.escape(reason)}'
+        f'</div>'
+    )
+
+
 def _phase_color(phase: str) -> str:
     """Return CSS color for a pipeline phase."""
     return {
@@ -129,7 +163,7 @@ def page_shell(updated_at: str, body: str) -> str:
   a {{ color:#4cc9f0; }}
   .header {{ display:flex; justify-content:space-between; align-items:center; padding:12px 24px; background:#0f3460; }}
   .header h1 {{ font-size:18px; color:#4cc9f0; }}
-  .header .updated {{ font-size:12px; color:#888; }}
+  .header .updated {{ font-size:12px; color:#b0b0b0; }}
   .container {{ max-width:1400px; margin:0 auto; padding:16px; }}
   .tab-bar {{ display:flex; gap:4px; margin-bottom:16px; flex-wrap:wrap; }}
   .tab-btn {{ padding:8px 16px; background:#0f3460; color:#e0e0e0; border:1px solid #4cc9f0; cursor:pointer; font-family:inherit; font-size:13px; }}
@@ -138,7 +172,7 @@ def page_shell(updated_at: str, body: str) -> str:
   .tab-content.active {{ display:block; }}
   .card {{ background:#0f3460; border-radius:6px; padding:16px; margin-bottom:12px; }}
   .summary-card {{ background:#0f3460; border-radius:6px; padding:16px; text-align:center; min-width:180px; }}
-  .summary-card .label {{ font-size:11px; color:#888; text-transform:uppercase; margin-bottom:4px; }}
+  .summary-card .label {{ font-size:11px; color:#b0b0b0; text-transform:uppercase; margin-bottom:4px; }}
   .summary-card .value {{ font-size:22px; font-weight:bold; }}
   .summary-row {{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px; }}
   .metric-row {{ display:flex; gap:24px; flex-wrap:wrap; font-size:13px; margin:4px 0; }}
@@ -150,8 +184,8 @@ def page_shell(updated_at: str, body: str) -> str:
   .filter-btn.active {{ background:#4cc9f0; color:#1a1a2e; border-color:#4cc9f0; }}
   table {{ width:100%; border-collapse:collapse; }}
   th, td {{ padding:6px 10px; text-align:left; border-bottom:1px solid #222; font-size:13px; }}
-  th {{ color:#888; font-size:11px; text-transform:uppercase; }}
-  blockquote {{ border-left:3px solid #4cc9f0; padding:4px 12px; margin:8px 0; color:#aaa; font-style:italic; }}
+  th {{ color:#b0b0b0; font-size:11px; text-transform:uppercase; }}
+  blockquote {{ border-left:3px solid #4cc9f0; padding:4px 12px; margin:8px 0; color:#ccc; font-style:italic; }}
 </style>
 </head>
 <body>
@@ -288,7 +322,7 @@ def activity_feed(events: list[dict]) -> str:
         ticker = html.escape(e.get("ticker", ""))
         lines.append(
             f'<div data-ticker="{ticker}" style="margin:4px 0">'
-            f'<span style="color:#888">{ts}</span> {desc}'
+            f'<span style="color:#b0b0b0">{ts}</span> {desc}'
             f'</div>'
         )
     lines.append('</div>')
@@ -341,7 +375,7 @@ def evolver_section(proposals: list[dict]) -> str:
                 f'<span>Max DD: {max_dd_str}</span>'
                 f'<span>LLM: ${llm_cost:.2f}</span>'
                 f'</div>'
-                f'<div style="margin:4px 0;font-size:12px;color:#888">Params: {html.escape(params_str)}</div>'
+                f'<div style="margin:4px 0;font-size:12px;color:#b0b0b0">Params: {html.escape(params_str)}</div>'
                 f'<blockquote>{rationale}</blockquote>'
                 f'<div style="font-size:11px;color:#666">{created}</div>'
                 f'</div>'
@@ -399,8 +433,8 @@ def positions_section(positions: list[dict]) -> str:
             f'<strong>{ticker} — {class_name}</strong>{_category_badge(ticker)}'
             f'{badge}'
             f'</div>'
-            f'<div style="font-size:12px;color:#aaa;margin:4px 0;font-style:italic">{html.escape(_strategy_description(class_name))}</div>'
-            f'<div style="font-size:12px;color:#888;margin:2px 0">Entered {entry_date} · {ticker} at {entry_spot_str}</div>'
+            f'<div style="font-size:12px;color:#ccc;margin:4px 0;font-style:italic">{html.escape(_strategy_description(class_name))}</div>'
+            f'<div style="font-size:12px;color:#b0b0b0;margin:2px 0">Entered {entry_date} · {ticker} at {entry_spot_str}</div>'
             f'<div class="metric-row">'
         )
         if open_price is not None:
@@ -412,14 +446,16 @@ def positions_section(positions: list[dict]) -> str:
         lines.append('</div>')
         rules_html = _format_exit_rules(exit_rules)
         if rules_html:
-            lines.append(f'<div style="font-size:12px;color:#888">{html.escape(rules_html)}</div>')
-        lines.append(f'<div style="font-size:12px;color:#aaa;margin-top:4px">{legs_html}</div>')
+            lines.append(f'<div style="font-size:12px;color:#b0b0b0">{html.escape(rules_html)}</div>')
+        lines.append(f'<div style="font-size:12px;color:#ccc;margin-top:4px">{legs_html}</div>')
         rationale = pos.get("rationale")
-        if rationale and not is_open:
+        if rationale:
             lines.append(
-                f'<blockquote style="font-size:12px;margin-top:6px;color:#999">'
-                f'Evolver\'s thesis: {html.escape(rationale)}</blockquote>'
+                f'<blockquote style="font-size:12px;margin-top:6px;color:#ccc">'
+                f'<strong>Why this trade:</strong> {html.escape(rationale)}</blockquote>'
             )
+        if not is_open:
+            lines.append(_closed_position_analysis(pos))
         lines.append('</div>')
 
     return "\n".join(lines)
@@ -462,7 +498,7 @@ def transactions_section(orders: list[dict]) -> str:
             f'<tr data-ticker="{ticker}" data-backtest="{str(is_bt).lower()}" data-filter-target{hide}>'
             f'<td>{placed}</td>'
             f'<td>{ticker}{_category_badge(ticker)}</td>'
-            f'<td style="font-size:12px">{class_name}<br><span style="color:#888;font-size:10px">{strat_desc}</span></td>'
+            f'<td style="font-size:12px">{class_name}<br><span style="color:#b0b0b0;font-size:10px">{strat_desc}</span></td>'
             f'<td>{intent}</td>'
             f'<td style="font-size:11px">{html.escape(legs)}</td>'
             f'<td>{pnl_html}</td>'
