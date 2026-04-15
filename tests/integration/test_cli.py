@@ -39,3 +39,34 @@ def test_rearm_requires_ticker_and_flag(db_conn, monkeypatch):
     assert row["active"] == 0
     row2 = db_conn.execute("SELECT phase FROM ticker_state WHERE ticker='SPY'").fetchone()
     assert row2["phase"] == "paper_trial"
+
+
+def test_run_daily_refreshes_bars_then_ticks(db_conn, monkeypatch):
+    """`run-daily` must refresh bars for tracked tickers, then call scheduler.tick once."""
+    db_conn.execute(
+        "INSERT INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
+        "VALUES ('SPY', '1d', 1, 1, 1, 1, 1, 0)"
+    )
+    db_conn.execute(
+        "INSERT INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
+        "VALUES ('TSLA', '1d', 1, 1, 1, 1, 1, 0)"
+    )
+
+    calls: list[tuple[str, tuple]] = []
+
+    def fake_refresh(conn, tickers, fetch_fn=None):
+        calls.append(("refresh", tuple(sorted(tickers))))
+        return {t: 1 for t in tickers}
+
+    def fake_tick(conn, anthropic_client, data_client, universe=None):
+        calls.append(("tick", ()))
+
+    monkeypatch.setattr("bullbot.cli._open_db", lambda: db_conn)
+    monkeypatch.setattr("bullbot.cli._build_anthropic_client", lambda: object())
+    monkeypatch.setattr("bullbot.cli._build_uw_client", lambda: object())
+    monkeypatch.setattr("bullbot.data.daily_refresh.refresh_all_bars", fake_refresh)
+    monkeypatch.setattr("bullbot.scheduler.tick", fake_tick)
+
+    rc = cli.main(["run-daily"])
+    assert rc == 0
+    assert calls == [("refresh", ("SPY", "TSLA")), ("tick", ())]

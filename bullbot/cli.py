@@ -1,6 +1,6 @@
 """Operator CLI. python -m bullbot.cli <command> [args]"""
 from __future__ import annotations
-import argparse, json, sqlite3, sys, time
+import argparse, json, logging, sqlite3, sys, time
 from bullbot import config
 from bullbot.db import connection as db_connection
 from bullbot.risk import cost_ledger, kill_switch
@@ -8,6 +8,18 @@ from bullbot.risk import cost_ledger, kill_switch
 
 def _open_db():
     return db_connection.open_persistent_connection(config.DB_PATH)
+
+
+def _build_anthropic_client():
+    import anthropic
+
+    return anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+
+
+def _build_uw_client():
+    from bullbot.data import fetchers
+
+    return fetchers.UWHttpClient(api_key=config.UW_API_KEY)
 
 
 def cmd_status(args):
@@ -48,6 +60,42 @@ def cmd_retire_ticker(args):
     return 0
 
 
+def cmd_run_daily(args):
+    """One-shot daily job: refresh Yahoo bars, then run a single scheduler tick.
+
+    Intended for invocation from launchd (see deploy/com.bullbot.daily.plist).
+    Returns non-zero if any ticker failed to refresh — launchd surfaces the
+    exit code so operational failures are visible.
+    """
+    from bullbot import scheduler
+    from bullbot.data import daily_refresh
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    log = logging.getLogger("bullbot.cli.run_daily")
+
+    conn = _open_db()
+    tickers = daily_refresh.discover_tracked_tickers(conn)
+    if not tickers:
+        log.warning("run-daily: no tickers to refresh (bars table is empty)")
+        return 0
+
+    log.info("run-daily: refreshing %d tickers", len(tickers))
+    result = daily_refresh.refresh_all_bars(conn, tickers)
+    failures = [t for t, n in result.items() if n == 0]
+
+    anthropic_client = _build_anthropic_client()
+    uw_client = _build_uw_client()
+
+    log.info("run-daily: calling scheduler.tick()")
+    scheduler.tick(conn=conn, anthropic_client=anthropic_client, data_client=uw_client)
+    conn.commit()
+
+    if failures:
+        log.warning("run-daily: %d tickers failed refresh: %s", len(failures), ",".join(failures))
+        return 1
+    return 0
+
+
 def cmd_rearm(args):
     if not args.acknowledge_risk:
         print("Error: --acknowledge-risk flag required", file=sys.stderr)
@@ -78,6 +126,8 @@ def main(argv=None):
     p_rearm.add_argument("--ticker", required=True)
     p_rearm.add_argument("--acknowledge-risk", action="store_true")
     p_rearm.set_defaults(fn=cmd_rearm)
+    p_run_daily = sub.add_parser("run-daily", help="Refresh bars and run one scheduler tick.")
+    p_run_daily.set_defaults(fn=cmd_run_daily)
     args = parser.parse_args(argv)
     if not hasattr(args, "fn"):
         parser.print_help()
