@@ -53,7 +53,7 @@ def test_fetch_bars_yahoo_returns_bars():
             ("2026-04-15", 154.5, 158.0, 154.0, 157.5, 1_100_000),
         ]
     )
-    fake_yf = lambda symbol: df  # noqa: E731
+    fake_yf = lambda symbol, period="1mo": df  # noqa: E731
     bars = daily_refresh.fetch_bars_yahoo("NVDA", fetch_fn=fake_yf)
 
     assert len(bars) == 2
@@ -69,7 +69,7 @@ def test_fetch_bars_yahoo_returns_bars():
 def test_fetch_bars_yahoo_maps_vix_to_caret_symbol():
     seen_symbols: list[str] = []
 
-    def fake_yf(symbol: str) -> pd.DataFrame:
+    def fake_yf(symbol: str, period: str = "1mo") -> pd.DataFrame:
         seen_symbols.append(symbol)
         return _fake_df([("2026-04-15", 15.0, 16.0, 14.5, 15.5, 0)])
 
@@ -79,7 +79,7 @@ def test_fetch_bars_yahoo_maps_vix_to_caret_symbol():
 
 
 def test_fetch_bars_yahoo_empty_raises():
-    fake_yf = lambda symbol: pd.DataFrame()  # noqa: E731
+    fake_yf = lambda symbol, period="1mo": pd.DataFrame()  # noqa: E731
     with pytest.raises(daily_refresh.DailyRefreshError):
         daily_refresh.fetch_bars_yahoo("NVDA", fetch_fn=fake_yf)
 
@@ -88,7 +88,7 @@ def test_refresh_all_bars_upserts(conn):
     df_nvda = _fake_df([("2026-04-15", 150.0, 155.0, 149.5, 154.0, 1_000_000)])
     df_tsla = _fake_df([("2026-04-15", 300.0, 310.0, 299.0, 305.0, 2_000_000)])
 
-    def fake_yf(symbol: str) -> pd.DataFrame:
+    def fake_yf(symbol: str, period: str = "1mo") -> pd.DataFrame:
         return {"NVDA": df_nvda, "TSLA": df_tsla}[symbol]
 
     result = daily_refresh.refresh_all_bars(conn, ["NVDA", "TSLA"], fetch_fn=fake_yf)
@@ -100,7 +100,7 @@ def test_refresh_all_bars_upserts(conn):
 
 def test_refresh_all_bars_is_idempotent(conn):
     df = _fake_df([("2026-04-15", 150.0, 155.0, 149.5, 154.0, 1_000_000)])
-    fake_yf = lambda symbol: df  # noqa: E731
+    fake_yf = lambda symbol, period="1mo": df  # noqa: E731
 
     daily_refresh.refresh_all_bars(conn, ["NVDA"], fetch_fn=fake_yf)
     daily_refresh.refresh_all_bars(conn, ["NVDA"], fetch_fn=fake_yf)
@@ -112,7 +112,7 @@ def test_refresh_all_bars_is_idempotent(conn):
 def test_refresh_all_bars_skips_failed_ticker_and_continues(conn):
     df_ok = _fake_df([("2026-04-15", 150.0, 155.0, 149.5, 154.0, 1_000_000)])
 
-    def fake_yf(symbol: str) -> pd.DataFrame:
+    def fake_yf(symbol: str, period: str = "1mo") -> pd.DataFrame:
         if symbol == "BAD":
             raise RuntimeError("simulated fetch failure")
         return df_ok
@@ -122,6 +122,29 @@ def test_refresh_all_bars_skips_failed_ticker_and_continues(conn):
     assert result["BAD"] == 0
     rows = conn.execute("SELECT ticker FROM bars").fetchall()
     assert [r["ticker"] for r in rows] == ["NVDA"]
+
+
+def test_fetch_bars_yahoo_passes_period_to_fetch_fn():
+    """Callers should be able to request a longer period (e.g. "5y") for backfill."""
+    seen: list[str] = []
+
+    def fake_yf(symbol: str, period: str = "1mo") -> pd.DataFrame:
+        seen.append(period)
+        return _fake_df([("2026-04-15", 150.0, 155.0, 149.5, 154.0, 1_000_000)])
+
+    daily_refresh.fetch_bars_yahoo("NVDA", period="5y", fetch_fn=fake_yf)
+    assert seen == ["5y"]
+
+
+def test_refresh_all_bars_passes_period(conn):
+    seen: list[str] = []
+
+    def fake_yf(symbol: str, period: str = "1mo") -> pd.DataFrame:
+        seen.append(period)
+        return _fake_df([("2026-04-15", 150.0, 155.0, 149.5, 154.0, 1_000_000)])
+
+    daily_refresh.refresh_all_bars(conn, ["NVDA"], period="5y", fetch_fn=fake_yf)
+    assert seen == ["5y"]
 
 
 def test_discover_tracked_tickers_returns_distinct(conn):
