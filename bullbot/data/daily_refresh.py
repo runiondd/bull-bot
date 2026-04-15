@@ -32,10 +32,16 @@ _YAHOO_SYMBOL_MAP: dict[str, str] = {
 
 
 def _default_fetch(symbol: str) -> pd.DataFrame:
-    """Real Yahoo Finance fetch — imported lazily so tests don't need yfinance."""
+    """Real Yahoo Finance fetch — imported lazily so tests don't need yfinance.
+
+    auto_adjust=False returns raw closes (not dividend-adjusted), matching the
+    existing convention used by SPY / sector / UW-sourced bars in the DB.
+    Mixing adjusted and raw closes causes spurious ~0.85% mismatches on
+    dividend-paying tickers.
+    """
     import yfinance as yf
 
-    return yf.Ticker(symbol).history(period="1mo", interval="1d")
+    return yf.Ticker(symbol).history(period="1mo", interval="1d", auto_adjust=False)
 
 
 FetchFn = Callable[[str], pd.DataFrame]
