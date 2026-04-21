@@ -38,10 +38,16 @@ def _default_fetch(symbol: str, period: str = "1mo") -> pd.DataFrame:
     existing convention used by SPY / sector / UW-sourced bars in the DB.
     Mixing adjusted and raw closes causes spurious ~0.85% mismatches on
     dividend-paying tickers.
+
+    actions=False suppresses standalone dividend/split metadata rows, which
+    yfinance otherwise emits as all-NaN OHLC rows on the ex-date and trips
+    Bar's gt=0 validators (observed on SPY ex-div 2026-03-20).
     """
     import yfinance as yf
 
-    return yf.Ticker(symbol).history(period=period, interval="1d", auto_adjust=False)
+    return yf.Ticker(symbol).history(
+        period=period, interval="1d", auto_adjust=False, actions=False
+    )
 
 
 FetchFn = Callable[..., pd.DataFrame]
