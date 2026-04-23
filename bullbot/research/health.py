@@ -141,3 +141,26 @@ def check_dead_paper_trials(conn: sqlite3.Connection, now: int | None = None) ->
         passed=not findings,
         findings=findings,
     )
+
+
+def check_iteration_failures(conn: sqlite3.Connection, now: int | None = None) -> CheckResult:
+    """Flag any iteration_failures rows recorded in the last 24 hours."""
+    now = now if now is not None else int(time.time())
+    cutoff = now - 86400
+    rows = conn.execute(
+        "SELECT ticker, exc_type, COUNT(*) AS n "
+        "FROM iteration_failures "
+        "WHERE ts > ? "
+        "GROUP BY ticker, exc_type "
+        "ORDER BY n DESC, ticker",
+        (cutoff,),
+    ).fetchall()
+    findings = [
+        f"{row[0]}: {row[2]} × {row[1]} (last 24h)"
+        for row in rows
+    ]
+    return CheckResult(
+        title="Iteration failures (24h)",
+        passed=not findings,
+        findings=findings,
+    )

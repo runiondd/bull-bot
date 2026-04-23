@@ -223,3 +223,58 @@ def test_check_dead_paper_trials_flags_zero_trades_after_threshold(monkeypatch):
     assert len(result.findings) == 1
     assert "XLF" in result.findings[0]
     assert "0 live trades" in result.findings[0] or "0 trades" in result.findings[0]
+
+
+# --- check_iteration_failures -----------------------------------------------
+
+
+def _add_iteration_failures_table(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE iteration_failures (
+            id INTEGER PRIMARY KEY,
+            ts INTEGER NOT NULL,
+            ticker TEXT,
+            phase TEXT NOT NULL,
+            exc_type TEXT NOT NULL,
+            exc_message TEXT NOT NULL,
+            traceback TEXT
+        )
+    """)
+
+
+def test_check_iteration_failures_passes_when_no_recent_failures():
+    now = 1_700_000_000
+    conn = _make_conn_with_ticker_state()
+    _add_iteration_failures_table(conn)
+    # one old failure, outside 24h window
+    conn.execute(
+        "INSERT INTO iteration_failures (ts, ticker, phase, exc_type, exc_message) "
+        "VALUES (?, 'AAPL', 'discovering', 'ValueError', 'old')",
+        (now - 2 * 86400,),
+    )
+    result = H.check_iteration_failures(conn, now=now)
+    assert result.passed is True
+
+
+def test_check_iteration_failures_flags_and_groups():
+    now = 1_700_000_000
+    conn = _make_conn_with_ticker_state()
+    _add_iteration_failures_table(conn)
+    # two recent, same ticker + exc type
+    for _ in range(2):
+        conn.execute(
+            "INSERT INTO iteration_failures (ts, ticker, phase, exc_type, exc_message) "
+            "VALUES (?, 'AAPL', 'discovering', 'DailyRefreshError', 'bad bar')",
+            (now - 3600,),
+        )
+    # one recent, different ticker
+    conn.execute(
+        "INSERT INTO iteration_failures (ts, ticker, phase, exc_type, exc_message) "
+        "VALUES (?, 'QQQ', 'paper_trial', 'ZeroDivisionError', 'div by zero')",
+        (now - 7200,),
+    )
+    result = H.check_iteration_failures(conn, now=now)
+    assert result.passed is False
+    assert len(result.findings) == 2
+    assert any("AAPL" in f and "DailyRefreshError" in f and "2" in f for f in result.findings)
+    assert any("QQQ" in f and "ZeroDivisionError" in f for f in result.findings)
