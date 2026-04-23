@@ -25,7 +25,14 @@ def check_exits(
     cursor: int,
     chain_rows: dict[str, dict[str, Any]],
 ) -> list[int]:
-    """Check all open positions for exit conditions. Returns list of closed position IDs."""
+    """Check all open positions for exit conditions. Returns list of closed position IDs.
+
+    Side effect: every open position that we can price gets its
+    `unrealized_pnl` column refreshed — whether or not it triggers an
+    exit. Positions we can't price (chain row missing, fill rejected)
+    are left with their previous `unrealized_pnl` value, matching the
+    existing exit-check fallback behavior.
+    """
     positions = conn.execute(
         "SELECT * FROM positions WHERE run_id=? AND ticker=? AND closed_at IS NULL",
         (run_id, ticker),
@@ -34,14 +41,17 @@ def check_exits(
     closed_ids: list[int] = []
     for pos in positions:
         exit_rules_raw = pos["exit_rules"]
-        if exit_rules_raw is None:
-            continue
-        rules = json.loads(exit_rules_raw)
-        if not rules:
-            continue
-
+        rules = json.loads(exit_rules_raw) if exit_rules_raw else {}
         legs = [Leg(**l) for l in json.loads(pos["legs"])]
-        reason = _should_exit(pos, legs, rules, cursor, chain_rows)
+
+        reason, unrealized = _evaluate_position(pos, legs, rules, cursor, chain_rows)
+
+        if unrealized is not None:
+            conn.execute(
+                "UPDATE positions SET unrealized_pnl=? WHERE id=?",
+                (unrealized, pos["id"]),
+            )
+
         if reason is None:
             continue
 
@@ -54,15 +64,26 @@ def check_exits(
     return closed_ids
 
 
-def _should_exit(
+def _evaluate_position(
     pos: sqlite3.Row,
     legs: list[Leg],
     rules: dict[str, Any],
     cursor: int,
     chain_rows: dict[str, dict[str, Any]],
-) -> str | None:
-    """Return exit reason string if any condition is met, else None."""
+) -> tuple[str | None, float | None]:
+    """Price the position and check exit rules in one pass.
+
+    Returns ``(reason, unrealized_pnl)`` where:
+      - ``reason`` is the exit-trigger reason string or ``None`` if no rule fired.
+      - ``unrealized_pnl`` is the current unrealized P&L vs entry, or ``None``
+        if the position couldn't be priced (missing chain row, fill rejected).
+
+    The DTE-close rule fires without needing to price the position; in that
+    case ``unrealized_pnl`` is still computed if pricing succeeds, and is
+    ``None`` only if pricing itself fails.
+    """
     # --- DTE close (check first: no chain pricing needed) ---
+    dte_reason: str | None = None
     min_dte = rules.get("min_dte_close")
     if min_dte is not None:
         cursor_date = datetime.fromtimestamp(cursor, tz=timezone.utc).date()
@@ -71,15 +92,16 @@ def _should_exit(
         )
         dte = (nearest_expiry - cursor_date).days
         if dte <= min_dte:
-            return f"dte_close: {dte} DTE <= {min_dte}"
+            dte_reason = f"dte_close: {dte} DTE <= {min_dte}"
 
-    # --- Price-based exits need current mark ---
+    # --- Price the position for unrealized P&L + price-based exit rules ---
     try:
         close_cost, _ = fill_model.simulate_close_multi_leg(
             legs, chain_rows, pos["contracts"],
         )
     except (fill_model.FillRejected, KeyError):
-        return None
+        # Can't price — return dte reason (if any) but no unrealized value.
+        return dte_reason, None
 
     open_price = pos["open_price"]
     is_credit = open_price < 0
@@ -90,21 +112,30 @@ def _should_exit(
     else:
         unrealized_pnl = -close_cost - open_price
 
+    if dte_reason is not None:
+        return dte_reason, unrealized_pnl
+
     # --- Stop loss ---
     stop_mult = rules.get("stop_loss_mult")
     if stop_mult is not None:
         max_loss = stop_mult * credit if is_credit else stop_mult * open_price
         if unrealized_pnl < 0 and abs(unrealized_pnl) >= max_loss:
-            return f"stop_loss: loss ${abs(unrealized_pnl):.2f} >= {stop_mult}x ${credit:.2f}"
+            return (
+                f"stop_loss: loss ${abs(unrealized_pnl):.2f} >= {stop_mult}x ${credit:.2f}",
+                unrealized_pnl,
+            )
 
     # --- Profit target ---
     target_pct = rules.get("profit_target_pct")
     if target_pct is not None:
         target_profit = target_pct * credit if is_credit else target_pct * open_price
         if unrealized_pnl >= target_profit:
-            return f"profit_target: profit ${unrealized_pnl:.2f} >= {target_pct:.0%} of ${credit:.2f}"
+            return (
+                f"profit_target: profit ${unrealized_pnl:.2f} >= {target_pct:.0%} of ${credit:.2f}",
+                unrealized_pnl,
+            )
 
-    return None
+    return None, unrealized_pnl
 
 
 def _execute_close(
@@ -124,7 +155,8 @@ def _execute_close(
     comm = fill_model.commission(pos["contracts"], len(legs))
 
     conn.execute(
-        "UPDATE positions SET closed_at=?, close_price=?, pnl_realized=?, mark_to_mkt=0.0 WHERE id=?",
+        "UPDATE positions SET closed_at=?, close_price=?, pnl_realized=?, "
+        "mark_to_mkt=0.0, unrealized_pnl=0.0 WHERE id=?",
         (cursor, net_close, pnl - comm, pos["id"]),
     )
     conn.execute(

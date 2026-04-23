@@ -321,8 +321,9 @@ def step(
             }.items() if v is not None
         }) or None
         cur = conn.execute(
-            "INSERT INTO positions (run_id, ticker, strategy_id, opened_at, legs, contracts, open_price, mark_to_mkt, exit_rules) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO positions (run_id, ticker, strategy_id, opened_at, legs, "
+            "contracts, open_price, mark_to_mkt, exit_rules, unrealized_pnl) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.0)",
             (run_id, ticker, strategy_id, cursor,
              json.dumps([l.model_dump() for l in signal.legs]),
              contracts, net_cash, net_cash, exit_rules),
@@ -352,7 +353,8 @@ def step(
     pnl = -(pos_row["open_price"] + net_close)
     comm = fill_model.commission(pos_row["contracts"], len(legs))
     conn.execute(
-        "UPDATE positions SET closed_at=?, close_price=?, pnl_realized=?, mark_to_mkt=0.0 WHERE id=?",
+        "UPDATE positions SET closed_at=?, close_price=?, pnl_realized=?, "
+        "mark_to_mkt=0.0, unrealized_pnl=0.0 WHERE id=?",
         (cursor, net_close, pnl - comm, pos_id),
     )
     conn.execute(

@@ -36,7 +36,7 @@ def conn():
             id INTEGER PRIMARY KEY, run_id TEXT, ticker TEXT, strategy_id INTEGER,
             legs TEXT, contracts INTEGER, open_price REAL, close_price REAL,
             mark_to_mkt REAL, opened_at INTEGER, closed_at INTEGER,
-            pnl_realized REAL, exit_rules TEXT
+            pnl_realized REAL, exit_rules TEXT, unrealized_pnl REAL
         );
         CREATE TABLE orders (
             id INTEGER PRIMARY KEY, run_id TEXT, ticker TEXT, strategy_id INTEGER,

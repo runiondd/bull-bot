@@ -172,3 +172,78 @@ class TestFillRejected:
                           exit_rules_json=exit_rules)
         closed = exit_manager.check_exits(conn, "test", "SPY", 2000, chain_rows={})
         assert closed == []
+
+
+class TestUnrealizedPnLRefresh:
+    """check_exits must refresh positions.unrealized_pnl on every visit,
+    even when no exit rule fires. This is what makes the dashboard's
+    paper-P&L number move day-to-day rather than being frozen at entry."""
+
+    def test_unrealized_pnl_updated_on_open_credit_spread(self, conn):
+        """Credit spread that hasn't hit target: unrealized_pnl should reflect
+        credit - close_cost using the same formula used for exit decisions."""
+        legs_json = _spread_legs_json()
+        exit_rules = json.dumps({"profit_target_pct": 0.50, "stop_loss_mult": 2.0, "min_dte_close": 7})
+        _insert_position(conn, legs_json=legs_json, open_price=-118.0,
+                          exit_rules_json=exit_rules)
+        # close_cost ~ 70 -> unrealized_pnl ~ 118 - 70 = 48 (below 50% target, won't exit)
+        chain_rows = _make_chain(
+            "SPY260620P00670000", 0.70, 0.80,
+            "SPY260620P00665000", 0.06, 0.08,
+        )
+        closed = exit_manager.check_exits(conn, "test", "SPY", 2000, chain_rows)
+        assert closed == []
+        pos = conn.execute("SELECT unrealized_pnl FROM positions WHERE ticker='SPY'").fetchone()
+        assert pos["unrealized_pnl"] is not None
+        assert pos["unrealized_pnl"] == pytest.approx(48.0, abs=0.5)
+
+    def test_unrealized_pnl_set_to_zero_on_close(self, conn):
+        """When a position closes, unrealized_pnl goes to 0 and pnl_realized
+        takes over. This preserves the invariant `realized + unrealized = total`."""
+        legs_json = _spread_legs_json()
+        exit_rules = json.dumps({"profit_target_pct": 0.50})
+        _insert_position(conn, legs_json=legs_json, open_price=-118.0,
+                          exit_rules_json=exit_rules)
+        # close_cost ~ 12 -> unrealized would be ~106, well past 50% target
+        chain_rows = _make_chain(
+            "SPY260620P00670000", 0.14, 0.16,
+            "SPY260620P00665000", 0.04, 0.06,
+        )
+        closed = exit_manager.check_exits(conn, "test", "SPY", 2000, chain_rows)
+        assert len(closed) == 1
+        pos = conn.execute("SELECT unrealized_pnl, pnl_realized FROM positions WHERE id=?",
+                            (closed[0],)).fetchone()
+        assert pos["unrealized_pnl"] == 0.0
+        assert pos["pnl_realized"] is not None
+        assert pos["pnl_realized"] > 0  # profit target fired, so realized is positive
+
+    def test_unrealized_pnl_left_stale_when_pricing_fails(self, conn):
+        """If the option chain doesn't have the leg symbols (fill rejected),
+        unrealized_pnl keeps its previous value rather than getting nulled out."""
+        legs_json = _spread_legs_json()
+        exit_rules = json.dumps({"profit_target_pct": 0.50, "stop_loss_mult": 2.0})
+        _insert_position(conn, legs_json=legs_json, open_price=-118.0,
+                          exit_rules_json=exit_rules)
+        # Prime unrealized_pnl with a known previous value
+        conn.execute("UPDATE positions SET unrealized_pnl=42.0 WHERE ticker='SPY'")
+        # Empty chain_rows -> simulate_close_multi_leg raises KeyError
+        closed = exit_manager.check_exits(conn, "test", "SPY", 2000, chain_rows={})
+        assert closed == []
+        pos = conn.execute("SELECT unrealized_pnl FROM positions WHERE ticker='SPY'").fetchone()
+        # Stale previous value preserved (not reset to NULL)
+        assert pos["unrealized_pnl"] == 42.0
+
+    def test_unrealized_pnl_updated_even_without_exit_rules(self, conn):
+        """Positions with no exit_rules should still get unrealized_pnl refreshed."""
+        legs_json = _spread_legs_json()
+        _insert_position(conn, legs_json=legs_json, open_price=-118.0,
+                          exit_rules_json=None)
+        chain_rows = _make_chain(
+            "SPY260620P00670000", 0.70, 0.80,
+            "SPY260620P00665000", 0.06, 0.08,
+        )
+        closed = exit_manager.check_exits(conn, "test", "SPY", 2000, chain_rows)
+        assert closed == []
+        pos = conn.execute("SELECT unrealized_pnl FROM positions WHERE ticker='SPY'").fetchone()
+        assert pos["unrealized_pnl"] is not None
+        assert pos["unrealized_pnl"] == pytest.approx(48.0, abs=0.5)

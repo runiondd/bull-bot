@@ -45,13 +45,18 @@ def _abbreviate_legs(legs: list[dict] | None) -> str:
 def summary_metrics(conn: sqlite3.Connection) -> dict[str, Any]:
     """Return high-level dashboard summary.
 
-    Keys: open_positions, paper_pnl, llm_spend, pnl_by_ticker.
-    Excludes backtest positions (run_id LIKE 'bt:%').
+    Keys: open_positions, realized_pnl, unrealized_pnl, paper_pnl (sum),
+    llm_spend, pnl_by_ticker. Excludes backtest positions (run_id LIKE 'bt:%').
+
+    `unrealized_pnl` reads the positions.unrealized_pnl column populated by
+    exit_manager on every tick. `paper_pnl` is kept for backwards compatibility
+    as realized_pnl + unrealized_pnl.
     """
     row = conn.execute(
         "SELECT"
         "  COALESCE(SUM(CASE WHEN closed_at IS NULL THEN 1 ELSE 0 END), 0) AS open_positions,"
-        "  COALESCE(SUM(COALESCE(pnl_realized, 0) + COALESCE(mark_to_mkt, 0)), 0) AS paper_pnl"
+        "  COALESCE(SUM(COALESCE(pnl_realized, 0)), 0) AS realized_pnl,"
+        "  COALESCE(SUM(CASE WHEN closed_at IS NULL THEN COALESCE(unrealized_pnl, 0) ELSE 0 END), 0) AS unrealized_pnl"
         " FROM positions"
         " WHERE run_id NOT LIKE 'bt:%'"
     ).fetchone()
@@ -64,7 +69,7 @@ def summary_metrics(conn: sqlite3.Connection) -> dict[str, Any]:
     for r in conn.execute("""
         SELECT ticker,
                SUM(CASE WHEN closed_at IS NOT NULL THEN COALESCE(pnl_realized, 0) ELSE 0 END) AS realized,
-               SUM(CASE WHEN closed_at IS NULL THEN COALESCE(mark_to_mkt, 0) ELSE 0 END) AS unrealized
+               SUM(CASE WHEN closed_at IS NULL THEN COALESCE(unrealized_pnl, 0) ELSE 0 END) AS unrealized
         FROM positions WHERE run_id NOT LIKE 'bt:%'
         GROUP BY ticker ORDER BY ticker
     """).fetchall():
@@ -76,7 +81,9 @@ def summary_metrics(conn: sqlite3.Connection) -> dict[str, Any]:
 
     return {
         "open_positions": row["open_positions"],
-        "paper_pnl": row["paper_pnl"],
+        "realized_pnl": row["realized_pnl"],
+        "unrealized_pnl": row["unrealized_pnl"],
+        "paper_pnl": row["realized_pnl"] + row["unrealized_pnl"],
         "llm_spend": llm_row["llm_spend"],
         "pnl_by_ticker": pnl_by_ticker,
     }

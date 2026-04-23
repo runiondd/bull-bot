@@ -50,3 +50,53 @@ def test_evolver_proposals_unique_per_ticker_iteration():
     import pytest
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute("INSERT INTO evolver_proposals (ticker, iteration, strategy_id, llm_cost_usd, passed_gate, created_at) VALUES ('AAPL', 1, 1, 0.0, 0, 0)")
+
+
+def test_positions_has_unrealized_pnl_column():
+    """Fresh DB should have unrealized_pnl column on positions."""
+    conn = sqlite3.connect(":memory:")
+    migrations.apply_schema(conn)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(positions)")}
+    assert "unrealized_pnl" in cols
+
+
+def test_apply_schema_migrates_existing_db_missing_unrealized_pnl():
+    """Simulate a pre-migration DB: positions without unrealized_pnl column.
+    apply_schema must ADD the column, not error, and second run must be a no-op."""
+    conn = sqlite3.connect(":memory:")
+    # Create a legacy positions table WITHOUT unrealized_pnl (pre-2026-04-23 shape).
+    conn.execute("""
+        CREATE TABLE positions (
+            id INTEGER PRIMARY KEY,
+            run_id TEXT NOT NULL DEFAULT 'live',
+            ticker TEXT NOT NULL,
+            strategy_id INTEGER,
+            legs TEXT,
+            contracts INTEGER NOT NULL DEFAULT 1,
+            open_price REAL NOT NULL,
+            close_price REAL,
+            mark_to_mkt REAL NOT NULL DEFAULT 0.0,
+            exit_rules TEXT,
+            opened_at INTEGER NOT NULL,
+            closed_at INTEGER,
+            pnl_realized REAL
+        ) STRICT
+    """)
+    conn.execute(
+        "INSERT INTO positions (ticker, open_price, opened_at) VALUES ('SPY', 100.0, 0)"
+    )
+
+    migrations.apply_schema(conn)  # should ADD the column, not throw
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(positions)")}
+    assert "unrealized_pnl" in cols
+
+    # Pre-existing row should still be there; new column should be NULL for it.
+    row = conn.execute(
+        "SELECT ticker, unrealized_pnl FROM positions WHERE ticker='SPY'"
+    ).fetchone()
+    assert row == ("SPY", None)
+
+    # Second apply must be a no-op (idempotent).
+    migrations.apply_schema(conn)
+    cols_after = {r[1] for r in conn.execute("PRAGMA table_info(positions)")}
+    assert cols_after == cols

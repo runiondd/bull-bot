@@ -250,10 +250,16 @@ function toggleFilter(type) {{
 def summary_cards(metrics: dict) -> str:
     total_equity = 265_000
     open_pos = metrics.get("open_positions", 0)
-    pnl = metrics.get("paper_pnl", 0.0)
+    # Prefer the split metrics; fall back to combined paper_pnl for legacy callers.
+    realized = metrics.get("realized_pnl", 0.0)
+    unrealized = metrics.get("unrealized_pnl", 0.0)
+    if "realized_pnl" not in metrics and "unrealized_pnl" not in metrics:
+        # Legacy single-metric fallback
+        realized = metrics.get("paper_pnl", 0.0)
     llm = metrics.get("llm_spend", 0.0)
 
-    pnl_html = _fmt_pnl(pnl)
+    realized_html = _fmt_pnl(realized)
+    unrealized_html = _fmt_pnl(unrealized)
 
     pnl_breakdown = ""
     pnl_by_ticker = metrics.get("pnl_by_ticker", [])
@@ -279,8 +285,12 @@ def summary_cards(metrics: dict) -> str:
     <div class="value">{open_pos}</div>
   </div>
   <div class="summary-card">
-    <div class="label">Paper P&amp;L</div>
-    <div class="value">{pnl_html}</div>{pnl_breakdown}
+    <div class="label">Realized P&amp;L</div>
+    <div class="value">{realized_html}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Unrealized P&amp;L</div>
+    <div class="value">{unrealized_html}</div>{pnl_breakdown}
   </div>
   <div class="summary-card">
     <div class="label">LLM Spend</div>

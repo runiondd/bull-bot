@@ -29,14 +29,14 @@ def test_summary_metrics(db_conn, _seed_strategy):
     # closed paper position with realized pnl
     db_conn.execute(
         "INSERT INTO positions (run_id, ticker, strategy_id, legs, contracts, open_price,"
-        " close_price, mark_to_mkt, opened_at, closed_at, pnl_realized)"
-        " VALUES ('paper', 'AAPL', 1, '[]', 1, 2.0, 1.5, 0, 1000, 2000, 50.0)",
+        " close_price, mark_to_mkt, opened_at, closed_at, pnl_realized, unrealized_pnl)"
+        " VALUES ('paper', 'AAPL', 1, '[]', 1, 2.0, 1.5, 0, 1000, 2000, 50.0, 0.0)",
     )
-    # open paper position with mark-to-market
+    # open paper position with current unrealized pnl
     db_conn.execute(
         "INSERT INTO positions (run_id, ticker, strategy_id, legs, contracts, open_price,"
-        " mark_to_mkt, opened_at)"
-        " VALUES ('paper', 'TSLA', 1, '[]', 1, 3.0, 25.0, 1100)",
+        " mark_to_mkt, opened_at, unrealized_pnl)"
+        " VALUES ('paper', 'TSLA', 1, '[]', 1, 3.0, 3.0, 1100, 25.0)",
     )
     # backtest position — should be excluded
     db_conn.execute(
@@ -57,7 +57,9 @@ def test_summary_metrics(db_conn, _seed_strategy):
     result = queries.summary_metrics(db_conn)
 
     assert result["open_positions"] == 1  # only the open non-backtest one
-    assert result["paper_pnl"] == pytest.approx(75.0)  # 50 realized + 25 mark
+    assert result["realized_pnl"] == pytest.approx(50.0)
+    assert result["unrealized_pnl"] == pytest.approx(25.0)
+    assert result["paper_pnl"] == pytest.approx(75.0)  # backward-compat sum
     assert result["llm_spend"] == pytest.approx(2.0)
 
 

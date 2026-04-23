@@ -156,7 +156,11 @@ CREATE TABLE IF NOT EXISTS positions (
     exit_rules      TEXT,           -- JSON: {"profit_target_pct": 0.5, ...}
     opened_at       INTEGER NOT NULL,
     closed_at       INTEGER,
-    pnl_realized    REAL
+    pnl_realized    REAL,
+    -- Current unrealized P&L vs entry. NULL before first exit_manager visit;
+    -- 0 at entry (see engine/step.py insert), current unrealized during hold,
+    -- 0 on close (see engine/exit_manager.py + engine/step.py close path).
+    unrealized_pnl  REAL
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_positions_run_id ON positions (run_id, ticker, opened_at DESC);
