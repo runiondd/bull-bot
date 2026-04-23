@@ -158,13 +158,17 @@ def check_dead_paper_trials(conn: sqlite3.Connection, now: int | None = None) ->
     cutoff = now - config.HEALTH_DEAD_PAPER_DAYS * 86400
     findings: list[str] = []
 
-    # Condition A: promoted (verdict_at set) but paper_started_at never set
+    # Condition A: phase=paper_trial but paper_started_at never set.
+    # Prefer verdict_at when present; fall back to updated_at if the
+    # promotion pipeline didn't record a verdict time (observed in
+    # production for SATS, promoted 2026-04-20 with verdict_at=NULL).
     rows_a = conn.execute(
-        "SELECT ticker, verdict_at FROM ticker_state "
+        "SELECT ticker, COALESCE(verdict_at, updated_at) AS promoted_at "
+        "FROM ticker_state "
         "WHERE phase='paper_trial' "
         "  AND paper_started_at IS NULL "
-        "  AND verdict_at IS NOT NULL "
-        "  AND verdict_at < ?",
+        "  AND COALESCE(verdict_at, updated_at) IS NOT NULL "
+        "  AND COALESCE(verdict_at, updated_at) < ?",
         (cutoff,),
     ).fetchall()
     for row in rows_a:

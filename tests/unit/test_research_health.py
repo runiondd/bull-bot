@@ -226,6 +226,27 @@ def test_check_dead_paper_trials_flags_zero_trades_after_threshold(monkeypatch):
     assert "0 live trades" in result.findings[0] or "0 trades" in result.findings[0]
 
 
+def test_check_dead_paper_trials_flags_null_verdict_at_via_updated_at(monkeypatch):
+    """SATS case: promoted to paper_trial with verdict_at NOT recorded —
+    the check should still catch it via the updated_at fallback so we
+    notice 'promoted but never started' even when the promotion pipeline
+    didn't stamp a verdict time."""
+    monkeypatch.setattr(config, "HEALTH_DEAD_PAPER_DAYS", 3)
+    now = 1_700_000_000
+    conn = _make_conn_with_ticker_state()
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, paper_started_at, "
+        "paper_trade_count, verdict_at, updated_at) "
+        "VALUES ('SATS', 'paper_trial', NULL, 0, NULL, ?)",
+        (now - 5 * 86400,),
+    )
+    result = H.check_dead_paper_trials(conn, now=now)
+    assert result.passed is False
+    assert len(result.findings) == 1
+    assert "SATS" in result.findings[0]
+    assert "never fired" in result.findings[0] or "never started" in result.findings[0]
+
+
 # --- check_iteration_failures -----------------------------------------------
 
 
