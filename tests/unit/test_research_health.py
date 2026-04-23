@@ -6,6 +6,7 @@ import time
 
 import pytest
 
+from bullbot import config
 from bullbot.research import health as H
 
 
@@ -56,8 +57,6 @@ def test_safe_check_converts_exception_to_findings():
 
 # --- check_data_shortfalls --------------------------------------------------
 
-from bullbot import config
-
 
 def _make_conn_with_bars(bars_by_ticker: dict[str, int]) -> sqlite3.Connection:
     """Minimal DB with a bars table populated by per-ticker row count."""
@@ -99,3 +98,69 @@ def test_check_data_shortfalls_flags_under_threshold_tickers(monkeypatch):
     assert any("HYG" in f for f in result.findings)
     # SPY passes, so no finding for it
     assert not any("SPY" in f for f in result.findings)
+
+
+# --- check_pf_inf ------------------------------------------------------------
+
+
+def _make_conn_with_ticker_state() -> sqlite3.Connection:
+    c = sqlite3.connect(":memory:")
+    c.row_factory = sqlite3.Row
+    c.execute("""
+        CREATE TABLE ticker_state (
+            id INTEGER PRIMARY KEY,
+            ticker TEXT UNIQUE,
+            phase TEXT,
+            iteration_count INTEGER DEFAULT 0,
+            plateau_counter INTEGER DEFAULT 0,
+            best_strategy_id INTEGER,
+            best_pf_is REAL,
+            best_pf_oos REAL,
+            cumulative_llm_usd REAL DEFAULT 0,
+            paper_started_at INTEGER,
+            paper_trade_count INTEGER DEFAULT 0,
+            live_started_at INTEGER,
+            verdict_at INTEGER,
+            retired INTEGER DEFAULT 0,
+            updated_at INTEGER
+        )
+    """)
+    return c
+
+
+def test_check_pf_inf_passes_when_all_pf_values_reasonable():
+    conn = _make_conn_with_ticker_state()
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, best_pf_oos, best_strategy_id, updated_at) "
+        "VALUES ('SPY', 'paper_trial', 1.8, 10, 0)"
+    )
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, best_pf_oos, best_strategy_id, updated_at) "
+        "VALUES ('QQQ', 'discovering', NULL, NULL, 0)"
+    )
+    result = H.check_pf_inf(conn)
+    assert result.passed is True
+    assert result.findings == []
+
+
+def test_check_pf_inf_flags_infinite_and_absurd_pf_values():
+    conn = _make_conn_with_ticker_state()
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, best_pf_oos, best_strategy_id, updated_at) "
+        "VALUES ('AAPL', 'no_edge', ?, 123, 0)", (float("inf"),),
+    )
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, best_pf_oos, best_strategy_id, updated_at) "
+        "VALUES ('TSLA', 'paper_trial', 1e12, 114, 0)"
+    )
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, best_pf_oos, best_strategy_id, updated_at) "
+        "VALUES ('MSFT', 'discovering', 2.5, 99, 0)"
+    )
+    result = H.check_pf_inf(conn)
+    assert result.passed is False
+    assert len(result.findings) == 2
+    assert any("AAPL" in f and "inf" in f and "123" in f for f in result.findings)
+    assert any("TSLA" in f and "114" in f for f in result.findings)
+    # MSFT's pf_oos=2.5 is reasonable, should not be flagged
+    assert not any("MSFT" in f for f in result.findings)

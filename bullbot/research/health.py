@@ -12,6 +12,7 @@ Check functions and helpers are module-private.
 from __future__ import annotations
 
 import logging
+import math
 import sqlite3
 from dataclasses import dataclass
 
@@ -66,6 +67,33 @@ def check_data_shortfalls(conn: sqlite3.Connection) -> CheckResult:
             findings.append(f"{ticker}: {n} bars (need ~{min_bars} for walkforward)")
     return CheckResult(
         title="Data shortfalls",
+        passed=not findings,
+        findings=findings,
+    )
+
+
+def check_pf_inf(conn: sqlite3.Connection) -> CheckResult:
+    """Flag ticker_state rows whose best_pf_oos is IEEE inf or absurdly large."""
+    threshold = config.HEALTH_PF_OOS_ABSURD_THRESHOLD
+    rows = conn.execute(
+        "SELECT ticker, best_pf_oos, best_strategy_id "
+        "FROM ticker_state "
+        "WHERE best_pf_oos IS NOT NULL AND best_pf_oos > ?",
+        (threshold,),
+    ).fetchall()
+    findings: list[str] = []
+    for row in rows:
+        ticker = row[0]
+        pf = row[1]
+        strat_id = row[2]
+        pf_str = "inf" if math.isinf(pf) else f"{pf:.4g}"
+        sid_str = f"strategy {strat_id}" if strat_id is not None else "no strategy_id"
+        findings.append(
+            f"{ticker}: best_pf_oos={pf_str} ({sid_str}) — "
+            f"likely sample-size artifact or /0"
+        )
+    return CheckResult(
+        title="pf_oos anomalies",
         passed=not findings,
         findings=findings,
     )
