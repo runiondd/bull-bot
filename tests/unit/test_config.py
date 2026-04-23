@@ -2,11 +2,25 @@
 from bullbot import config
 
 
-def test_universe_is_ten_tickers():
-    assert config.UNIVERSE == [
-        "SPY", "QQQ", "IWM", "AAPL", "MSFT",
-        "NVDA", "TSLA", "AMD", "META", "GOOGL",
-    ]
+def test_universe_contents():
+    # Equity singles + indexes + promoted sector ETFs + HYG (credit).
+    # Sector ETFs (2026-04-22) added to broaden evolver search space; they
+    # remain in REGIME_DATA_TICKERS for regime feature synthesis as well.
+    assert set(config.UNIVERSE) == {
+        "AAPL", "MSFT", "NVDA", "TSLA", "AMD", "META", "GOOGL",
+        "SPY", "QQQ", "IWM",
+        "XLK", "XLF", "XLE", "XLV", "XLI",
+        "HYG",
+    }
+    assert len(config.UNIVERSE) == len(set(config.UNIVERSE))  # no dupes
+
+
+def test_universe_has_category_and_sector_map_entries():
+    # Every trading-candidate ticker must have an explicit category and
+    # sector-map entry (defaults exist but explicitness prevents silent drift).
+    for ticker in config.UNIVERSE:
+        assert ticker in config.TICKER_CATEGORY, f"{ticker} missing from TICKER_CATEGORY"
+        assert ticker in config.TICKER_SECTOR_MAP, f"{ticker} missing from TICKER_SECTOR_MAP"
 
 def test_capital_and_timeline():
     assert config.INITIAL_CAPITAL_USD == 50_000

@@ -27,8 +27,14 @@ POLYGON_API_KEY = os.environ.get("POLYGON_API_KEY", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 UNIVERSE: list[str] = [
-    "SPY", "QQQ", "IWM", "AAPL", "MSFT",
-    "NVDA", "TSLA", "AMD", "META", "GOOGL",
+    # Equity single-names (mega-cap tech + semis)
+    "AAPL", "MSFT", "NVDA", "TSLA", "AMD", "META", "GOOGL",
+    # Broad indexes
+    "SPY", "QQQ", "IWM",
+    # Sector ETFs — promoted 2026-04-22 for search-space breadth
+    "XLK", "XLF", "XLE", "XLV", "XLI",
+    # Credit (bond ETF) — different regime driver than equities
+    "HYG",
 ]
 UNIVERSE_RETIRED: list[str] = []
 
@@ -65,6 +71,13 @@ TICKER_CATEGORY: dict[str, str] = {
     "AMD": "income",
     "META": "income",
     "GOOGL": "income",
+    # Sector ETFs + HYG — income (credit-style strategies, not growth LEAPS)
+    "XLK": "income",
+    "XLF": "income",
+    "XLE": "income",
+    "XLV": "income",
+    "XLI": "income",
+    "HYG": "income",
 }
 
 GROWTH_FRAC_BULL = 0.40
@@ -149,6 +162,15 @@ TICKER_SECTOR_MAP: dict[str, str | None] = {
     "AMD": "XLK",
     "META": "XLC",
     "GOOGL": "XLC",
+    # Sector ETFs map to None — "sector-relative" is meaningless for the
+    # sector itself; regime_signals falls back to breadth_score.
+    "XLK": None,
+    "XLF": None,
+    "XLE": None,
+    "XLV": None,
+    "XLI": None,
+    # HYG is credit, not equity — no sector analog.
+    "HYG": None,
 }
 
 # Sector ETFs used for breadth calculation (all 11 GICS sectors)
