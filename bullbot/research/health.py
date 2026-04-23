@@ -16,6 +16,7 @@ import math
 import sqlite3
 import time
 from dataclasses import dataclass
+from datetime import date, datetime, time as dtime, timezone
 
 from bullbot import config
 
@@ -163,4 +164,74 @@ def check_iteration_failures(conn: sqlite3.Connection, now: int | None = None) -
         title="Iteration failures (24h)",
         passed=not findings,
         findings=findings,
+    )
+
+
+def _today_utc_ts() -> int:
+    """Unix seconds at 00:00 UTC of the current calendar date."""
+    return int(datetime.combine(date.today(), dtime.min, tzinfo=timezone.utc).timestamp())
+
+
+def _build_header(conn: sqlite3.Connection) -> dict[str, str]:
+    today = _today_utc_ts()
+
+    # Universe
+    universe_n = len(config.UNIVERSE)
+    phase_rows = conn.execute(
+        "SELECT phase, COUNT(*) FROM ticker_state GROUP BY phase"
+    ).fetchall()
+    phase_bits = ", ".join(f"{row[1]} {row[0]}" for row in phase_rows) or "no ticker_state rows"
+    universe_line = f"{universe_n} tickers ({phase_bits})"
+
+    # Strategy pool
+    total_strats = conn.execute("SELECT COUNT(*) FROM strategies").fetchone()[0]
+    new_today = conn.execute(
+        "SELECT COUNT(*) FROM strategies WHERE created_at >= ?", (today,)
+    ).fetchone()[0]
+    strat_line = f"{total_strats} (+{new_today} today)"
+
+    # LLM spend today
+    llm_row = conn.execute(
+        "SELECT COALESCE(SUM(amount_usd), 0) FROM cost_ledger "
+        "WHERE category='llm' AND ts >= ?", (today,),
+    ).fetchone()
+    llm_line = f"${llm_row[0]:.2f}"
+
+    # Live positions
+    open_row = conn.execute(
+        "SELECT COUNT(*) FROM positions WHERE run_id='live' AND closed_at IS NULL"
+    ).fetchone()
+    closed_today_rows = conn.execute(
+        "SELECT COUNT(*), COALESCE(SUM(pnl_realized),0) "
+        "FROM positions WHERE run_id='live' AND closed_at >= ?", (today,),
+    ).fetchone()
+    positions_line = (
+        f"{open_row[0]} open, {closed_today_rows[0]} closed today "
+        f"(${closed_today_rows[1]:.2f} realized)"
+    )
+
+    return {
+        "Universe": universe_line,
+        "Strategy pool": strat_line,
+        "LLM spend today": llm_line,
+        "Live positions": positions_line,
+    }
+
+
+_CHECKS = (
+    check_data_shortfalls,
+    check_pf_inf,
+    check_dead_paper_trials,
+    check_iteration_failures,
+)
+
+
+def generate_health_brief(conn: sqlite3.Connection) -> HealthBrief:
+    """Build a HealthBrief by running header + each check under _safe_check."""
+    header = _build_header(conn)
+    results = [_safe_check(fn, conn) for fn in _CHECKS]
+    return HealthBrief(
+        generated_at=int(time.time()),
+        header=header,
+        results=results,
     )

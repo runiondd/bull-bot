@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from datetime import date, datetime, time as dtime, timezone
 
 import pytest
 
@@ -278,3 +279,85 @@ def test_check_iteration_failures_flags_and_groups():
     assert len(result.findings) == 2
     assert any("AAPL" in f and "DailyRefreshError" in f and "2" in f for f in result.findings)
     assert any("QQQ" in f and "ZeroDivisionError" in f for f in result.findings)
+
+
+# --- generate_health_brief ---------------------------------------------------
+
+
+def _today_utc_ts() -> int:
+    return int(datetime.combine(date.today(), dtime.min, tzinfo=timezone.utc).timestamp())
+
+
+def _make_full_conn() -> sqlite3.Connection:
+    """Connection with all tables needed by generate_health_brief."""
+    c = _make_conn_with_ticker_state()
+    _add_iteration_failures_table(c)
+    c.execute("""
+        CREATE TABLE bars (
+            ticker TEXT, timeframe TEXT, ts INTEGER,
+            open REAL, high REAL, low REAL, close REAL, volume INTEGER
+        )
+    """)
+    c.execute("""
+        CREATE TABLE strategies (
+            id INTEGER PRIMARY KEY, class_name TEXT, class_version INTEGER,
+            params TEXT, params_hash TEXT, parent_id INTEGER, created_at INTEGER
+        )
+    """)
+    c.execute("""
+        CREATE TABLE positions (
+            id INTEGER PRIMARY KEY, run_id TEXT, ticker TEXT, strategy_id INTEGER,
+            legs TEXT, contracts INTEGER, open_price REAL, close_price REAL,
+            mark_to_mkt REAL, opened_at INTEGER, closed_at INTEGER,
+            pnl_realized REAL, exit_rules TEXT
+        )
+    """)
+    c.execute("""
+        CREATE TABLE cost_ledger (
+            id INTEGER PRIMARY KEY, ts INTEGER, category TEXT, ticker TEXT,
+            amount_usd REAL, details TEXT
+        )
+    """)
+    return c
+
+
+def test_generate_health_brief_returns_populated_header(monkeypatch):
+    monkeypatch.setattr(config, "UNIVERSE", ["SPY"])
+    monkeypatch.setattr(config, "HEALTH_MIN_BARS_FOR_WF", 10)
+    today = _today_utc_ts()
+    conn = _make_full_conn()
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, updated_at) VALUES ('SPY', 'discovering', ?)",
+        (today,),
+    )
+    conn.execute(
+        "INSERT INTO strategies (class_name, class_version, params, params_hash, created_at) "
+        "VALUES ('PutCreditSpread', 1, '{}', 'hash1', ?)", (today,),
+    )
+    conn.execute(
+        "INSERT INTO cost_ledger (ts, category, amount_usd) VALUES (?, 'llm', 0.42)",
+        (today + 100,),
+    )
+    brief = H.generate_health_brief(conn)
+    assert isinstance(brief, H.HealthBrief)
+    assert "Universe" in brief.header
+    assert "1 tickers" in brief.header["Universe"] or "1 ticker" in brief.header["Universe"]
+    assert "1 discovering" in brief.header["Universe"]
+    assert brief.header["Strategy pool"].startswith("1")
+    assert "+1 today" in brief.header["Strategy pool"]
+    assert "$0.42" in brief.header["LLM spend today"]
+
+
+def test_generate_health_brief_runs_all_four_checks(monkeypatch):
+    monkeypatch.setattr(config, "UNIVERSE", ["SPY"])
+    monkeypatch.setattr(config, "HEALTH_MIN_BARS_FOR_WF", 10)
+    conn = _make_full_conn()
+    brief = H.generate_health_brief(conn)
+    titles = {r.title for r in brief.results}
+    assert {
+        "Data shortfalls",
+        "pf_oos anomalies",
+        "Dead paper trials",
+        "Iteration failures (24h)",
+    }.issubset(titles)
+    assert len(brief.results) == 4
