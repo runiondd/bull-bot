@@ -36,7 +36,26 @@ class HealthBrief:
     header: dict[str, str]
     results: list[CheckResult]
 
-    # Renderers come in later tasks (Tasks 8 and 9).
+    def to_markdown(self) -> str:
+        ts = datetime.fromtimestamp(self.generated_at, tz=timezone.utc).strftime(
+            "%Y-%m-%dT%H:%MZ"
+        )
+        lines = [f"# Research Health — {ts}", ""]
+        for label, value in self.header.items():
+            lines.append(f"**{label}:** {value}")
+        lines.append("")
+        for check in self.results:
+            if check.passed:
+                lines.append(f"## {check.title} — OK")
+                lines.append("")
+            else:
+                lines.append(f"## {check.title} — FLAG ({len(check.findings)})")
+                for finding in check.findings:
+                    lines.append(f"- {finding}")
+                lines.append("")
+        return "\n".join(lines).rstrip() + "\n"
+
+    # to_html() comes in Task 9.
 
 
 def _safe_check(fn, conn: sqlite3.Connection | None) -> CheckResult:

@@ -361,3 +361,53 @@ def test_generate_health_brief_runs_all_four_checks(monkeypatch):
         "Iteration failures (24h)",
     }.issubset(titles)
     assert len(brief.results) == 4
+
+
+# --- HealthBrief.to_markdown -------------------------------------------------
+
+
+def _sample_brief() -> H.HealthBrief:
+    return H.HealthBrief(
+        generated_at=1_700_000_000,
+        header={"Universe": "16 tickers (6 discovering)", "LLM spend today": "$0.38"},
+        results=[
+            H.CheckResult(
+                title="Data shortfalls", passed=False,
+                findings=["XLK: 257 bars (need ~504)", "HYG: 257 bars (need ~504)"],
+            ),
+            H.CheckResult(title="pf_oos anomalies", passed=True, findings=[]),
+            H.CheckResult(
+                title="Dead paper trials", passed=False,
+                findings=["SATS: promoted 2 days ago, dispatch never fired"],
+            ),
+            H.CheckResult(title="Iteration failures (24h)", passed=True, findings=[]),
+        ],
+    )
+
+
+def test_to_markdown_includes_header_and_timestamp():
+    md = _sample_brief().to_markdown()
+    assert md.startswith("# Research Health")
+    assert "2023-11-14" in md  # 1_700_000_000 -> 2023-11-14T22:13:20Z
+    assert "**Universe:** 16 tickers (6 discovering)" in md
+    assert "**LLM spend today:** $0.38" in md
+
+
+def test_to_markdown_flag_sections_have_count_and_findings():
+    md = _sample_brief().to_markdown()
+    assert "## Data shortfalls — FLAG (2)" in md
+    assert "- XLK: 257 bars (need ~504)" in md
+    assert "- HYG: 257 bars (need ~504)" in md
+    assert "## Dead paper trials — FLAG (1)" in md
+    assert "- SATS: promoted 2 days ago" in md
+
+
+def test_to_markdown_ok_sections_are_single_line():
+    md = _sample_brief().to_markdown()
+    assert "## pf_oos anomalies — OK" in md
+    assert "## Iteration failures (24h) — OK" in md
+    # No bulleted findings under an OK section
+    ok_idx = md.index("## pf_oos anomalies — OK")
+    next_section_idx = md.index("## Dead paper trials", ok_idx)
+    between = md[ok_idx:next_section_idx]
+    assert "- " not in between
