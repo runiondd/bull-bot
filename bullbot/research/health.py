@@ -18,6 +18,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, time as dtime, timezone
+from pathlib import Path
 
 from bullbot import config
 
@@ -285,3 +286,15 @@ def generate_health_brief(conn: sqlite3.Connection) -> HealthBrief:
         header=header,
         results=results,
     )
+
+
+def write_latest_brief(
+    conn: sqlite3.Connection, reports_dir: Path | None = None
+) -> Path:
+    """Generate a brief and persist it as a timestamped markdown archive."""
+    brief = generate_health_brief(conn)
+    target_dir = reports_dir if reports_dir is not None else config.REPORTS_DIR
+    target_dir.mkdir(parents=True, exist_ok=True)
+    path = target_dir / f"research_health_{brief.generated_at}.md"
+    path.write_text(brief.to_markdown(), encoding="utf-8")
+    return path

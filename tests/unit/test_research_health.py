@@ -440,3 +440,29 @@ def test_to_html_escapes_user_content():
     html = brief.to_html()
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
+
+
+# --- write_latest_brief ------------------------------------------------------
+
+
+def test_write_latest_brief_creates_file_with_expected_shape(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "UNIVERSE", ["SPY"])
+    monkeypatch.setattr(config, "HEALTH_MIN_BARS_FOR_WF", 10)
+    conn = _make_full_conn()
+    path = H.write_latest_brief(conn, reports_dir=tmp_path)
+    assert path.exists()
+    assert path.parent == tmp_path
+    assert path.name.startswith("research_health_")
+    assert path.suffix == ".md"
+    content = path.read_text()
+    assert content.startswith("# Research Health")
+    assert "Universe" in content
+
+
+def test_write_latest_brief_defaults_to_reports_dir(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "UNIVERSE", ["SPY"])
+    monkeypatch.setattr(config, "HEALTH_MIN_BARS_FOR_WF", 10)
+    monkeypatch.setattr(config, "REPORTS_DIR", tmp_path)
+    conn = _make_full_conn()
+    path = H.write_latest_brief(conn)
+    assert path.parent == tmp_path
