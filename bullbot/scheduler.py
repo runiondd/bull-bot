@@ -177,6 +177,11 @@ def tick(conn, anthropic_client, data_client, universe=None):
                 log.exception("failed to record iteration_failure")
             continue
     try:
+        from bullbot.research import health
+        health.write_latest_brief(conn)
+    except Exception:
+        log.exception("health brief generation failed")
+    try:
         from bullbot.dashboard import generator
         generator.generate(conn)
     except Exception:
