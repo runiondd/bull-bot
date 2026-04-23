@@ -111,3 +111,9 @@ def test_growth_config():
     assert config.GROWTH_EDGE_SORTINO_MIN == 1.0
     assert config.GROWTH_EDGE_MAX_DD_PCT == 0.35
     assert config.GROWTH_EDGE_TRADE_COUNT_MIN == 5
+
+
+def test_health_brief_config():
+    assert config.HEALTH_DEAD_PAPER_DAYS == 3
+    assert config.HEALTH_MIN_BARS_FOR_WF == config.WF_WINDOW_MONTHS * 21
+    assert config.HEALTH_PF_OOS_ABSURD_THRESHOLD == 1e10
