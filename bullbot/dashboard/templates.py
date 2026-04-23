@@ -186,6 +186,15 @@ def page_shell(updated_at: str, body: str) -> str:
   th, td {{ padding:6px 10px; text-align:left; border-bottom:1px solid #222; font-size:13px; }}
   th {{ color:#b0b0b0; font-size:11px; text-transform:uppercase; }}
   blockquote {{ border-left:3px solid #4cc9f0; padding:4px 12px; margin:8px 0; color:#ccc; font-style:italic; }}
+  .research-health {{ padding: 16px; }}
+  .research-health h2 {{ margin-top: 0; }}
+  .research-health .health-header {{ display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin-bottom: 16px; }}
+  .research-health .health-header dt {{ font-weight: 600; }}
+  .research-health .check {{ margin-top: 16px; padding: 12px; border-radius: 6px; border: 1px solid rgba(128,128,128,0.3); }}
+  .research-health .check-ok {{ border-left: 4px solid #3fb950; }}
+  .research-health .check-flag {{ border-left: 4px solid #f0883e; }}
+  .research-health .check h3 {{ margin: 0 0 8px 0; font-size: 1em; }}
+  .research-health .check ul {{ margin: 0; padding-left: 20px; }}
 </style>
 </head>
 <body>

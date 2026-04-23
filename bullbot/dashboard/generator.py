@@ -7,6 +7,7 @@ from pathlib import Path
 
 from bullbot import config
 from bullbot.dashboard import queries, templates
+from bullbot.research import health as research_health
 
 
 def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
@@ -31,8 +32,15 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
     costs_html = templates.costs_section(costs)
     inventory_html = templates.inventory_section(inventory)
 
+    try:
+        health_html = research_health.generate_health_brief(conn).to_html()
+    except Exception:
+        # Dashboard must render even if health module breaks
+        health_html = '<p class="research-health-error">Health brief unavailable this run.</p>'
+
     tabs = {
         "Overview": overview_html,
+        "Health": health_html,
         "Evolver": evolver_html,
         "Positions": positions_html,
         "Transactions": transactions_html,

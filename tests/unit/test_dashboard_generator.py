@@ -68,3 +68,12 @@ def test_generate_uses_default_path(conn, monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "REPORTS_DIR", tmp_path)
     generator.generate(conn)
     assert (tmp_path / "dashboard.html").exists()
+
+
+def test_generate_includes_health_tab(conn, tmp_path):
+    out = tmp_path / "dashboard.html"
+    generator.generate(conn, output_path=out)
+    html = out.read_text()
+    assert "tab-Health" in html
+    assert 'class="research-health"' in html
+    assert ">Health<" in html  # tab button text
