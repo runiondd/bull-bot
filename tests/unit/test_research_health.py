@@ -411,3 +411,32 @@ def test_to_markdown_ok_sections_are_single_line():
     next_section_idx = md.index("## Dead paper trials", ok_idx)
     between = md[ok_idx:next_section_idx]
     assert "- " not in between
+
+
+# --- HealthBrief.to_html -----------------------------------------------------
+
+
+def test_to_html_has_expected_structure():
+    html = _sample_brief().to_html()
+    assert '<section class="research-health">' in html
+    assert '<h2>Research Health' in html
+    assert '<dl class="health-header">' in html
+    assert '<dt>Universe</dt>' in html
+    assert '<dd>16 tickers (6 discovering)</dd>' in html
+    assert '<section class="check check-flag">' in html
+    assert '<section class="check check-ok">' in html
+    assert '<h3>Data shortfalls — FLAG (2)</h3>' in html
+    assert '<h3>pf_oos anomalies — OK</h3>' in html
+
+
+def test_to_html_escapes_user_content():
+    brief = H.HealthBrief(
+        generated_at=1_700_000_000,
+        header={"Universe": "1 tickers (<script>alert(1)</script>)"},
+        results=[
+            H.CheckResult(title="X", passed=False, findings=["<script>evil</script>"]),
+        ],
+    )
+    html = brief.to_html()
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html

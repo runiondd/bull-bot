@@ -11,6 +11,7 @@ Check functions and helpers are module-private.
 """
 from __future__ import annotations
 
+import html as htmllib
 import logging
 import math
 import sqlite3
@@ -55,7 +56,37 @@ class HealthBrief:
                 lines.append("")
         return "\n".join(lines).rstrip() + "\n"
 
-    # to_html() comes in Task 9.
+    def to_html(self) -> str:
+        ts = datetime.fromtimestamp(self.generated_at, tz=timezone.utc).strftime(
+            "%Y-%m-%dT%H:%MZ"
+        )
+        parts = [
+            '<section class="research-health">',
+            f"<h2>Research Health — {htmllib.escape(ts)}</h2>",
+            '<dl class="health-header">',
+        ]
+        for label, value in self.header.items():
+            parts.append(f"<dt>{htmllib.escape(label)}</dt>")
+            parts.append(f"<dd>{htmllib.escape(value)}</dd>")
+        parts.append("</dl>")
+        for check in self.results:
+            title_esc = htmllib.escape(check.title)
+            if check.passed:
+                parts.append('<section class="check check-ok">')
+                parts.append(f"<h3>{title_esc} — OK</h3>")
+                parts.append("</section>")
+            else:
+                parts.append('<section class="check check-flag">')
+                parts.append(
+                    f"<h3>{title_esc} — FLAG ({len(check.findings)})</h3>"
+                )
+                parts.append("<ul>")
+                for finding in check.findings:
+                    parts.append(f"<li>{htmllib.escape(finding)}</li>")
+                parts.append("</ul>")
+                parts.append("</section>")
+        parts.append("</section>")
+        return "\n".join(parts)
 
 
 def _safe_check(fn, conn: sqlite3.Connection | None) -> CheckResult:
