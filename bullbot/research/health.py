@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import math
 import sqlite3
+import time
 from dataclasses import dataclass
 
 from bullbot import config
@@ -94,6 +95,49 @@ def check_pf_inf(conn: sqlite3.Connection) -> CheckResult:
         )
     return CheckResult(
         title="pf_oos anomalies",
+        passed=not findings,
+        findings=findings,
+    )
+
+
+def check_dead_paper_trials(conn: sqlite3.Connection, now: int | None = None) -> CheckResult:
+    """Flag tickers promoted to paper_trial that aren't actually trading."""
+    now = now if now is not None else int(time.time())
+    cutoff = now - config.HEALTH_DEAD_PAPER_DAYS * 86400
+    findings: list[str] = []
+
+    # Condition A: promoted (verdict_at set) but paper_started_at never set
+    rows_a = conn.execute(
+        "SELECT ticker, verdict_at FROM ticker_state "
+        "WHERE phase='paper_trial' "
+        "  AND paper_started_at IS NULL "
+        "  AND verdict_at IS NOT NULL "
+        "  AND verdict_at < ?",
+        (cutoff,),
+    ).fetchall()
+    for row in rows_a:
+        days = (now - row[1]) // 86400
+        findings.append(
+            f"{row[0]}: promoted {days} days ago, paper_trial dispatch has never fired"
+        )
+
+    # Condition B: paper trading started but zero live trades
+    rows_b = conn.execute(
+        "SELECT ticker, paper_started_at FROM ticker_state "
+        "WHERE phase='paper_trial' "
+        "  AND paper_started_at IS NOT NULL "
+        "  AND paper_trade_count = 0 "
+        "  AND paper_started_at < ?",
+        (cutoff,),
+    ).fetchall()
+    for row in rows_b:
+        days = (now - row[1]) // 86400
+        findings.append(
+            f"{row[0]}: started paper trading {days} days ago, 0 live trades"
+        )
+
+    return CheckResult(
+        title="Dead paper trials",
         passed=not findings,
         findings=findings,
     )

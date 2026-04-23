@@ -164,3 +164,62 @@ def test_check_pf_inf_flags_infinite_and_absurd_pf_values():
     assert any("TSLA" in f and "114" in f for f in result.findings)
     # MSFT's pf_oos=2.5 is reasonable, should not be flagged
     assert not any("MSFT" in f for f in result.findings)
+
+
+# --- check_dead_paper_trials -------------------------------------------------
+
+
+def test_check_dead_paper_trials_passes_when_all_healthy(monkeypatch):
+    monkeypatch.setattr(config, "HEALTH_DEAD_PAPER_DAYS", 3)
+    now = 1_700_000_000
+    conn = _make_conn_with_ticker_state()
+    # freshly promoted, not yet past threshold
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, paper_started_at, "
+        "paper_trade_count, verdict_at, updated_at) "
+        "VALUES ('GOOGL', 'paper_trial', NULL, 0, ?, ?)",
+        (now - 1 * 86400, now),
+    )
+    # actively trading
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, paper_started_at, "
+        "paper_trade_count, updated_at) "
+        "VALUES ('SPY', 'paper_trial', ?, 5, ?)",
+        (now - 10 * 86400, now),
+    )
+    result = H.check_dead_paper_trials(conn, now=now)
+    assert result.passed is True
+
+
+def test_check_dead_paper_trials_flags_never_started(monkeypatch):
+    monkeypatch.setattr(config, "HEALTH_DEAD_PAPER_DAYS", 3)
+    now = 1_700_000_000
+    conn = _make_conn_with_ticker_state()
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, paper_started_at, "
+        "paper_trade_count, verdict_at, updated_at) "
+        "VALUES ('SATS', 'paper_trial', NULL, 0, ?, ?)",
+        (now - 5 * 86400, now),
+    )
+    result = H.check_dead_paper_trials(conn, now=now)
+    assert result.passed is False
+    assert len(result.findings) == 1
+    assert "SATS" in result.findings[0]
+    assert "never fired" in result.findings[0] or "never started" in result.findings[0]
+
+
+def test_check_dead_paper_trials_flags_zero_trades_after_threshold(monkeypatch):
+    monkeypatch.setattr(config, "HEALTH_DEAD_PAPER_DAYS", 3)
+    now = 1_700_000_000
+    conn = _make_conn_with_ticker_state()
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, paper_started_at, "
+        "paper_trade_count, updated_at) "
+        "VALUES ('XLF', 'paper_trial', ?, 0, ?)",
+        (now - 5 * 86400, now),
+    )
+    result = H.check_dead_paper_trials(conn, now=now)
+    assert result.passed is False
+    assert len(result.findings) == 1
+    assert "XLF" in result.findings[0]
+    assert "0 live trades" in result.findings[0] or "0 trades" in result.findings[0]
