@@ -15,7 +15,9 @@ import logging
 import sqlite3
 from dataclasses import dataclass
 
-log = logging.getLogger(__name__)
+from bullbot import config
+
+log = logging.getLogger("bullbot.research.health")
 
 
 @dataclass(frozen=True)
@@ -48,3 +50,22 @@ def _safe_check(fn, conn: sqlite3.Connection | None) -> CheckResult:
             passed=False,
             findings=[f"check crashed: {type(exc).__name__}: {exc}"],
         )
+
+
+def check_data_shortfalls(conn: sqlite3.Connection) -> CheckResult:
+    """Flag UNIVERSE tickers with insufficient bar history for walkforward."""
+    min_bars = config.HEALTH_MIN_BARS_FOR_WF
+    findings: list[str] = []
+    for ticker in config.UNIVERSE:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM bars WHERE ticker=? AND timeframe='1d'",
+            (ticker,),
+        ).fetchone()
+        n = row[0] if row else 0
+        if n < min_bars:
+            findings.append(f"{ticker}: {n} bars (need ~{min_bars} for walkforward)")
+    return CheckResult(
+        title="Data shortfalls",
+        passed=not findings,
+        findings=findings,
+    )
