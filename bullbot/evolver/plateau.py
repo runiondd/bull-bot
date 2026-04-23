@@ -61,12 +61,18 @@ def classify(state: _StateLike, metrics: _MetricsLike, category: str = "income")
             new_best_pf_oos=max(state.best_pf_oos, metrics.pf_oos),
         )
 
-    # inf > inf + 0.10 is False, so treat inf-vs-inf as not degraded
+    # Treat "both at ceiling" (or both +inf, defensively) as not degraded —
+    # the cap obscures whether the candidate is better than the incumbent,
+    # so we shouldn't count it as a plateau.
     both_inf = math.isinf(metrics.pf_oos) and math.isinf(state.best_pf_oos)
+    both_at_ceiling = (
+        metrics.pf_oos >= config.PF_CEILING
+        and state.best_pf_oos >= config.PF_CEILING
+    )
     improved = metrics.pf_oos > state.best_pf_oos + config.PLATEAU_IMPROVEMENT_MIN
     new_best = max(state.best_pf_oos, metrics.pf_oos)
 
-    if improved or both_inf:
+    if improved or both_inf or both_at_ceiling:
         new_plateau = 0
     else:
         new_plateau = state.plateau_counter + 1

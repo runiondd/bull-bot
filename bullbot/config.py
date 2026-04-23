@@ -47,6 +47,16 @@ EDGE_PF_IS_MIN = 1.5
 EDGE_PF_OOS_MIN = 1.3
 EDGE_TRADE_COUNT_MIN = 5
 
+# Ceiling for profit_factor. A fold with zero losing trades produces an
+# IEEE +inf profit factor, which is mathematically "infinite edge" but
+# statistically meaningless for small-sample OOS windows (e.g. 3-5 trades).
+# The prior behaviour returned inf and required downstream code to branch
+# on math.isinf; capping at a finite value lets us reason about pf
+# uniformly. 10.0 is well above "believable" edge (industry "excellent"
+# tops out ~3-5) so capping here doesn't mask real signals — anything
+# above the cap was sample-size-artifact territory anyway.
+PF_CEILING = 10.0
+
 WF_TRAIN_FRAC = 0.70
 WF_WINDOW_MONTHS = 24
 WF_STEP_DAYS = 30

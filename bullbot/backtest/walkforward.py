@@ -84,13 +84,22 @@ def compute_folds(
 
 
 def profit_factor(pnls: list[float]) -> float:
+    """Profit factor = gross_win / gross_loss, capped at config.PF_CEILING.
+
+    Returns 0.0 when there are no trades or only losing trades (gross_win == 0).
+    When there are only winning trades (gross_loss == 0), returns config.PF_CEILING
+    instead of IEEE +inf — the cap prevents sample-size artifacts in small OOS
+    folds from poisoning downstream weighted averages.
+    """
+    from bullbot import config
+
     if not pnls:
         return 0.0
     gross_win = sum(p for p in pnls if p > 0)
     gross_loss = -sum(p for p in pnls if p < 0)
     if gross_loss == 0:
-        return gross_win if gross_win == 0 else float("inf")
-    return gross_win / gross_loss
+        return 0.0 if gross_win == 0 else config.PF_CEILING
+    return min(gross_win / gross_loss, config.PF_CEILING)
 
 
 def max_drawdown_pct(equity_curve: list[float]) -> float:

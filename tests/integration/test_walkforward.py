@@ -41,6 +41,22 @@ def test_profit_factor_no_trades_returns_zero():
     assert walkforward.profit_factor([]) == 0.0
 
 
+def test_profit_factor_all_winners_caps_at_ceiling():
+    """Zero losing trades previously produced +inf, which poisoned downstream
+    weighted averages. Must now cap at config.PF_CEILING."""
+    from bullbot import config
+    assert walkforward.profit_factor([100.0, 200.0, 50.0]) == config.PF_CEILING
+
+
+def test_profit_factor_extreme_ratio_caps_at_ceiling():
+    """Very large but finite ratios are also capped — a 1000x ratio from a
+    small sample is statistically indistinguishable from a sample-size
+    artifact and shouldn't mislead downstream consumers."""
+    from bullbot import config
+    # gross_win=1000, gross_loss=1 -> raw PF=1000, should cap to PF_CEILING
+    assert walkforward.profit_factor([1000.0, -1.0]) == config.PF_CEILING
+
+
 def test_aggregate_metrics_combines_folds():
     fold_metrics = [
         walkforward.FoldMetrics(pf_is=1.2, pf_oos=1.1, trade_count_is=30, trade_count_oos=12, max_dd_pct=0.05),
