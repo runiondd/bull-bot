@@ -500,3 +500,50 @@ def transactions_tab(data: dict) -> str:
     </tfoot>
   </table>
 </div>"""
+
+
+# ---- Health tab -------------------------------------------------------------
+
+def health_tab(data: dict) -> str:
+    """Health tab: universe summary stats + system check cards."""
+    h = data["health"]
+    u = h["universe"]
+
+    def _stat(label: str, value: int, subtext: str, num_extra_class: str = "") -> str:
+        num_cls = f"num {num_extra_class}".strip() if num_extra_class else "num"
+        return f"""<div>
+  <div class="label-sm" style="color: var(--fg-2); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase">{html.escape(label)}</div>
+  <div class="{num_cls}" style="font-size: 22px; margin-top: 4px">{value}</div>
+  <div style="font-size: 11.5px; color: var(--fg-2)">{html.escape(subtext)}</div>
+</div>"""
+
+    universe_grid = f"""<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px">
+  {_stat("Universe", u["total"], "tickers tracked")}
+  {_stat("Live", u["live"], "strategies in production", "pos")}
+  {_stat("Paper Trial", u["paper_trial"], "under evaluation")}
+  {_stat("No Edge", u["no_edge"], "retired this cycle", "muted")}
+</div>"""
+
+    def _check_card(c: dict) -> str:
+        status = c.get("status", "")
+        card_extra = " warn" if status == "warn" else (" fail" if status == "fail" else "")
+        chip_cls = "pass" if status == "ok" else ("warn" if status == "warn" else "fail")
+        return f"""<div class="health-card{card_extra}">
+  <div class="h-name">
+    <span>{html.escape(c.get("name", ""))}</span>
+    <span class="chip {chip_cls}">{html.escape(status)}</span>
+  </div>
+  <div class="h-detail">{html.escape(c.get("detail", ""))}</div>
+</div>"""
+
+    checks_html = "".join(_check_card(c) for c in h.get("checks", []))
+
+    return f"""<div class="card">
+  <div class="card-body">
+    {universe_grid}
+  </div>
+</div>
+<div class="subhead">Checks</div>
+<div class="health-grid">
+  {checks_html}
+</div>"""

@@ -140,3 +140,26 @@ def test_transactions_tab_renders_with_totals():
 def test_transactions_tab_empty_no_crash():
     html_str = tabs.transactions_tab({"orders": []})
     assert html_str
+
+
+def test_health_tab_renders_universe_summary_and_checks():
+    data = {"health": {
+        "universe": {"total": 16, "live": 3, "paper_trial": 6, "discovering": 4, "no_edge": 3},
+        "checks": [
+            {"name": "Data freshness", "status": "ok", "detail": "All bars current"},
+            {"name": "LLM budget", "status": "warn", "detail": "57% through budget"},
+        ],
+    }}
+    html_str = tabs.health_tab(data)
+    assert ">16<" in html_str  # universe total
+    assert "Live" in html_str
+    assert "Paper Trial" in html_str
+    assert "No Edge" in html_str
+    assert "Data freshness" in html_str
+    assert "LLM budget" in html_str
+    assert "All bars current" in html_str
+
+def test_health_tab_empty_checks_no_crash():
+    data = {"health": {"universe": {"total": 0, "live": 0, "paper_trial": 0, "discovering": 0, "no_edge": 0}, "checks": []}}
+    html_str = tabs.health_tab(data)
+    assert html_str
