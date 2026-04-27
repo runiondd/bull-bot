@@ -248,11 +248,20 @@ def propose(
     ProposerApiError
         On unexpected API errors.
     """
+    from bullbot.llm import cache as llm_cache
+    from bullbot import config as bb_config
+
     guidance = _GROWTH_GUIDANCE if category == "growth" else _INCOME_GUIDANCE
     system_prompt = _SYSTEM_PROMPT.format(
         strategy_names=", ".join(registry.list_all_names())
     ) + guidance
     user_prompt = build_user_prompt(snapshot, history, best_strategy_id)
+
+    # Build cached/uncached system arg per config
+    if bb_config.PROPOSER_CACHE_ENABLED:
+        system_arg = llm_cache.build_system_blocks([system_prompt])
+    else:
+        system_arg = system_prompt
 
     total_input_tokens = 0
     total_output_tokens = 0
@@ -263,7 +272,7 @@ def propose(
             response = client.messages.create(
                 model=PROPOSER_MODEL,
                 max_tokens=PROPOSER_MAX_TOKENS,
-                system=system_prompt,
+                system=system_arg,
                 messages=[{"role": "user", "content": user_prompt}],
             )
         except Exception as exc:
