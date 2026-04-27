@@ -306,3 +306,40 @@ def test_account_summary_empty_db_returns_baseline(db_conn):
     assert result["income_account"] == 50_000
     assert result["growth_account"] == 215_000
     assert result["month_to_date"] == 0
+
+
+# ---------- test_extended_metrics ----------
+
+
+def test_extended_metrics_returns_required_keys(db_conn, _seed_strategy):
+    # 3 wins, 2 losses
+    for pnl in (100, 200, 50, -80, -120):
+        db_conn.execute(
+            "INSERT INTO positions (run_id, ticker, opened_at, open_price, "
+            "mark_to_mkt, pnl_realized, closed_at) VALUES "
+            "('paper', 'SPY', 0, 1, 0, ?, 1)", (pnl,),
+        )
+    db_conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, paper_trade_count, updated_at) "
+        "VALUES ('SPY', 'paper_trial', 5, 0)"
+    )
+    result = queries.extended_metrics(db_conn)
+    expected_keys = {"sharpe_30d", "win_rate", "avg_win", "avg_loss",
+                     "profit_factor", "paper_trade_count", "backtest_count",
+                     "llm_spend_7d"}
+    assert expected_keys.issubset(set(result.keys()))
+    assert result["win_rate"] == pytest.approx(0.6)  # 3/5
+    assert result["avg_win"] == pytest.approx(116.667, abs=0.01)
+    assert result["avg_loss"] == pytest.approx(-100.0)
+    assert result["profit_factor"] == pytest.approx(350 / 200)
+    assert result["paper_trade_count"] == 5
+
+
+def test_extended_metrics_empty_db(db_conn):
+    """Empty DB: zeros across the board, no division-by-zero."""
+    result = queries.extended_metrics(db_conn)
+    assert result["win_rate"] == 0
+    assert result["avg_win"] == 0
+    assert result["avg_loss"] == 0
+    assert result["profit_factor"] == 0
+    assert result["paper_trade_count"] == 0

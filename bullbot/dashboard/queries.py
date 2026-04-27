@@ -364,3 +364,76 @@ def equity_curve(conn: sqlite3.Connection, days: int = 30) -> list[dict[str, Any
         (days,),
     ).fetchall()
     return [_row_to_dict(r) for r in reversed(rows)]
+
+
+# ---------------------------------------------------------------------------
+# extended_metrics
+# ---------------------------------------------------------------------------
+
+
+def extended_metrics(conn: sqlite3.Connection, now: int | None = None) -> dict[str, Any]:
+    """Return extended dashboard metrics: win rate, profit factor, sharpe, etc.
+
+    All metrics computed on paper positions only (run_id NOT LIKE 'bt:%').
+    Empty DB → all zeros, no division-by-zero.
+    """
+    import time as _time
+    now = now if now is not None else int(_time.time())
+
+    # Win/loss aggregates from closed paper positions
+    rows = conn.execute(
+        "SELECT pnl_realized FROM positions "
+        "WHERE run_id NOT LIKE 'bt:%' AND pnl_realized IS NOT NULL"
+    ).fetchall()
+    pnls = [r[0] for r in rows if r[0] is not None]
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+    closed_count = len(pnls)
+    win_rate = len(wins) / closed_count if closed_count else 0.0
+    avg_win = sum(wins) / len(wins) if wins else 0.0
+    avg_loss = sum(losses) / len(losses) if losses else 0.0
+    gross_win = sum(wins)
+    gross_loss = -sum(losses)
+    profit_factor = gross_win / gross_loss if gross_loss > 0 else 0.0
+
+    # Sharpe over last 30 daily snapshots (simple impl: mean/stdev of daily delta)
+    sharpe_30d = 0.0
+    snaps = conn.execute(
+        "SELECT total_equity FROM equity_snapshots "
+        "ORDER BY ts DESC LIMIT 30"
+    ).fetchall()
+    if len(snaps) >= 3:
+        eqs = [float(r[0]) for r in reversed(snaps)]
+        deltas = [eqs[i+1] - eqs[i] for i in range(len(eqs)-1)]
+        if len(deltas) > 1:
+            mean = sum(deltas) / len(deltas)
+            var = sum((d - mean) ** 2 for d in deltas) / (len(deltas) - 1)
+            stdev = var ** 0.5
+            if stdev > 0:
+                sharpe_30d = (mean / stdev) * (252 ** 0.5)  # annualized
+
+    # Trade counts
+    paper_count = conn.execute(
+        "SELECT COALESCE(SUM(paper_trade_count), 0) FROM ticker_state"
+    ).fetchone()[0]
+    bt_count = conn.execute(
+        "SELECT COUNT(*) FROM positions WHERE run_id LIKE 'bt:%'"
+    ).fetchone()[0]
+
+    # LLM spend last 7 days
+    cutoff_7d = now - 7 * 86400
+    llm_7d = conn.execute(
+        "SELECT COALESCE(SUM(amount_usd), 0) FROM cost_ledger "
+        "WHERE category='llm' AND ts >= ?", (cutoff_7d,),
+    ).fetchone()[0]
+
+    return {
+        "sharpe_30d": float(sharpe_30d),
+        "win_rate": float(win_rate),
+        "avg_win": float(avg_win),
+        "avg_loss": float(avg_loss),
+        "profit_factor": float(profit_factor),
+        "paper_trade_count": int(paper_count),
+        "backtest_count": int(bt_count),
+        "llm_spend_7d": float(llm_7d),
+    }
