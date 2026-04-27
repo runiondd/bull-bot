@@ -502,6 +502,94 @@ def transactions_tab(data: dict) -> str:
 </div>"""
 
 
+# ---- Costs tab --------------------------------------------------------------
+
+def costs_tab(data: dict) -> str:
+    """Costs tab: LLM spend by ticker + commissions table + cost efficiency."""
+    c = data["costs"]
+    m = data["metrics"]
+
+    llm_per_ticker = c.get("llmPerTicker", {})
+    llm_total = c.get("llmTotal", 0.0)
+    llm_budget = c.get("llmBudget", 0.0)
+    paper_comm = c.get("paperCommissions", 0.0)
+    backtest_comm = c.get("backtestCommissions", 0.0)
+    paper_trade_count = m.get("paperTradeCount", 0)
+    backtest_count = m.get("backtestCount", 0)
+
+    # LLM bar rows sorted by spend descending
+    sorted_entries = sorted(llm_per_ticker.items(), key=lambda kv: kv[1], reverse=True)
+    max_val = max((v for _, v in sorted_entries), default=1.0) or 1.0
+
+    bar_rows = []
+    for ticker, v in sorted_entries:
+        width_pct = (v / max_val) * 100
+        bar_rows.append(
+            f'<div class="bar-row">'
+            f'<span class="bar-label">{html.escape(ticker)}</span>'
+            f'<div class="bar-track"><div class="bar-fill" style="width: {width_pct:.1f}%"></div></div>'
+            f'<span class="num bar-amt">${v:.2f}</span>'
+            f'</div>'
+        )
+    bars_html = "".join(bar_rows) if bar_rows else ""
+
+    # Commissions totals
+    total_comm = paper_comm + backtest_comm
+
+    # Cost efficiency — guard against division by zero
+    if paper_trade_count:
+        per_paper = f"${llm_total / paper_trade_count:.2f}"
+    else:
+        per_paper = "&mdash;"
+
+    if backtest_count:
+        per_backtest = f"${llm_total / backtest_count:.3f}"
+    else:
+        per_backtest = "&mdash;"
+
+    return f"""<div class="cols-2-eq">
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">LLM Spend by Ticker</span>
+      <span class="num" style="font-size: 12px">${llm_total:.2f} <span style="color: var(--fg-2)">/ ${llm_budget:.2f}</span></span>
+    </div>
+    <div class="card-body">
+      {bars_html}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">Commissions</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <tbody>
+          <tr><td>Paper trading</td><td class="num t-right">${paper_comm:.2f}</td></tr>
+          <tr><td class="muted">Backtest (cumulative)</td><td class="num t-right muted">${backtest_comm:,.2f}</td></tr>
+          <tr style="font-weight: 600">
+            <td style="border-top: 1px solid var(--line-strong)">Total</td>
+            <td class="num t-right" style="border-top: 1px solid var(--line-strong)">${total_comm:,.2f}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top: 18px">
+        <div class="subhead" style="margin: 0">Cost Efficiency</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px">
+          <div>
+            <div style="font-size: 10.5px; color: var(--fg-2); text-transform: uppercase; letter-spacing: 0.08em">$ per paper trade</div>
+            <div class="num" style="font-size: 18px">{per_paper}</div>
+          </div>
+          <div>
+            <div style="font-size: 10.5px; color: var(--fg-2); text-transform: uppercase; letter-spacing: 0.08em">$ per backtest</div>
+            <div class="num" style="font-size: 18px">{per_backtest}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>"""
+
+
 # ---- Health tab -------------------------------------------------------------
 
 def health_tab(data: dict) -> str:

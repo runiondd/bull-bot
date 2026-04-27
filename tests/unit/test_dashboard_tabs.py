@@ -163,3 +163,29 @@ def test_health_tab_empty_checks_no_crash():
     data = {"health": {"universe": {"total": 0, "live": 0, "paper_trial": 0, "discovering": 0, "no_edge": 0}, "checks": []}}
     html_str = tabs.health_tab(data)
     assert html_str
+
+
+def test_costs_tab_renders_breakdown():
+    data = {
+        "costs": {
+            "llmPerTicker": {"AAPL": 4.20, "MSFT": 3.80, "TSLA": 3.10},
+            "llmTotal": 28.74, "llmBudget": 50.00,
+            "paperCommissions": 67.20, "backtestCommissions": 1284.50,
+        },
+        "metrics": {"paperTradeCount": 31, "backtestCount": 247},
+    }
+    html_str = tabs.costs_tab(data)
+    assert "AAPL" in html_str
+    assert "28.74" in html_str
+    assert "67.20" in html_str
+    assert "1,284.50" in html_str or "1284.50" in html_str
+    assert "Cost Efficiency" in html_str
+
+def test_costs_tab_zero_paper_trades_no_div_zero():
+    data = {
+        "costs": {"llmPerTicker": {}, "llmTotal": 0, "llmBudget": 50.0,
+                  "paperCommissions": 0, "backtestCommissions": 0},
+        "metrics": {"paperTradeCount": 0, "backtestCount": 0},
+    }
+    html_str = tabs.costs_tab(data)
+    assert html_str  # don't crash on division-by-zero
