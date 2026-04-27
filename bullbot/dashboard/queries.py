@@ -281,3 +281,26 @@ def cost_breakdown(conn: sqlite3.Connection) -> dict[str, Any]:
         "paper_commissions": paper_comm["total"],
         "backtest_commissions": bt_comm["total"],
     }
+
+
+# ---------------------------------------------------------------------------
+# equity_curve
+# ---------------------------------------------------------------------------
+
+
+def equity_curve(conn: sqlite3.Connection, days: int = 30) -> list[dict[str, Any]]:
+    """Return the last `days` equity snapshots, oldest first.
+
+    Reads from equity_snapshots (written by bullbot.research.equity_snapshot
+    at the end of every scheduler.tick()). Empty DB → empty list. Caller is
+    responsible for handling the empty case (e.g. flat-line chart).
+    """
+    rows = conn.execute(
+        "SELECT ts, total_equity, income_equity, growth_equity, "
+        "       realized_pnl, unrealized_pnl "
+        "FROM equity_snapshots "
+        "ORDER BY ts DESC "
+        "LIMIT ?",
+        (days,),
+    ).fetchall()
+    return [_row_to_dict(r) for r in reversed(rows)]

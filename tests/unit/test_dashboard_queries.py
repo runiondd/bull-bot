@@ -244,3 +244,37 @@ def test_cost_breakdown(db_conn, _seed_strategy):
     assert result["llm_ledger_total"] == pytest.approx(1.50)
     assert result["paper_commissions"] == pytest.approx(2.60)
     assert result["backtest_commissions"] == pytest.approx(1.30)
+
+
+# ---------- test_equity_curve ----------
+
+
+def test_equity_curve_returns_recent_snapshots(db_conn, _seed_strategy):
+    """30 days of snapshots, most recent last."""
+    for i in range(30):
+        db_conn.execute(
+            "INSERT INTO equity_snapshots (ts, total_equity, income_equity, "
+            "growth_equity, realized_pnl, unrealized_pnl) VALUES (?, ?, ?, ?, ?, ?)",
+            (i * 86400, 265000 + i * 100, 50000 + i * 50, 215000 + i * 50, i * 50, i * 50),
+        )
+    result = queries.equity_curve(db_conn, days=30)
+    assert len(result) == 30
+    assert result[0]["total_equity"] == 265000  # oldest
+    assert result[-1]["total_equity"] == 265000 + 29 * 100  # newest
+
+
+def test_equity_curve_returns_empty_when_no_snapshots(db_conn):
+    """Empty DB: empty list, no crash."""
+    result = queries.equity_curve(db_conn, days=30)
+    assert result == []
+
+
+def test_equity_curve_respects_days_parameter(db_conn):
+    for i in range(50):
+        db_conn.execute(
+            "INSERT INTO equity_snapshots (ts, total_equity, income_equity, "
+            "growth_equity, realized_pnl, unrealized_pnl) VALUES (?, ?, ?, ?, ?, ?)",
+            (i * 86400, 265000, 50000, 215000, 0, 0),
+        )
+    result = queries.equity_curve(db_conn, days=10)
+    assert len(result) == 10
