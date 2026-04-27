@@ -96,3 +96,25 @@ def test_evolver_tab_renders_proposals_table():
 def test_evolver_tab_empty_no_crash():
     html_str = tabs.evolver_tab({"proposals": []})
     assert html_str
+
+
+def test_universe_tab_renders_table():
+    data = {"universe": [
+        {"ticker": "SPY", "category": "income", "phase": "live",
+         "strategy": "PutCreditSpread", "iterations": 18, "paperTrades": 8,
+         "edge": {"pf_oos": 1.84, "pf_is": 2.10, "dd": -0.06}},
+        {"ticker": "XLE", "category": "income", "phase": "no_edge",
+         "strategy": None, "iterations": 22, "paperTrades": 0,
+         "edge": {"pf_oos": 0.92, "pf_is": 1.08, "dd": -0.18}},
+    ]}
+    html_str = tabs.universe_tab(data)
+    assert "SPY" in html_str
+    assert "XLE" in html_str
+    assert "PutCreditSpread" in html_str
+    assert "income" in html_str
+    assert "Ticker" in html_str  # column header
+
+
+def test_universe_tab_empty_no_crash():
+    html_str = tabs.universe_tab({"universe": []})
+    assert html_str

@@ -383,3 +383,63 @@ def evolver_tab(data: dict) -> str:
 {table}
 <div class="subhead">Proposal Detail</div>
 {detail_cards}"""
+
+
+# ---- Universe tab -----------------------------------------------------------
+
+def universe_tab(data: dict) -> str:
+    """Universe tab: single card with a table of all universe rows."""
+
+    def _row(u: dict) -> str:
+        ticker = html.escape(str(u.get("ticker", "")))
+        category = html.escape(str(u.get("category", "")))
+        phase = u.get("phase", "")
+        strategy = u.get("strategy")
+        edge = u.get("edge", {})
+        pf_oos = edge.get("pf_oos", 0.0)
+        pf_is = edge.get("pf_is", 0.0)
+        dd = edge.get("dd", 0.0)
+        iterations = u.get("iterations", 0)
+        paper_trades = u.get("paperTrades", 0)
+
+        pf_oos_cls = "pos" if pf_oos >= 1.3 else "neg"
+        strategy_cell = (
+            f'<span class="mono" style="font-size: 11.5px">{html.escape(str(strategy))}</span>'
+            if strategy else
+            '<span class="muted">—</span>'
+        )
+
+        return f"""<tr class="clickable">
+  <td><strong>{ticker}</strong></td>
+  <td><span class="tag {category}">{category}</span></td>
+  <td><span class="chip {phase_class(phase)}">{phase_label(phase)}</span></td>
+  <td>{strategy_cell}</td>
+  <td class="num t-right {pf_oos_cls}">{pf_oos:.2f}</td>
+  <td class="num t-right">{pf_is:.2f}</td>
+  <td class="num t-right neg">{dd * 100:.1f}%</td>
+  <td class="num t-right">{iterations}</td>
+  <td class="num t-right">{paper_trades}</td>
+</tr>"""
+
+    rows = "".join(_row(u) for u in data.get("universe", []))
+
+    return f"""<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Ticker</th>
+        <th>Cat</th>
+        <th>Phase</th>
+        <th>Best Strategy</th>
+        <th class="t-right">PF OOS</th>
+        <th class="t-right">PF IS</th>
+        <th class="t-right">Max DD</th>
+        <th class="t-right">Iter</th>
+        <th class="t-right">Paper Trades</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows}
+    </tbody>
+  </table>
+</div>"""
