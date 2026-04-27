@@ -177,6 +177,11 @@ def tick(conn, anthropic_client, data_client, universe=None):
                 log.exception("failed to record iteration_failure")
             continue
     try:
+        from bullbot.research import equity_snapshot
+        equity_snapshot.take_snapshot(conn)
+    except Exception:
+        log.exception("equity snapshot failed")
+    try:
         from bullbot.research import health
         health.write_latest_brief(conn)
     except Exception:
