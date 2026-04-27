@@ -2,12 +2,13 @@ from bullbot.dashboard import templates
 
 
 def test_page_shell_wraps_content():
+    # Updated for reskin: timestamp no longer embedded in shell (moved to body
+    # templates); switchTab replaced by IIFE showTab; title now "Bull-Bot — Dashboard"
     html = templates.page_shell("2026-04-14 12:00", "<p>body</p>")
-    assert "Bull-Bot Dashboard" in html
-    assert "2026-04-14 12:00" in html
+    assert "Bull-Bot" in html
     assert "<p>body</p>" in html
     assert "<html" in html
-    assert "switchTab" in html
+    assert "showTab" in html
 
 
 def test_summary_cards():
@@ -121,3 +122,37 @@ def test_costs_section():
     assert "SPY" in html
     assert "$2.50" in html
     assert "$6.50" in html
+
+
+def test_page_shell_includes_lifted_css():
+    from bullbot.dashboard import templates, styles_css
+    body = "<div>hi</div>"
+    html_str = templates.page_shell("2026-04-26 12:00 UTC", body)
+    # Sample of CSS tokens that must be present
+    assert "oklch(15% 0.005 250)" in html_str  # --bg-0
+    assert ".chip.live" in html_str
+    assert "data-theme" in html_str
+    assert "data-accent" in html_str
+
+
+def test_page_shell_loads_ibm_plex_via_link():
+    from bullbot.dashboard import templates
+    html_str = templates.page_shell("ts", "")
+    assert "fonts.googleapis.com" in html_str
+    assert "IBM+Plex+Sans" in html_str
+    assert "IBM+Plex+Mono" in html_str
+
+
+def test_page_shell_includes_tab_switching_js():
+    from bullbot.dashboard import templates
+    html_str = templates.page_shell("ts", "")
+    assert "<script>" in html_str
+    # Tab switching toggles .active on .nav-item and shows .tab-content
+    assert "nav-item" in html_str
+    assert "tab-content" in html_str
+
+
+def test_page_shell_embeds_body_content():
+    from bullbot.dashboard import templates
+    html_str = templates.page_shell("ts", "<div id='test-marker'>marker</div>")
+    assert "<div id='test-marker'>marker</div>" in html_str

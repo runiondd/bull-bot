@@ -149,98 +149,47 @@ def _phase_color(phase: str) -> str:
 # 1. Page shell
 # ---------------------------------------------------------------------------
 
-def page_shell(updated_at: str, body: str) -> str:
-    """Full <!DOCTYPE html> page wrapping *body* content."""
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bull-Bot Dashboard</title>
-<style>
-  * {{ margin:0; padding:0; box-sizing:border-box; }}
-  body {{ background:#1a1a2e; color:#e0e0e0; font-family:'Courier New',monospace; font-size:14px; }}
-  a {{ color:#4cc9f0; }}
-  .header {{ display:flex; justify-content:space-between; align-items:center; padding:12px 24px; background:#0f3460; }}
-  .header h1 {{ font-size:18px; color:#4cc9f0; }}
-  .header .updated {{ font-size:12px; color:#b0b0b0; }}
-  .container {{ max-width:1400px; margin:0 auto; padding:16px; }}
-  .tab-bar {{ display:flex; gap:4px; margin-bottom:16px; flex-wrap:wrap; }}
-  .tab-btn {{ padding:8px 16px; background:#0f3460; color:#e0e0e0; border:1px solid #4cc9f0; cursor:pointer; font-family:inherit; font-size:13px; }}
-  .tab-btn.active {{ background:#4cc9f0; color:#1a1a2e; }}
-  .tab-content {{ display:none; }}
-  .tab-content.active {{ display:block; }}
-  .card {{ background:#0f3460; border-radius:6px; padding:16px; margin-bottom:12px; }}
-  .summary-card {{ background:#0f3460; border-radius:6px; padding:16px; text-align:center; min-width:180px; }}
-  .summary-card .label {{ font-size:11px; color:#b0b0b0; text-transform:uppercase; margin-bottom:4px; }}
-  .summary-card .value {{ font-size:22px; font-weight:bold; }}
-  .summary-row {{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px; }}
-  .metric-row {{ display:flex; gap:24px; flex-wrap:wrap; font-size:13px; margin:4px 0; }}
-  .phase-badge {{ padding:2px 8px; border-radius:3px; font-size:11px; font-weight:bold; }}
-  .pass-border {{ border-left:4px solid #53d769; }}
-  .fail-border {{ border-left:4px solid #ff6b6b; }}
-  .dimmed {{ opacity:0.6; }}
-  .filter-btn {{ padding:4px 12px; background:#1a1a2e; color:#e0e0e0; border:1px solid #555; cursor:pointer; font-family:inherit; font-size:12px; margin:2px; }}
-  .filter-btn.active {{ background:#4cc9f0; color:#1a1a2e; border-color:#4cc9f0; }}
-  table {{ width:100%; border-collapse:collapse; }}
-  th, td {{ padding:6px 10px; text-align:left; border-bottom:1px solid #222; font-size:13px; }}
-  th {{ color:#b0b0b0; font-size:11px; text-transform:uppercase; }}
-  blockquote {{ border-left:3px solid #4cc9f0; padding:4px 12px; margin:8px 0; color:#ccc; font-style:italic; }}
-  .research-health {{ padding: 16px; }}
-  .research-health h2 {{ margin-top: 0; }}
-  .research-health .health-header {{ display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin-bottom: 16px; }}
-  .research-health .health-header dt {{ font-weight: 600; }}
-  .research-health .check {{ margin-top: 16px; padding: 12px; border-radius: 6px; border: 1px solid rgba(128,128,128,0.3); }}
-  .research-health .check-ok {{ border-left: 4px solid #3fb950; }}
-  .research-health .check-flag {{ border-left: 4px solid #f0883e; }}
-  .research-health .check h3 {{ margin: 0 0 8px 0; font-size: 1em; }}
-  .research-health .check ul {{ margin: 0; padding-left: 20px; }}
-</style>
-</head>
-<body>
-<div class="header">
-  <h1>Bull-Bot Dashboard</h1>
-  <span class="updated">Updated {html.escape(updated_at)}</span>
-</div>
-<div class="container">
-{body}
-</div>
-<script>
-function switchTab(tabName) {{
-  document.querySelectorAll('.tab-content').forEach(function(el) {{ el.style.display = 'none'; }});
-  document.querySelectorAll('.tab-btn').forEach(function(el) {{ el.classList.remove('active'); }});
-  var tab = document.getElementById('tab-' + tabName);
-  if (tab) tab.style.display = 'block';
-  document.querySelectorAll('.tab-btn').forEach(function(btn) {{
-    if (btn.textContent.trim() === tabName) btn.classList.add('active');
-  }});
-}}
-function filterTicker(ticker) {{
-  document.querySelectorAll('[data-ticker]').forEach(function(el) {{
-    el.style.display = (el.getAttribute('data-ticker') === ticker) ? '' : 'none';
-  }});
-}}
-function clearFilter() {{
-  document.querySelectorAll('[data-ticker]').forEach(function(el) {{
-    el.style.display = '';
-  }});
-}}
-function toggleFilter(type) {{
-  document.querySelectorAll('.filter-btn').forEach(function(btn) {{
-    btn.classList.remove('active');
-  }});
-  event.target.classList.add('active');
-  document.querySelectorAll('[data-filter-target]').forEach(function(el) {{
-    if (type === 'all') {{ el.style.display = ''; return; }}
-    if (type === 'open') {{ el.style.display = el.getAttribute('data-open') === 'true' ? '' : 'none'; return; }}
-    if (type === 'closed') {{ el.style.display = el.getAttribute('data-open') === 'false' ? '' : 'none'; return; }}
-    if (type === 'paper') {{ el.style.display = el.getAttribute('data-backtest') === 'false' ? '' : 'none'; return; }}
-    if (type === 'backtest') {{ el.style.display = el.getAttribute('data-backtest') === 'true' ? '' : 'none'; return; }}
-  }});
-}}
-</script>
-</body>
-</html>"""
+def page_shell(generated_at: str, body: str) -> str:
+    """Outer HTML document. Embeds the lifted CSS, IBM Plex font link, and
+    minimal tab-switching JS. `body` is the assembled inner content (header,
+    layout, sidebar, main, all the tab divs)."""
+    from bullbot.dashboard import styles_css
+    template = (
+        '<!DOCTYPE html>\n'
+        '<html lang="en" data-theme="dark" data-density="default" data-accent="green">\n'
+        '<head>\n'
+        '<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=1280">\n'
+        '<title>Bull-Bot — Dashboard</title>\n'
+        '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
+        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
+        '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700'
+        '&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">\n'
+        '<style>\n'
+        '{css}\n'
+        '</style>\n'
+        '</head>\n'
+        '<body>\n'
+        '{body}\n'
+        '<script>\n'
+        '(function() {\n'
+        '  function showTab(name) {\n'
+        '    document.querySelectorAll(\'.nav-item\').forEach(function(el) {\n'
+        '      el.classList.toggle(\'active\', el.dataset.tab === name);\n'
+        '    });\n'
+        '    document.querySelectorAll(\'.tab-content\').forEach(function(el) {\n'
+        '      el.style.display = (el.id === \'tab-\' + name) ? \'block\' : \'none\';\n'
+        '    });\n'
+        '  }\n'
+        '  document.querySelectorAll(\'.nav-item\').forEach(function(el) {\n'
+        '    el.addEventListener(\'click\', function() { showTab(el.dataset.tab); });\n'
+        '  });\n'
+        '})();\n'
+        '</script>\n'
+        '</body>\n'
+        '</html>'
+    )
+    return template.replace('{css}', styles_css.CSS).replace('{body}', body)
 
 
 # ---------------------------------------------------------------------------
