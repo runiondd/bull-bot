@@ -278,3 +278,31 @@ def test_equity_curve_respects_days_parameter(db_conn):
         )
     result = queries.equity_curve(db_conn, days=10)
     assert len(result) == 10
+
+
+# ---------- test_account_summary ----------
+
+
+def test_account_summary_returns_required_fields(db_conn, _seed_strategy):
+    # Seed a snapshot so total_equity/income/growth are populated
+    db_conn.execute(
+        "INSERT INTO equity_snapshots (ts, total_equity, income_equity, "
+        "growth_equity, realized_pnl, unrealized_pnl) VALUES (?, ?, ?, ?, ?, ?)",
+        (1_700_000_000, 268_412.18, 51_204.42, 217_207.76, 3_104.55, 1_708.00),
+    )
+    result = queries.account_summary(db_conn, now=1_700_000_000)
+    assert result["total_equity"] == pytest.approx(268_412.18)
+    assert result["income_account"] == pytest.approx(51_204.42)
+    assert result["growth_account"] == pytest.approx(217_207.76)
+    assert result["target_monthly"] == 10_000  # from config
+    assert "month_to_date" in result
+    assert "days_to_target" in result
+
+
+def test_account_summary_empty_db_returns_baseline(db_conn):
+    """No snapshots: fall back to config baseline so the page still renders."""
+    result = queries.account_summary(db_conn, now=1_700_000_000)
+    assert result["total_equity"] == 50_000 + 215_000  # INITIAL + GROWTH
+    assert result["income_account"] == 50_000
+    assert result["growth_account"] == 215_000
+    assert result["month_to_date"] == 0

@@ -288,6 +288,66 @@ def cost_breakdown(conn: sqlite3.Connection) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def account_summary(conn: sqlite3.Connection, now: int | None = None) -> dict[str, Any]:
+    """Return account-level totals for the KPI strip.
+
+    Reads the most-recent equity snapshot if any; falls back to config
+    baseline (INITIAL_CAPITAL_USD + GROWTH_CAPITAL_USD) when no snapshots
+    exist. month_to_date is realized P&L on positions closed since the
+    1st of the current UTC month. days_to_target is days remaining until
+    config.TARGET_DATE.
+    """
+    import time as _time
+    from datetime import datetime, date, timezone
+    from bullbot import config
+
+    now = now if now is not None else int(_time.time())
+
+    snap = conn.execute(
+        "SELECT total_equity, income_equity, growth_equity FROM equity_snapshots "
+        "ORDER BY ts DESC LIMIT 1"
+    ).fetchone()
+
+    if snap is not None:
+        total_equity = float(snap["total_equity"])
+        income_account = float(snap["income_equity"])
+        growth_account = float(snap["growth_equity"])
+    else:
+        income_account = float(config.INITIAL_CAPITAL_USD)
+        growth_account = float(config.GROWTH_CAPITAL_USD)
+        total_equity = income_account + growth_account
+
+    # Month-to-date realized P&L (paper only)
+    now_dt = datetime.fromtimestamp(now, tz=timezone.utc)
+    month_start = datetime(now_dt.year, now_dt.month, 1, tzinfo=timezone.utc)
+    month_start_ts = int(month_start.timestamp())
+    mtd_row = conn.execute(
+        "SELECT COALESCE(SUM(pnl_realized), 0) FROM positions "
+        "WHERE run_id NOT LIKE 'bt:%' AND closed_at >= ? AND pnl_realized IS NOT NULL",
+        (month_start_ts,),
+    ).fetchone()
+    month_to_date = float(mtd_row[0])
+
+    # Days to target
+    target = date.fromisoformat(config.TARGET_DATE)
+    today = now_dt.date()
+    days_to_target = max(0, (target - today).days)
+
+    return {
+        "total_equity": total_equity,
+        "income_account": income_account,
+        "growth_account": growth_account,
+        "target_monthly": config.TARGET_MONTHLY_PNL_USD,
+        "month_to_date": month_to_date,
+        "days_to_target": days_to_target,
+    }
+
+
+# ---------------------------------------------------------------------------
+# equity_curve
+# ---------------------------------------------------------------------------
+
+
 def equity_curve(conn: sqlite3.Connection, days: int = 30) -> list[dict[str, Any]]:
     """Return the last `days` equity snapshots, oldest first.
 
