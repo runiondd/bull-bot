@@ -252,3 +252,83 @@ def test_proposer_uses_string_system_when_caching_disabled(
     if isinstance(system, list):
         for block in system:
             assert "cache_control" not in block
+
+
+# ---------------------------------------------------------------------------
+# Task 4: explicit model argument + per-model pricing
+# ---------------------------------------------------------------------------
+
+
+def test_propose_uses_passed_model_argument(fake_anthropic):
+    """When `model="claude-sonnet-4-6"` is passed, that exact string lands in
+    the API kwargs — not the global PROPOSER_MODEL."""
+    from bullbot.evolver import proposer
+    from bullbot.strategies.base import StrategySnapshot
+
+    fake_anthropic.queue_response(
+        '{"class_name": "PutCreditSpread", '
+        '"params": {"dte": 21, "short_delta": 0.30, "width": 5}, '
+        '"rationale": "test"}'
+    )
+    snap = StrategySnapshot(
+        ticker="SPY", asof_ts=0, spot=500.0, bars_1d=[],
+        indicators={}, atm_greeks={}, iv_rank=50.0,
+        regime="up_low_vix", chain=[], market_brief="", ticker_brief="",
+    )
+
+    proposer.propose(
+        fake_anthropic, snap, history=[], best_strategy_id=None,
+        model="claude-sonnet-4-6",
+    )
+
+    call = fake_anthropic.call_log[-1]
+    assert call["model"] == "claude-sonnet-4-6"
+
+
+def test_propose_cost_uses_per_model_pricing(fake_anthropic, monkeypatch):
+    """Cost is computed from PROPOSER_MODEL_PRICING[model], not hardcoded Opus rates."""
+    from bullbot import config
+    from bullbot.evolver import proposer
+    from bullbot.strategies.base import StrategySnapshot
+
+    # Force deterministic non-zero token counts on the fake.
+    class _Usage:
+        input_tokens = 1_000_000
+        output_tokens = 1_000_000
+
+    original_create = fake_anthropic.messages.create
+    def stub_create(**kwargs):
+        resp = original_create(**kwargs)
+        resp.usage = _Usage()
+        return resp
+    monkeypatch.setattr(fake_anthropic.messages, "create", stub_create)
+
+    fake_anthropic.queue_response(
+        '{"class_name": "PutCreditSpread", '
+        '"params": {"dte": 21, "short_delta": 0.30, "width": 5}, '
+        '"rationale": "test"}'
+    )
+    snap = StrategySnapshot(
+        ticker="SPY", asof_ts=0, spot=500.0, bars_1d=[],
+        indicators={}, atm_greeks={}, iv_rank=50.0,
+        regime="up_low_vix", chain=[], market_brief="", ticker_brief="",
+    )
+
+    sonnet_result = proposer.propose(
+        fake_anthropic, snap, history=[], best_strategy_id=None,
+        model="claude-sonnet-4-6",
+    )
+    # Sonnet: $3/MTok in + $15/MTok out → 1M+1M tokens = $3 + $15 = $18.
+    assert abs(sonnet_result.llm_cost_usd - 18.0) < 0.01
+
+    fake_anthropic.queue_response(
+        '{"class_name": "PutCreditSpread", '
+        '"params": {"dte": 21, "short_delta": 0.30, "width": 5}, '
+        '"rationale": "test"}'
+    )
+    opus_result = proposer.propose(
+        fake_anthropic, snap, history=[], best_strategy_id=None,
+        model="claude-opus-4-6",
+    )
+    # Opus: $15/MTok in + $75/MTok out → 1M+1M = $15 + $75 = $90.
+    assert abs(opus_result.llm_cost_usd - 90.0) < 0.01

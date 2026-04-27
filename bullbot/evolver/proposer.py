@@ -23,7 +23,6 @@ from typing import Any
 from bullbot.config import (
     HISTORY_BLOCK_SIZE,
     PROPOSER_MAX_TOKENS,
-    PROPOSER_MODEL,
 )
 from bullbot.strategies import registry
 from bullbot.strategies.base import StrategySnapshot
@@ -186,14 +185,16 @@ Propose the next strategy variant. Output only the JSON object described in your
 """
 
 
-def _cost_for_call(input_tokens: int, output_tokens: int) -> float:
-    """Estimate USD cost for one API call.
+def _cost_for_call(input_tokens: int, output_tokens: int, model: str) -> float:
+    """Estimate USD cost for one API call using per-model pricing.
 
-    Opus 4.6 pricing: $15 / MTok input, $75 / MTok output.
-    A minimum floor of $0.001 accounts for API overhead and ensures the
-    returned value is always positive (useful even when fake/zero token counts).
+    Looks up rates in ``config.PROPOSER_MODEL_PRICING``. Falls back to Opus
+    rates for unknown models so we never silently zero out a real cost.
+    A minimum floor of $0.001 ensures the value is always positive.
     """
-    cost = (input_tokens * 15.0 + output_tokens * 75.0) / 1_000_000
+    from bullbot import config
+    in_rate, out_rate = config.PROPOSER_MODEL_PRICING.get(model, (15.0, 75.0))
+    cost = (input_tokens * in_rate + output_tokens * out_rate) / 1_000_000
     return max(cost, 0.001)
 
 
@@ -234,6 +235,7 @@ def propose(
     history: list[dict],
     best_strategy_id: str | None,
     category: str = "income",
+    model: str | None = None,
 ) -> Proposal:
     """Call the LLM and return a parsed, validated ``Proposal``.
 
@@ -250,6 +252,8 @@ def propose(
     """
     from bullbot.llm import cache as llm_cache
     from bullbot import config as bb_config
+
+    effective_model = model if model is not None else bb_config.PROPOSER_MODEL
 
     guidance = _GROWTH_GUIDANCE if category == "growth" else _INCOME_GUIDANCE
     system_prompt = _SYSTEM_PROMPT.format(
@@ -270,7 +274,7 @@ def propose(
     for attempt in range(2):
         try:
             response = client.messages.create(
-                model=PROPOSER_MODEL,
+                model=effective_model,
                 max_tokens=PROPOSER_MAX_TOKENS,
                 system=system_arg,
                 messages=[{"role": "user", "content": user_prompt}],
@@ -309,7 +313,7 @@ def propose(
         class_name=class_name,
         params=parsed.get("params", {}),
         rationale=parsed.get("rationale", ""),
-        llm_cost_usd=_cost_for_call(total_input_tokens, total_output_tokens),
+        llm_cost_usd=_cost_for_call(total_input_tokens, total_output_tokens, effective_model),
         input_tokens=total_input_tokens,
         output_tokens=total_output_tokens,
     )
