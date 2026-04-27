@@ -138,10 +138,23 @@ REGIME_BULL_RETURN_MIN = 0.05
 REGIME_BEAR_RETURN_MAX = -0.05
 REGIME_BULL_VOL_MAX = 0.20
 
-PROPOSER_MODEL = "claude-opus-4-6"
+PROPOSER_MODEL = "claude-opus-4-6"          # default when A/B disabled
 PROPOSER_MODEL_FALLBACK = "claude-sonnet-4-6"
 PROPOSER_MAX_TOKENS = 2000
 PROPOSER_BUDGET_CEILING_USD = 0.10
+
+# --- Agentic throughput (Phase 2: Sonnet A/B harness) ---
+
+PROPOSER_MODEL_AB_ENABLED = True            # split proposer calls across A and B by ticker hash
+PROPOSER_MODEL_A = "claude-opus-4-6"        # control arm
+PROPOSER_MODEL_B = "claude-sonnet-4-6"      # challenger arm
+
+# (input_$/MTok, output_$/MTok) per model. Keep in sync with Anthropic pricing.
+PROPOSER_MODEL_PRICING: dict[str, tuple[float, float]] = {
+    "claude-opus-4-6":   (15.0, 75.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-haiku-4-6":  (0.80, 4.0),
+}
 
 TICK_INTERVAL_MARKET_SEC = 60
 TICK_INTERVAL_OFFHOURS_SEC = 5

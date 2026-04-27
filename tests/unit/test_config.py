@@ -121,3 +121,12 @@ def test_health_brief_config():
 def test_phase1_caching_config():
     assert config.PROPOSER_CACHE_ENABLED is True
     assert config.SKIP_BRIEFS_FOR_RETIRED is True
+
+
+def test_phase2_ab_config():
+    assert config.PROPOSER_MODEL_AB_ENABLED is True
+    assert config.PROPOSER_MODEL_A == "claude-opus-4-6"
+    assert config.PROPOSER_MODEL_B == "claude-sonnet-4-6"
+    # Per-model pricing in USD per million tokens (input, output).
+    assert config.PROPOSER_MODEL_PRICING["claude-opus-4-6"] == (15.0, 75.0)
+    assert config.PROPOSER_MODEL_PRICING["claude-sonnet-4-6"] == (3.0, 15.0)
