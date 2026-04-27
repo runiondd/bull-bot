@@ -63,6 +63,14 @@ def _refresh_regime(conn, anthropic_client) -> None:
     # --- Per-ticker briefs ---
     for ticker in config.UNIVERSE:
         try:
+            # Skip retired tickers per config flag
+            if config.SKIP_BRIEFS_FOR_RETIRED:
+                phase_row = conn.execute(
+                    "SELECT phase FROM ticker_state WHERE ticker=?", (ticker,)
+                ).fetchone()
+                if phase_row and phase_row["phase"] in ("no_edge", "killed"):
+                    log.debug("scheduler: skipping brief for retired ticker %s", ticker)
+                    continue
             ticker_bars = _load_bars_for_ticker(conn, ticker)
             sector_etf = config.TICKER_SECTOR_MAP.get(ticker)
             sector_etf_bars = _load_bars_for_ticker(conn, sector_etf) if sector_etf else []

@@ -5,6 +5,12 @@ import time
 from bullbot.db import migrations
 from tests.conftest import FakeAnthropicClient, FakeUWClient
 
+# Market-regime tickers that _refresh_regime always loads before the per-ticker loop.
+_MARKET_REGIME_TICKERS = [
+    "VIX", "SPY", "XLK", "XLF", "XLE", "XLV", "XLI",
+    "XLC", "XLY", "XLP", "XLU", "XLRE", "XLB", "TLT", "HYG",
+]
+
 
 def _fresh_conn():
     conn = sqlite3.connect(":memory:", isolation_level=None)
@@ -72,3 +78,71 @@ def test_scheduler_tick_skips_regime_on_insufficient_data():
     from bullbot import scheduler
     # Should not crash
     scheduler.tick(conn, fake_anthropic, fake_uw, universe=["SPY"])
+
+
+def test_refresh_regime_skips_retired_tickers(db_conn, fake_anthropic, monkeypatch):
+    """Retired tickers (phase=no_edge or killed) shouldn't get briefs generated
+    when SKIP_BRIEFS_FOR_RETIRED is True."""
+    from bullbot import config, scheduler
+    monkeypatch.setattr(config, "SKIP_BRIEFS_FOR_RETIRED", True)
+    monkeypatch.setattr(config, "UNIVERSE", ["SPY", "AAPL"])
+
+    db_conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, updated_at) VALUES ('SPY', 'discovering', 0)"
+    )
+    db_conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, updated_at) VALUES ('AAPL', 'no_edge', 0)"
+    )
+
+    base_ts = 1_700_000_000
+    # Seed all market-regime tickers so compute_market_signals succeeds
+    for ticker in _MARKET_REGIME_TICKERS + ["AAPL"]:
+        for i in range(60):
+            db_conn.execute(
+                "INSERT INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
+                "VALUES (?, '1d', ?, 100, 101, 99, 100, 1000000)",
+                (ticker, base_ts + i * 86400),
+            )
+
+    for _ in range(20):
+        fake_anthropic.queue_response("brief text")
+
+    scheduler._refresh_regime(db_conn, fake_anthropic)
+
+    aapl_brief_calls = [
+        c for c in fake_anthropic.call_log
+        if "AAPL" in str(c.get("messages", ""))
+    ]
+    assert aapl_brief_calls == [], (
+        "AAPL is retired but its brief was still generated"
+    )
+
+
+def test_refresh_regime_does_not_skip_when_flag_disabled(db_conn, fake_anthropic, monkeypatch):
+    """When SKIP_BRIEFS_FOR_RETIRED=False, retired tickers still get briefs (legacy behavior)."""
+    from bullbot import config, scheduler
+    monkeypatch.setattr(config, "SKIP_BRIEFS_FOR_RETIRED", False)
+    monkeypatch.setattr(config, "UNIVERSE", ["AAPL"])
+
+    db_conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, updated_at) VALUES ('AAPL', 'no_edge', 0)"
+    )
+    base_ts = 1_700_000_000
+    # Seed all market-regime tickers so compute_market_signals succeeds
+    for ticker in _MARKET_REGIME_TICKERS + ["AAPL"]:
+        for i in range(60):
+            db_conn.execute(
+                "INSERT INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
+                "VALUES (?, '1d', ?, 100, 101, 99, 100, 1000000)",
+                (ticker, base_ts + i * 86400),
+            )
+    for _ in range(20):
+        fake_anthropic.queue_response("brief text")
+
+    scheduler._refresh_regime(db_conn, fake_anthropic)
+
+    aapl_brief_calls = [
+        c for c in fake_anthropic.call_log
+        if "AAPL" in str(c.get("messages", ""))
+    ]
+    assert len(aapl_brief_calls) >= 1
