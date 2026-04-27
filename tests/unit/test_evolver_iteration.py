@@ -12,11 +12,9 @@ from bullbot.evolver import iteration
 
 
 def test_iteration_persists_proposer_model_on_new_strategy(
-    fake_anthropic, monkeypatch, sample_indicators, sample_key_levels
+    fake_anthropic, monkeypatch
 ):
     """A successful iteration writes the model used into evolver_proposals.proposer_model."""
-    from bullbot import config
-
     # Pin the A/B helper so AAPL deterministically lands on Sonnet for this test.
     monkeypatch.setattr(
         "bullbot.evolver.ab.pick_proposer_model",
@@ -75,12 +73,10 @@ def test_iteration_persists_proposer_model_on_new_strategy(
 
 
 def test_iteration_tags_cost_ledger_with_model(
-    fake_anthropic, monkeypatch, sample_indicators, sample_key_levels
+    fake_anthropic, monkeypatch
 ):
     """The cost_ledger entry's details JSON should contain the actual model name,
     not the literal string 'proposer'."""
-    from bullbot import config
-
     monkeypatch.setattr(
         "bullbot.evolver.ab.pick_proposer_model",
         lambda ticker: "claude-opus-4-6",

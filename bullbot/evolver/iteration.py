@@ -107,8 +107,7 @@ def run(
         log.warning("Not enough bar data for %s at cursor=%d; skipping iteration", ticker, cursor)
         return
 
-    # 3b. pick model (Phase 2 A/B). Always picked here so duplicate-skip + new-strategy
-    # branches both have access to it.
+    # Picked before branching so both duplicate-skip and new-strategy paths share the same model value.
     proposer_model = ab.pick_proposer_model(ticker)
 
     # 4. propose
