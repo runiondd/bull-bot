@@ -47,6 +47,24 @@ def conn():
             id INTEGER PRIMARY KEY, ts INTEGER, category TEXT, ticker TEXT,
             amount_usd REAL, details TEXT
         );
+        CREATE TABLE equity_snapshots (
+            id INTEGER PRIMARY KEY, ts INTEGER,
+            total_equity REAL, income_equity REAL, growth_equity REAL,
+            realized_pnl REAL, unrealized_pnl REAL
+        );
+        CREATE TABLE long_inventory (
+            id INTEGER PRIMARY KEY, account TEXT, ticker TEXT, kind TEXT,
+            strike REAL, expiry TEXT, qty REAL, cost_basis REAL,
+            added_at INTEGER, removed_at INTEGER
+        );
+        CREATE TABLE bars (
+            id INTEGER PRIMARY KEY, ticker TEXT, timeframe TEXT,
+            ts INTEGER, open REAL, high REAL, low REAL, close REAL, volume INTEGER
+        );
+        CREATE TABLE iteration_failures (
+            id INTEGER PRIMARY KEY, ticker TEXT, strategy_id INTEGER,
+            iteration INTEGER, reason TEXT, created_at INTEGER
+        );
     """)
     c.execute("INSERT INTO ticker_state (ticker,phase,iteration_count,paper_trade_count,cumulative_llm_usd,best_strategy_id) VALUES ('SPY','paper_trial',3,1,2.50,1)")
     c.execute("INSERT INTO strategies (id,class_name,class_version,params,params_hash) VALUES (1,'PutCreditSpread',1,'{}','abc')")
@@ -71,9 +89,46 @@ def test_generate_uses_default_path(conn, monkeypatch, tmp_path):
 
 
 def test_generate_includes_health_tab(conn, tmp_path):
+    # Updated for new generator: tab ids are lowercase; health-grid replaces research-health class.
     out = tmp_path / "dashboard.html"
     generator.generate(conn, output_path=out)
     html = out.read_text()
-    assert "tab-Health" in html
-    assert 'class="research-health"' in html
-    assert ">Health<" in html  # tab button text
+    assert "tab-health" in html          # new generator uses lowercase tab ids
+    assert "health-grid" in html         # health_tab() renders class="health-grid"
+    assert ">Health<" in html            # sidebar still labels it "Health"
+
+
+def test_generate_uses_new_shell_and_tabs(conn, tmp_path):
+    """Smoke test: generator produces HTML with new design tokens."""
+    out = tmp_path / "dashboard.html"
+    generator.generate(conn, output_path=out)
+    text = out.read_text()
+    # New shell markers
+    assert "data-theme" in text
+    assert "data-accent" in text
+    assert "IBM+Plex+Sans" in text
+    # 8 tabs present
+    for tab in ("overview", "positions", "evolver", "universe",
+                "transactions", "health", "costs", "inventory"):
+        assert f"tab-{tab}" in text
+    # Sidebar groups
+    assert ">Operations<" in text
+    assert ">Diagnostics<" in text
+
+
+def test_generate_empty_db_renders(tmp_path, monkeypatch):
+    """Fresh DB with only schema applied — page must render."""
+    import sqlite3
+    from bullbot.db import migrations
+    from bullbot import config
+    monkeypatch.setattr(config, "REPORTS_DIR", tmp_path)
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    migrations.apply_schema(conn)
+    generator.generate(conn)
+    out = tmp_path / "dashboard.html"
+    assert out.exists()
+    text = out.read_text()
+    # Empty-state assertions
+    assert len(text) > 5000  # not blank
+    assert "data-theme" in text
