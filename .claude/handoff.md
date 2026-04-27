@@ -1,29 +1,31 @@
 # Context Handoff
-**Updated:** 2026-04-25
+**Updated:** 2026-04-27
 
 ## Current State
-`main` clean and pushed (HEAD `8752ef6` — no new commits today; this was a validation day). Two scheduled runs since the 4/23 ship (07:30 on 4/24 and 07:30 on 4/25). Next: tomorrow 07:30 EDT.
-
-## What 4/24 + 4/25 confirmed in production
-Every piece of the 4/23 work is operating as designed:
-- Research-health brief auto-writes after every `scheduler.tick()`.
-- `pf_oos anomalies — OK` consistently — `PF_CEILING=10.0` cap holding, no new inf values.
-- `Dead paper trials — FLAG (1)` for SATS as of 4/24 ("promoted 3 days ago, paper_trial dispatch has never fired") — the `COALESCE(verdict_at, updated_at)` fallback fired exactly as predicted.
-- `unrealized_pnl` populated and drifting daily. SPY ~flat at -$8 both days. TSLA went -$915 → **-$1,651** overnight 4/23→4/24 (8% leg down). User decision: **ride it** — paper trial is exactly the moment to observe. No kill_switch tripped.
-- Dashboard renders split "Realized P&L" / "Unrealized P&L" cards.
+`main` clean and pushed (HEAD `8f97cbd`). Two big things shipped since last handoff: dashboard reskin (4/26) and Phase 1 of the agentic-throughput rework (4/27). 423 unit + integration tests pass on pasture. Next scheduled run: 04-28 07:30 EDT.
 
 ## In Progress
 None.
 
 ## Key Context
-- **Anthropic shipped "Custom Visuals" in March 2026** but it's locked to Claude.ai + Cowork chat — not embeddable in third-party static HTML. Wrong tool for our cron-regenerated `dashboard.html`. If we want charts, the right path is **Chart.js** (or Plotly) embedded at build time. Not started; user asked, recommendation given.
-- **User mentioned an `IMPLEMENTATION_PROMPT.md`** late in the session that should drive next steps — `find` couldn't locate it under `~/Projects/bull-bot`, `~/Downloads`, `~/Desktop`, `~/Documents`. Ask user where it is before proceeding with anything else.
-- The `_dispatch_paper_trial` bug for SATS/GOOGL (promoted tickers whose dispatch never fires) is still open — surfaces in the health brief but no one's investigated the root cause yet.
-- **`mark_to_mkt` column is vestigial** (per Option Z): still written on open/close, but `unrealized_pnl` is the authoritative unrealized value. Don't "fix" `mark_to_mkt`.
+- **Agentic-throughput rework is a 5-phase project.** Spec at `docs/superpowers/specs/2026-04-27-agentic-throughput-design.md` (approved 4/27). Phase 1 (prompt caching + skip retired briefs) is shipped. Phases 2-5 are planned in the spec but not yet broken into implementation plans.
+- **Phase 1 savings are intentionally small** (~$0.05/day). Real cost wins materialize in Phase 3 (batched proposals) and Phase 4 (iterations-per-tick > 1) because that's when many calls land within Anthropic's 5-minute cache window. Phase 1 is the foundation.
+- **Dashboard URL:** `http://Daniels-MacBook-Pro-2.local:8080/` (or `192.168.1.220:8080`). `index.html → dashboard.html` symlink on pasture handles the directory-listing-vs-page issue.
+- **TSLA paper position is down ~$1,500–1,600 unrealized.** User explicit decision (4/24): ride it. Paper trial is exactly the moment to observe. No kill_switch tripped.
+- **`mark_to_mkt` is vestigial** (per Option Z); `unrealized_pnl` is authoritative.
+- **`IMPLEMENTATION_PROMPT.md` from prior handoff was found** — was the dashboard-reskin spec at `~/Projects/bull-bot/dashboard/handoff/IMPLEMENTATION_PROMPT.md`. Reskin is shipped; that doc is now historical.
 
 ## Pending Work
-1. **Locate `IMPLEMENTATION_PROMPT.md`** — ask user where it is or what it should contain.
-2. **Dashboard charts** (if user wants to pursue): Chart.js or Plotly embedded at build time. Candidates: equity curve over time, per-ticker realized+unrealized P&L bars, strategy pool growth, evolver-verdict mix over time. ~1-2h scoped.
-3. **`_dispatch_paper_trial` investigation** — root-cause why promoted tickers (SATS, GOOGL) don't dispatch.
-4. **`PLATEAU_COUNTER_MAX=3` is aggressive** — half the universe retired to no_edge after only 3 iterations. Consider raising to 5-7.
-5. v2 health-brief checks deferred in original spec: research-spend efficiency per ticker, unused-data detection, strategy class diversity, regime drift, cross-day trend comparison, weekly LLM-interpreted review agent.
+
+### Agentic-throughput Phases 2-5 (priority: high)
+2. **Phase 2 — Sonnet swap + A/B harness.** Switch proposer from Opus 4.6 → Sonnet 4.6, tag each proposal with `proposer_model`, run for 7 days, ship Sonnet if pass rate ≥ 80% of Opus. ~2-3 days. Plan not yet written.
+3. **Phase 3 — Batched proposals (5 per LLM call).** Largest single throughput win. Parser change for `{"proposals": [...]}`; each batched proposal walk-forwarded independently. ~3-4 days.
+4. **Phase 4 — Raise `PLATEAU_COUNTER_MAX` 3→10 + `ITERATIONS_PER_TICK` 1→5.** Pure config + small loop change. Resurrects the 8 retired tickers. ~1 day.
+5. **Phase 5 — Universe expansion +10 tickers** (XLC, XLY, XLP, XLU, XLRE, XLB, TLT, UVXY, KRE, SMH). Yahoo bar backfill + config edit. ~1 day.
+
+### Other open work (priority: medium)
+- **`_dispatch_paper_trial` bug** still open. Promoted tickers (SATS, GOOGL) never fire dispatch — `paper_started_at` stays NULL or trades never open. Surfaces in the health brief. Real reason zero new paper positions in ~7 days. Worth a debugging session.
+
+### Out of scope for now
+- v2 health-brief checks deferred in spec (research-spend efficiency per ticker, regime drift, cross-day comparison, weekly LLM review agent).
+- Dashboard charts (Chart.js / Plotly) — recommended but not started.
