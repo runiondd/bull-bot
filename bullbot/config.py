@@ -153,7 +153,6 @@ PROPOSER_MODEL_B = "claude-sonnet-4-6"      # challenger arm
 PROPOSER_MODEL_PRICING: dict[str, tuple[float, float]] = {
     "claude-opus-4-6":   (15.0, 75.0),
     "claude-sonnet-4-6": (3.0, 15.0),
-    "claude-haiku-4-6":  (0.80, 4.0),
 }
 
 TICK_INTERVAL_MARKET_SEC = 60
