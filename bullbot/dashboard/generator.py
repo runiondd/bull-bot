@@ -31,6 +31,14 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
     metrics = {**summary, **extended}
     total_pnl = metrics.get("realized_pnl", 0) + metrics.get("unrealized_pnl", 0)
 
+    # Filter out backtest data from the dashboard view (matches dashboard's
+    # "live + paper only" scope; backtests aren't trades the user reviews).
+    positions = [p for p in positions if not p.get("is_backtest")]
+    orders = [o for o in orders if not o.get("is_backtest")]
+    # Cap proposals at most recent 50 to keep the page small. Older proposals
+    # are still in the DB; just not surfaced in the dashboard.
+    proposals = proposals[-50:] if len(proposals) > 50 else proposals
+
     # Adapt query rows to the JSX/data.js shape that tabs.py expects
     adapted_proposals = [_proposal_to_jsx_shape(p) for p in proposals]
     adapted_positions = [_position_to_jsx_shape(p) for p in positions]

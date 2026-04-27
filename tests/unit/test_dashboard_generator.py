@@ -116,6 +116,16 @@ def test_generate_uses_new_shell_and_tabs(conn, tmp_path):
     assert ">Diagnostics<" in text
 
 
+def test_generate_dashboard_size_reasonable(conn, tmp_path):
+    """Dashboard HTML must stay reasonable in size — backtest data filtered."""
+    out = tmp_path / "dashboard.html"
+    generator.generate(conn, output_path=out)
+    size = out.stat().st_size
+    # In tests fixtures are small, but this test pins the upper bound for
+    # any future commit that accidentally re-includes backtest data
+    assert size < 1_000_000, f"dashboard too large: {size} bytes"
+
+
 def test_generate_empty_db_renders(tmp_path, monkeypatch):
     """Fresh DB with only schema applied — page must render."""
     import sqlite3
