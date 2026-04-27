@@ -100,3 +100,40 @@ def test_apply_schema_migrates_existing_db_missing_unrealized_pnl():
     migrations.apply_schema(conn)
     cols_after = {r[1] for r in conn.execute("PRAGMA table_info(positions)")}
     assert cols_after == cols
+
+
+def test_equity_snapshots_table_exists():
+    conn = sqlite3.connect(":memory:")
+    migrations.apply_schema(conn)
+    rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='equity_snapshots'").fetchall()
+    assert len(rows) == 1
+
+
+def test_equity_snapshots_columns():
+    conn = sqlite3.connect(":memory:")
+    migrations.apply_schema(conn)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(equity_snapshots)")}
+    assert {"id", "ts", "total_equity", "income_equity", "growth_equity",
+            "realized_pnl", "unrealized_pnl"}.issubset(cols)
+
+
+def test_equity_snapshots_unique_ts():
+    """Snapshots are written daily — one per UTC day. Enforce uniqueness on ts."""
+    conn = sqlite3.connect(":memory:")
+    migrations.apply_schema(conn)
+    conn.execute("INSERT INTO equity_snapshots (ts, total_equity, income_equity, growth_equity, realized_pnl, unrealized_pnl) VALUES (1, 265000, 50000, 215000, 0, 0)")
+    import pytest
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO equity_snapshots (ts, total_equity, income_equity, growth_equity, realized_pnl, unrealized_pnl) VALUES (1, 266000, 50500, 215500, 100, 400)")
+
+
+def test_apply_schema_migrates_legacy_db_without_equity_snapshots():
+    """Pre-migration DB shouldn't break apply_schema."""
+    conn = sqlite3.connect(":memory:")
+    # Apply schema with everything except equity_snapshots
+    migrations.apply_schema(conn)
+    conn.execute("DROP TABLE equity_snapshots")
+    # Re-applying must add it back without error
+    migrations.apply_schema(conn)
+    rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='equity_snapshots'").fetchall()
+    assert len(rows) == 1

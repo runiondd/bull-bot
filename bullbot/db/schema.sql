@@ -181,6 +181,24 @@ CREATE INDEX IF NOT EXISTS idx_cost_ledger_ts ON cost_ledger (ts DESC);
 CREATE INDEX IF NOT EXISTS idx_cost_ledger_category ON cost_ledger (category);
 
 -- ---------------------------------------------------------------------------
+-- equity_snapshots: daily snapshot of account equity for the dashboard equity curve
+-- Written at the end of scheduler.tick() per (ts) UNIQUE constraint;
+-- one row per UTC midnight day.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS equity_snapshots (
+    id              INTEGER PRIMARY KEY,
+    ts              INTEGER NOT NULL UNIQUE,  -- unix midnight UTC of snapshot day
+    total_equity    REAL    NOT NULL,
+    income_equity   REAL    NOT NULL,
+    growth_equity   REAL    NOT NULL,
+    realized_pnl    REAL    NOT NULL,
+    unrealized_pnl  REAL    NOT NULL,
+    created_at      INTEGER NOT NULL DEFAULT (cast(strftime('%s','now') as integer))
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_equity_snapshots_ts ON equity_snapshots (ts DESC);
+
+-- ---------------------------------------------------------------------------
 -- kill_state: singleton row (id must be 1) for kill-switch state
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS kill_state (
