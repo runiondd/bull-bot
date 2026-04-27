@@ -16,7 +16,7 @@ from typing import Any
 
 from bullbot.backtest import walkforward
 from bullbot.engine import step as engine_step
-from bullbot.evolver import plateau, proposer
+from bullbot.evolver import ab, plateau, proposer
 from bullbot.risk import cost_ledger
 from bullbot.strategies import registry
 from bullbot import config
@@ -107,6 +107,10 @@ def run(
         log.warning("Not enough bar data for %s at cursor=%d; skipping iteration", ticker, cursor)
         return
 
+    # 3b. pick model (Phase 2 A/B). Always picked here so duplicate-skip + new-strategy
+    # branches both have access to it.
+    proposer_model = ab.pick_proposer_model(ticker)
+
     # 4. propose
     proposal = proposer.propose(
         client=anthropic_client,
@@ -114,6 +118,7 @@ def run(
         history=history,
         best_strategy_id=state.get("best_strategy_id"),
         category=category,
+        model=proposer_model,
     )
 
     # 5. cost
@@ -125,7 +130,7 @@ def run(
         ticker=ticker,
         amount_usd=proposal.llm_cost_usd,
         details={
-            "model": "proposer",
+            "model": proposer_model,
             "input_tokens": proposal.input_tokens,
             "output_tokens": proposal.output_tokens,
         },
@@ -154,8 +159,8 @@ def run(
         conn.execute(
             "INSERT INTO evolver_proposals "
             "(ticker, iteration, strategy_id, rationale, llm_cost_usd, "
-            " pf_is, pf_oos, sharpe_is, max_dd_pct, trade_count, regime_breakdown, passed_gate, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " pf_is, pf_oos, sharpe_is, max_dd_pct, trade_count, regime_breakdown, passed_gate, created_at, proposer_model) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 ticker, iteration_num, strategy_id, proposal.rationale,
                 proposal.llm_cost_usd,
@@ -167,6 +172,7 @@ def run(
                 prev["regime_breakdown"] if prev else None,
                 prev["passed_gate"] if prev else 0,
                 now_ts,
+                proposer_model,
             ),
         )
         conn.execute(
@@ -210,8 +216,8 @@ def run(
     conn.execute(
         "INSERT INTO evolver_proposals "
         "(ticker, iteration, strategy_id, rationale, llm_cost_usd, "
-        " pf_is, pf_oos, sharpe_is, max_dd_pct, trade_count, regime_breakdown, passed_gate, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " pf_is, pf_oos, sharpe_is, max_dd_pct, trade_count, regime_breakdown, passed_gate, created_at, proposer_model) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             ticker, iteration_num, strategy_id, proposal.rationale,
             proposal.llm_cost_usd,
@@ -219,6 +225,7 @@ def run(
             metrics.max_dd_pct, metrics.trade_count,
             json.dumps(metrics.regime_breakdown),
             passed_gate, now_ts,
+            proposer_model,
         ),
     )
 
