@@ -443,3 +443,60 @@ def universe_tab(data: dict) -> str:
     </tbody>
   </table>
 </div>"""
+
+
+# ---- Transactions tab -------------------------------------------------------
+
+def transactions_tab(data: dict) -> str:
+    """Transactions tab: single card with a table of orders and a totals footer."""
+    orders = data.get("orders", [])
+    total_pnl = sum(o.get("pnl") or 0 for o in orders)
+    total_comm = sum(o.get("commission") or 0 for o in orders)
+
+    def _order_row(o: dict) -> str:
+        pnl = o.get("pnl")
+        commission = o.get("commission") or 0
+        intent = o.get("intent", "")
+        chip_cls = "open" if intent == "open" else "closed"
+        pnl_cell = (fmt_money(pnl, signed=True, decimals=2)
+                    if pnl is not None else "&mdash;")
+        pnl_cls = pnl_class(pnl)
+        return f"""<tr>
+  <td class="num" style="font-size: 11.5px; color: var(--fg-1)">{html.escape(str(o.get('date', '')))}</td>
+  <td><strong>{html.escape(str(o.get('ticker', '')))}</strong></td>
+  <td><span class="mono" style="font-size: 11.5px">{html.escape(str(o.get('className', '')))}</span></td>
+  <td><span class="chip {chip_cls}">{html.escape(intent)}</span></td>
+  <td class="mono" style="font-size: 11px; color: var(--fg-1)">{html.escape(str(o.get('legs', '')))}</td>
+  <td class="num t-right {pnl_cls}">{pnl_cell}</td>
+  <td class="num t-right muted">${commission:.2f}</td>
+</tr>"""
+
+    rows = "".join(_order_row(o) for o in orders)
+    total_pnl_cls = pnl_class(total_pnl)
+    total_pnl_str = fmt_money(total_pnl, signed=True, decimals=2)
+
+    return f"""<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Ticker</th>
+        <th>Strategy</th>
+        <th>Intent</th>
+        <th>Legs</th>
+        <th class="t-right">P&amp;L</th>
+        <th class="t-right">Comm</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows}
+    </tbody>
+    <tfoot>
+      <tr style="font-weight: 600">
+        <td colspan="5" class="t-right" style="color: var(--fg-2); text-transform: uppercase; font-size: 11px; letter-spacing: 0.08em">Totals</td>
+        <td class="num t-right {total_pnl_cls}">{total_pnl_str}</td>
+        <td class="num t-right">${total_comm:.2f}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>"""

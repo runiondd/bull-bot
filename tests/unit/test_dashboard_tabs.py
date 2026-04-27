@@ -118,3 +118,25 @@ def test_universe_tab_renders_table():
 def test_universe_tab_empty_no_crash():
     html_str = tabs.universe_tab({"universe": []})
     assert html_str
+
+
+def test_transactions_tab_renders_with_totals():
+    data = {"orders": [
+        {"date": "2026-04-26 10:14", "ticker": "QQQ", "className": "PutCreditSpread",
+         "intent": "open", "legs": "S 2x QQQ 437P / L 2x QQQ 427P",
+         "pnl": None, "commission": 5.20, "isBacktest": False},
+        {"date": "2026-04-23 11:20", "ticker": "QQQ", "className": "PutCreditSpread",
+         "intent": "close", "legs": "S 2x QQQ 430P / L 2x QQQ 420P",
+         "pnl": 94.0, "commission": 5.20, "isBacktest": False},
+    ]}
+    html_str = tabs.transactions_tab(data)
+    assert "QQQ" in html_str
+    assert "PutCreditSpread" in html_str
+    assert "open" in html_str.lower()
+    assert "TOTALS" in html_str.upper() or "totals" in html_str.lower()
+    assert "+$94" in html_str  # signed P&L formatting
+    assert "10.40" in html_str  # commission total 5.20+5.20
+
+def test_transactions_tab_empty_no_crash():
+    html_str = tabs.transactions_tab({"orders": []})
+    assert html_str
