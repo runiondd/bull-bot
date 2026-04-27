@@ -209,3 +209,36 @@ def test_sidebar_section_omits_zero_badges():
               "transactions": 0, "health": 0, "inventory": 0}
     html_str = templates.sidebar_section(active_tab="overview", counts=counts)
     assert html_str  # just don't crash
+
+
+def test_kpi_strip_renders_5_cards():
+    from bullbot.dashboard import templates
+    account = {"total_equity": 268_412.18, "income_account": 51_204.42,
+               "growth_account": 217_207.76, "target_monthly": 10_000,
+               "month_to_date": 4_812.55, "days_to_target": 75}
+    metrics = {"open_positions": 6, "realized_pnl": 3_104.55,
+               "unrealized_pnl": 1_708.00, "llm_spend": 28.74,
+               "llm_spend_7d": 6.91, "sharpe_30d": 1.42, "win_rate": 0.68,
+               "profit_factor": 1.71}
+    equity_curve = [{"total_equity": 265_000.0 + i * 100} for i in range(30)]
+    html_out = templates.kpi_strip(account=account, metrics=metrics,
+                                     equity_curve=equity_curve)
+    assert '<div class="kpi-grid">' in html_out
+    assert "Total Equity" in html_out
+    assert "Realized P&amp;L" in html_out
+    assert "Unrealized P&amp;L" in html_out
+    assert "Target Progress" in html_out
+    assert "LLM Spend" in html_out
+
+
+def test_kpi_strip_empty_metrics_no_crash():
+    from bullbot.dashboard import templates
+    account = {"total_equity": 265_000, "income_account": 50_000,
+               "growth_account": 215_000, "target_monthly": 10_000,
+               "month_to_date": 0, "days_to_target": 75}
+    metrics = {"open_positions": 0, "realized_pnl": 0, "unrealized_pnl": 0,
+               "llm_spend": 0, "llm_spend_7d": 0, "sharpe_30d": 0,
+               "win_rate": 0, "profit_factor": 0}
+    html_out = templates.kpi_strip(account=account, metrics=metrics,
+                                     equity_curve=[])
+    assert '<div class="kpi-grid">' in html_out

@@ -619,3 +619,53 @@ def sidebar_section(*, active_tab: str, counts: dict[str, int]) -> str:
   <div class="nav-group">Diagnostics</div>
   {diag_html}
 </aside>"""
+
+
+def kpi_strip(*, account: dict, metrics: dict, equity_curve: list) -> str:
+    """Top-of-overview KPI strip: 5 cards. Ports components-shell.jsx:KPIStrip."""
+    from bullbot.dashboard.fmt import fmt_money, fmt_pct, pnl_class
+    from bullbot.dashboard.svg_charts import sparkline_svg
+
+    eq_values = [float(p["total_equity"]) for p in equity_curve] if equity_curve else []
+    realized = metrics.get("realized_pnl", 0)
+    unrealized = metrics.get("unrealized_pnl", 0)
+    target_progress = (account["month_to_date"] / account["target_monthly"]
+                       if account.get("target_monthly") else 0.0)
+    llm_progress = metrics.get("llm_spend", 0) / 50.0
+    llm_warn = llm_progress > 0.5
+
+    spark_eq = sparkline_svg(eq_values) if eq_values else ""
+
+    realized_cls = pnl_class(realized)
+    unrealized_cls = pnl_class(unrealized)
+
+    return f"""<div class="kpi-grid">
+  <div class="kpi">
+    <div class="label">Total Equity</div>
+    <div class="value">{fmt_money(account["total_equity"], decimals=0)}</div>
+    <div class="sub"><span>{account.get('days_to_target', 0)}d to target</span></div>
+    <div class="spark">{spark_eq}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Realized P&amp;L</div>
+    <div class="value"><span class="{realized_cls}">{fmt_money(realized, signed=True, decimals=0)}</span></div>
+    <div class="sub"><span>WR {fmt_pct(metrics.get('win_rate', 0), decimals=0)}</span><span>·</span><span>PF {metrics.get('profit_factor', 0):.2f}</span></div>
+  </div>
+  <div class="kpi">
+    <div class="label">Unrealized P&amp;L</div>
+    <div class="value"><span class="{unrealized_cls}">{fmt_money(unrealized, signed=True, decimals=0)}</span></div>
+    <div class="sub"><span>{metrics.get('open_positions', 0)} open</span><span>·</span><span>Sharpe {metrics.get('sharpe_30d', 0):.2f}</span></div>
+  </div>
+  <div class="kpi">
+    <div class="label">Target Progress</div>
+    <div class="value">{fmt_money(account['month_to_date'], decimals=0)}<span style="color: var(--fg-2); font-size: 14px"> / {fmt_money(account['target_monthly'], decimals=0)}</span></div>
+    <div class="sub"><span>{account.get('days_to_target', 0)}d to target date</span></div>
+    <div class="progress" style="margin-top: 6px"><div style="width: {min(100.0, target_progress * 100):.1f}%; background: var(--accent)"></div></div>
+  </div>
+  <div class="kpi">
+    <div class="label">LLM Spend (MTD)</div>
+    <div class="value">${metrics.get('llm_spend', 0):.2f}<span style="color: var(--fg-2); font-size: 14px"> / $50</span></div>
+    <div class="sub"><span>${metrics.get('llm_spend_7d', 0):.2f} this week</span></div>
+    <div class="progress" style="margin-top: 6px"><div style="width: {min(100.0, llm_progress * 100):.1f}%; background: var({'--warn' if llm_warn else '--accent'})"></div></div>
+  </div>
+</div>"""
