@@ -37,3 +37,33 @@ def test_overview_tab_empty_universe_no_crash():
             "pnl_by_ticker": [], "universe": [], "activity": []}
     html_str = tabs.overview_tab(data)
     assert html_str  # non-empty
+
+
+def test_positions_tab_renders_with_open_and_closed():
+    data = {"positions": [
+        {"id": 1, "ticker": "SPY", "className": "PutCreditSpread", "isOpen": True,
+         "openedAt": "2026-04-22", "entrySpot": 521.40, "mark": 0.42, "openPrice": 0.78,
+         "pnl": 180.0, "pnlPct": 0.46, "dte": 19,
+         "legs": [{"side": "short", "qty": 1, "strike": 510, "kind": "P", "expiry": "2026-05-15"}],
+         "exitRules": {"profit_target_pct": 0.50}, "rationale": "test rationale"},
+        {"id": 2, "ticker": "META", "className": "PutCreditSpread", "isOpen": False,
+         "openedAt": "2026-04-02", "closedAt": "2026-04-09", "entrySpot": 598.40,
+         "mark": 1.92, "openPrice": 1.10, "pnl": -164.0, "pnlPct": -0.74, "dte": 21,
+         "legs": [{"side": "short", "qty": 1, "strike": 590, "kind": "P", "expiry": "2026-04-30"}],
+         "exitRules": {"profit_target_pct": 0.50}, "rationale": "miscall"},
+    ]}
+    html_str = tabs.positions_tab(data)
+    assert "SPY" in html_str
+    assert "META" in html_str
+    assert "PutCreditSpread" in html_str or "Put Credit Spread" in html_str
+    assert "open" in html_str.lower()
+    assert "closed" in html_str.lower()
+    assert "test rationale" in html_str
+    assert "miscall" in html_str
+    # Filter bar buttons
+    assert "All" in html_str
+
+
+def test_positions_tab_empty_no_crash():
+    html_str = tabs.positions_tab({"positions": []})
+    assert html_str  # non-empty

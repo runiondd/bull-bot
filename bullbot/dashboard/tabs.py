@@ -6,6 +6,7 @@ Pure functions over the data dict from queries; no DB access here.
 from __future__ import annotations
 
 import html
+from datetime import date
 
 from bullbot.dashboard.fmt import fmt_money, fmt_pct, pnl_class, phase_class, phase_label
 from bullbot.dashboard.svg_charts import equity_chart_svg
@@ -134,3 +135,145 @@ def overview_tab(data: dict) -> str:
     </div>
   </div>
 </div>"""
+
+
+# ---- Positions tab helpers --------------------------------------------------
+
+_MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _format_leg(leg: dict) -> str:
+    """Format a single option leg as  '[L|S] qty× strikeKind Mon DD'."""
+    side = "L" if leg.get("side") == "long" else "S"
+    qty = leg.get("qty", 1)
+    kind = leg.get("kind", "")
+    strike = leg.get("strike", "")
+    expiry = leg.get("expiry")  # YYYY-MM-DD string
+
+    if kind == "S":
+        return f"{side} {qty}× shares"
+
+    exp_str = ""
+    if expiry:
+        try:
+            y, m, d = expiry.split("-")
+            exp_str = f" {_MONTH_ABBR[int(m) - 1]} {int(d)}"
+        except (ValueError, IndexError):
+            exp_str = f" {expiry}"
+
+    return f"{side} {qty}× {strike}{kind}{exp_str}"
+
+
+def _position_card(p: dict) -> str:
+    """Render a single PositionCard."""
+    is_open = p.get("isOpen", False)
+    pnl = p.get("pnl", 0.0)
+    pnl_pct = p.get("pnlPct", 0.0)
+    class_name = p.get("className", "")
+    ticker = html.escape(str(p.get("ticker", "")))
+
+    card_class = "pos" if pnl >= 0 else "neg"
+    closed_class = "" if is_open else " closed"
+
+    # Category tag
+    is_growth = class_name.startswith("Growth")
+    tag_label = "growth" if is_growth else "income"
+    tag_class = "growth" if is_growth else "income"
+
+    # Strategy label: insert space before each capital letter then strip
+    import re
+    strat_label = re.sub(r"([A-Z])", r" \1", class_name).strip()
+
+    # Open/closed chip
+    chip_label = "open" if is_open else "closed"
+    chip_class = "open" if is_open else "closed"
+
+    # DTE tag (only when open and dte > 0)
+    dte = p.get("dte", 0)
+    dte_tag = f'<span class="tag mono">{dte} DTE</span>' if is_open and dte > 0 else ""
+
+    # Meta line
+    entry_spot = p.get("entrySpot", 0.0)
+    open_date = html.escape(str(p.get("openedAt", "")))
+    meta_extra = ""
+    if not is_open:
+        closed_at = html.escape(str(p.get("closedAt", "")))
+        meta_extra = f' · closed <span class="mono">{closed_at}</span>'
+    else:
+        mark = p.get("mark", 0.0)
+        open_price = p.get("openPrice", 0.0)
+        meta_extra = (f' · mark <span class="mono">${mark:.2f}</span>'
+                      f' vs open <span class="mono">${open_price:.2f}</span>')
+
+    # P&L display
+    pnl_cls = pnl_class(pnl)
+    pnl_dollar = fmt_money(pnl, signed=True, decimals=0)
+    pnl_percent = fmt_pct(pnl_pct, signed=True)
+
+    # Legs
+    legs = p.get("legs", [])
+    legs_str = html.escape("  /  ".join(_format_leg(l) for l in legs))
+
+    # Rationale
+    rationale_block = ""
+    rationale = p.get("rationale")
+    if rationale:
+        rationale_block = f'\n      <div class="pos-rationale">{html.escape(str(rationale))}</div>'
+
+    # Progress bar (only when open)
+    target = (p.get("exitRules") or {}).get("profit_target_pct", 0.5) or 0.5
+    progress_block = ""
+    if is_open:
+        progress_pct = min(100.0, max(0.0, (pnl_pct / target) * 100))
+        bar_color = "var(--accent)" if pnl >= 0 else "var(--neg)"
+        progress_block = f"""
+      <div class="progress" style="margin-top: 4px">
+        <div style="width: {progress_pct:.1f}%; background: {bar_color}"></div>
+      </div>"""
+
+    return f"""<div class="position-card {card_class}{closed_class}">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start">
+    <div>
+      <div class="pos-head">
+        <span class="pos-ticker">{ticker}</span>
+        <span class="tag {tag_class}">{tag_label}</span>
+        <span class="pos-strat">{html.escape(strat_label)}</span>
+        <span class="chip {chip_class}">{chip_label}</span>
+        {dte_tag}
+      </div>
+      <div class="pos-meta">
+        Entered <span class="mono">{open_date}</span> · spot <span class="mono">${entry_spot:.2f}</span>{meta_extra}
+      </div>
+    </div>
+    <div>
+      <div class="pos-pnl {pnl_cls}">{pnl_dollar}</div>
+      <div class="pos-pnl-pct">{pnl_percent}</div>
+    </div>
+  </div>
+  <div class="pos-legs">{legs_str}</div>{rationale_block}{progress_block}
+</div>"""
+
+
+def positions_tab(data: dict) -> str:
+    """Positions tab: filter bar + legend chips + position cards."""
+    positions = data.get("positions", [])
+    open_count = sum(1 for p in positions if p.get("isOpen"))
+    closed_count = len(positions) - open_count
+    total_count = len(positions)
+
+    filter_bar = f"""<div class="filter-bar">
+  <span class="label-sm">Filter</span>
+  <div class="segmented">
+    <button class="active">All ({total_count})</button>
+    <button>Open ({open_count})</button>
+    <button>Closed ({closed_count})</button>
+  </div>
+  <div style="flex: 1"></div>
+  <span class="legend"><span class="sw" style="background: var(--info)"></span>open</span>
+  <span class="legend"><span class="sw" style="background: var(--pos)"></span>profit</span>
+  <span class="legend"><span class="sw" style="background: var(--neg)"></span>loss</span>
+</div>"""
+
+    cards = "".join(_position_card(p) for p in positions)
+    return f"{filter_bar}\n{cards}"
