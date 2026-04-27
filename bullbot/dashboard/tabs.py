@@ -277,3 +277,109 @@ def positions_tab(data: dict) -> str:
 
     cards = "".join(_position_card(p) for p in positions)
     return f"{filter_bar}\n{cards}"
+
+
+# ---- Evolver tab ------------------------------------------------------------
+
+def evolver_tab(data: dict) -> str:
+    """Evolver tab: filter bar + proposals table + proposal detail cards."""
+    import re
+    proposals = data.get("proposals", [])
+    passed_count = sum(1 for p in proposals if p.get("passed"))
+    rejected_count = len(proposals) - passed_count
+    total_count = len(proposals)
+
+    filter_bar = f"""<div class="filter-bar">
+  <span class="label-sm">Filter</span>
+  <div class="segmented">
+    <button class="active">All ({total_count})</button>
+    <button>Passed ({passed_count})</button>
+    <button>Rejected ({rejected_count})</button>
+  </div>
+  <div style="flex: 1"></div>
+  <span class="label-sm" style="color: var(--fg-3)">Gate: pf_oos &ge; 1.30 &middot; trades &ge; 5 &middot; pf_is &ge; 1.50</span>
+</div>"""
+
+    def _table_row(p: dict) -> str:
+        created_at = p.get("createdAt", "")
+        parts = created_at.split(" ")
+        time_str = parts[1] if len(parts) > 1 else ""
+        date_str = parts[0][5:] if parts else ""
+        pf_oos = p.get("pf_oos", 0.0)
+        pf_is = p.get("pf_is", 0.0)
+        max_dd_pct = p.get("max_dd_pct", 0.0)
+        trade_count = p.get("trade_count", 0)
+        llm_cost = p.get("llm_cost", 0.0)
+        passed = p.get("passed", False)
+        pf_oos_cls = "pos" if pf_oos >= 1.3 else "neg"
+        verdict_cls = "pass" if passed else "fail"
+        verdict_label = "PASS" if passed else "FAIL"
+        return f"""<tr>
+  <td><strong>{html.escape(str(p.get('ticker', '')))}</strong></td>
+  <td><span class="mono" style="font-size: 11.5px">{html.escape(str(p.get('className', '')))}</span></td>
+  <td class="num">{p.get('iteration', '')}</td>
+  <td class="num t-right {pf_oos_cls}">{pf_oos:.2f}</td>
+  <td class="num t-right">{pf_is:.2f}</td>
+  <td class="num t-right neg">{max_dd_pct * 100:.1f}%</td>
+  <td class="num t-right">{trade_count}</td>
+  <td class="num t-right muted">${llm_cost:.2f}</td>
+  <td><span class="chip {verdict_cls}">{verdict_label}</span></td>
+  <td class="num muted" style="font-size: 11px">{html.escape(time_str)} {html.escape(date_str)}</td>
+</tr>"""
+
+    rows = "".join(_table_row(p) for p in proposals)
+
+    table = f"""<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Ticker</th>
+        <th>Strategy</th>
+        <th>Iter</th>
+        <th class="t-right">PF OOS</th>
+        <th class="t-right">PF IS</th>
+        <th class="t-right">Max DD</th>
+        <th class="t-right">Trades</th>
+        <th class="t-right">LLM</th>
+        <th>Verdict</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows}
+    </tbody>
+  </table>
+</div>"""
+
+    def _detail_card(p: dict) -> str:
+        passed = p.get("passed", False)
+        card_cls = "pos" if passed else "neg"
+        verdict_cls = "pass" if passed else "fail"
+        verdict_label = "PASS" if passed else "FAIL"
+        class_name = p.get("className", "")
+        strat_label = re.sub(r"([A-Z])", r" \1", class_name).strip()
+        params = p.get("params") or {}
+        params_str = ", ".join(f"{html.escape(str(k))}={html.escape(str(v))}" for k, v in params.items())
+        rationale = html.escape(str(p.get("rationale", "")))
+        return f"""<div class="position-card {card_cls}" style="display: block">
+  <div class="pos-head" style="justify-content: space-between">
+    <div class="pos-head" style="gap: 10px">
+      <span class="pos-ticker">{html.escape(str(p.get('ticker', '')))}</span>
+      <span class="pos-strat">{html.escape(strat_label)}</span>
+      <span class="tag mono">iter {p.get('iteration', '')}</span>
+      <span class="tag mono">{html.escape(str(p.get('id', '')))}</span>
+    </div>
+    <span class="chip {verdict_cls}">{verdict_label}</span>
+  </div>
+  <div class="pos-meta" style="margin-top: 6px">
+    params: <span class="mono">{params_str}</span>
+  </div>
+  <div class="pos-rationale" style="margin-top: 8px">{rationale}</div>
+</div>"""
+
+    detail_cards = "".join(_detail_card(p) for p in proposals[:4])
+
+    return f"""{filter_bar}
+{table}
+<div class="subhead">Proposal Detail</div>
+{detail_cards}"""

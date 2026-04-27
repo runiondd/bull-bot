@@ -67,3 +67,32 @@ def test_positions_tab_renders_with_open_and_closed():
 def test_positions_tab_empty_no_crash():
     html_str = tabs.positions_tab({"positions": []})
     assert html_str  # non-empty
+
+
+def test_evolver_tab_renders_proposals_table():
+    data = {"proposals": [
+        {"id": "ep_412", "ticker": "AAPL", "className": "PutCreditSpread",
+         "iteration": 9, "passed": True, "createdAt": "2026-04-26 02:14 UTC",
+         "pf_oos": 1.38, "pf_is": 1.62, "max_dd_pct": -0.06, "trade_count": 24,
+         "llm_cost": 0.42, "params": {"delta_short": 0.18, "width": 10},
+         "rationale": "tightened delta"},
+        {"id": "ep_410", "ticker": "TSLA", "className": "GrowthLEAPS",
+         "iteration": 8, "passed": False, "createdAt": "2026-04-25 18:22 UTC",
+         "pf_oos": 1.18, "pf_is": 1.40, "max_dd_pct": -0.14, "trade_count": 12,
+         "llm_cost": 0.51, "params": {"delta_long": 0.60},
+         "rationale": "below gate"},
+    ]}
+    html_str = tabs.evolver_tab(data)
+    assert "AAPL" in html_str
+    assert "TSLA" in html_str
+    assert "PASS" in html_str.upper() or "pass" in html_str.lower()
+    assert "FAIL" in html_str.upper() or "fail" in html_str.lower()
+    # Filter labels
+    assert "All" in html_str
+    assert "Passed" in html_str or "passed" in html_str.lower()
+    assert "Rejected" in html_str or "rejected" in html_str.lower()
+
+
+def test_evolver_tab_empty_no_crash():
+    html_str = tabs.evolver_tab({"proposals": []})
+    assert html_str
