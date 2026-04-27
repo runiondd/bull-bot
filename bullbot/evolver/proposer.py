@@ -7,7 +7,7 @@ calls the configured Anthropic model and parses its JSON response into a
 ``Proposal`` dataclass.
 
 Config knobs live in ``bullbot.config``:
-  PROPOSER_MODEL           — model ID to use
+  PROPOSER_MODEL           — fallback model when propose() is called without model=
   PROPOSER_MAX_TOKENS      — max output tokens per call
   HISTORY_BLOCK_SIZE       — how many past proposals to include
 """
@@ -192,6 +192,8 @@ def _cost_for_call(input_tokens: int, output_tokens: int, model: str) -> float:
     rates for unknown models so we never silently zero out a real cost.
     A minimum floor of $0.001 ensures the value is always positive.
     """
+    # Lazy import to mirror propose()'s function-scope config access; keeps
+    # this module's import graph clean of circular imports through llm.cache.
     from bullbot import config
     in_rate, out_rate = config.PROPOSER_MODEL_PRICING.get(model, (15.0, 75.0))
     cost = (input_tokens * in_rate + output_tokens * out_rate) / 1_000_000
