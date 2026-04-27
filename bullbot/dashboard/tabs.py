@@ -635,3 +635,54 @@ def health_tab(data: dict) -> str:
 <div class="health-grid">
   {checks_html}
 </div>"""
+
+
+# ---- Inventory tab ----------------------------------------------------------
+
+def inventory_tab(data: dict) -> str:
+    """Inventory tab: single card with a table of all held positions."""
+    inventory = data.get("inventory", [])
+
+    _KIND_LABEL = {"S": "shares", "C": "call", "P": "put"}
+
+    def _row(r: dict) -> str:
+        account = html.escape(str(r.get("account", "")))
+        ticker = html.escape(str(r.get("ticker", "")))
+        kind = r.get("kind", "")
+        kind_label = _KIND_LABEL.get(kind, html.escape(kind))
+        strike = r.get("strike")
+        strike_html = f"${strike}" if strike else "&mdash;"
+        expiry = r.get("expiry", "") or ""
+        expiry_html = html.escape(expiry) if expiry else "&mdash;"
+        qty = r.get("qty", "")
+        cost_basis = fmt_money(r.get("costBasis"), decimals=2)
+        return f"""<tr>
+  <td><span class="tag {account}">{account}</span></td>
+  <td><strong>{ticker}</strong></td>
+  <td>{kind_label}</td>
+  <td class="num t-right">{strike_html}</td>
+  <td class="num mono">{expiry_html}</td>
+  <td class="num t-right">{qty}</td>
+  <td class="num t-right">{cost_basis}</td>
+</tr>"""
+
+    rows = "".join(_row(r) for r in inventory)
+
+    return f"""<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Account</th>
+        <th>Ticker</th>
+        <th>Type</th>
+        <th class="t-right">Strike</th>
+        <th>Expiry</th>
+        <th class="t-right">Qty</th>
+        <th class="t-right">Cost Basis</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows}
+    </tbody>
+  </table>
+</div>"""

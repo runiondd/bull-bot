@@ -98,6 +98,28 @@ def test_evolver_tab_empty_no_crash():
     assert html_str
 
 
+def test_inventory_tab_renders_table():
+    data = {"inventory": [
+        {"account": "growth", "ticker": "NVDA", "kind": "C", "strike": 130,
+         "expiry": "2026-12-19", "qty": 1, "costBasis": 1940.00},
+        {"account": "income", "ticker": "AAPL", "kind": "S", "strike": 0,
+         "expiry": "", "qty": 100, "costBasis": 178.40},
+    ]}
+    html_str = tabs.inventory_tab(data)
+    assert "NVDA" in html_str
+    assert "AAPL" in html_str
+    assert "growth" in html_str
+    assert "income" in html_str
+    assert "shares" in html_str
+    assert "call" in html_str
+    assert "$1,940" in html_str or "1,940.00" in html_str
+
+
+def test_inventory_tab_empty_no_crash():
+    html_str = tabs.inventory_tab({"inventory": []})
+    assert html_str
+
+
 def test_universe_tab_renders_table():
     data = {"universe": [
         {"ticker": "SPY", "category": "income", "phase": "live",
