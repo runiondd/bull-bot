@@ -111,6 +111,41 @@ def cmd_rearm(args):
     return 0
 
 
+def cmd_ab_report(args):
+    """Print pass-rate / avg pf_oos / total cost grouped by proposer_model.
+
+    Used to decide whether to ship Sonnet after the 7-day A/B window
+    (decision rule: ship Sonnet if its pass rate is ≥ 80% of Opus's).
+    """
+    conn = _open_db()
+    cutoff = int(time.time()) - args.days * 86_400
+    rows = conn.execute(
+        "SELECT proposer_model, "
+        "       COUNT(*) AS n, "
+        "       SUM(passed_gate) AS passes, "
+        "       AVG(pf_oos) AS avg_pf_oos, "
+        "       SUM(llm_cost_usd) AS total_cost "
+        "FROM evolver_proposals "
+        "WHERE proposer_model IS NOT NULL AND created_at >= ? "
+        "GROUP BY proposer_model "
+        "ORDER BY proposer_model",
+        (cutoff,),
+    ).fetchall()
+    if not rows:
+        print(f"No proposer_model data in the last {args.days} day(s).")
+        return 0
+    print(f"A/B report — last {args.days} day(s)")
+    print(f"{'model':<25} {'n':>4} {'pass_rate':>10} {'avg_pf_oos':>11} {'total_$':>10}")
+    for r in rows:
+        n = r["n"] or 0
+        passes = r["passes"] or 0
+        rate = (passes / n * 100.0) if n else 0.0
+        avg_pf = r["avg_pf_oos"] if r["avg_pf_oos"] is not None else 0.0
+        cost = r["total_cost"] or 0.0
+        print(f"{r['proposer_model']:<25} {n:>4} {rate:>9.1f}% {avg_pf:>11.3f} {cost:>9.3f}")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="bullbot")
     sub = parser.add_subparsers(dest="command")
@@ -128,6 +163,9 @@ def main(argv=None):
     p_rearm.set_defaults(fn=cmd_rearm)
     p_run_daily = sub.add_parser("run-daily", help="Refresh bars and run one scheduler tick.")
     p_run_daily.set_defaults(fn=cmd_run_daily)
+    p_ab = sub.add_parser("ab-report", help="Print Phase 2 A/B comparison (Opus vs Sonnet) by proposer_model.")
+    p_ab.add_argument("--days", type=int, default=30, help="How many days back to include (default: 30).")
+    p_ab.set_defaults(fn=cmd_ab_report)
     args = parser.parse_args(argv)
     if not hasattr(args, "fn"):
         parser.print_help()
