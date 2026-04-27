@@ -343,3 +343,39 @@ def test_extended_metrics_empty_db(db_conn):
     assert result["avg_loss"] == 0
     assert result["profit_factor"] == 0
     assert result["paper_trade_count"] == 0
+
+
+# ---------- test_universe_with_edge ----------
+
+
+def test_universe_with_edge_joins_state_and_strategy(db_conn, _seed_strategy):
+    db_conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, iteration_count, paper_trade_count, "
+        "best_strategy_id, best_pf_is, best_pf_oos, updated_at) "
+        "VALUES ('SPY', 'paper_trial', 5, 2, 1, 1.78, 1.42, 0)"
+    )
+    result = queries.universe_with_edge(db_conn)
+    assert len(result) == 1
+    r = result[0]
+    assert r["ticker"] == "SPY"
+    assert r["phase"] == "paper_trial"
+    assert r["category"] == "income"  # SPY is income per config.TICKER_CATEGORY
+    assert r["strategy"] == "BearPutSpread"
+    assert r["edge"]["pf_oos"] == pytest.approx(1.42)
+    assert r["edge"]["pf_is"] == pytest.approx(1.78)
+
+
+def test_universe_with_edge_handles_null_strategy(db_conn):
+    """no_edge tickers have no best_strategy_id — must not crash."""
+    db_conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, iteration_count, paper_trade_count, "
+        "updated_at) VALUES ('XLE', 'no_edge', 22, 0, 0)"
+    )
+    result = queries.universe_with_edge(db_conn)
+    assert len(result) == 1
+    assert result[0]["strategy"] is None
+    assert result[0]["edge"]["pf_oos"] == 0.0  # NULL → 0
+
+
+def test_universe_with_edge_empty_db(db_conn):
+    assert queries.universe_with_edge(db_conn) == []

@@ -437,3 +437,45 @@ def extended_metrics(conn: sqlite3.Connection, now: int | None = None) -> dict[s
         "backtest_count": int(bt_count),
         "llm_spend_7d": float(llm_7d),
     }
+
+
+# ---------------------------------------------------------------------------
+# universe_with_edge
+# ---------------------------------------------------------------------------
+
+
+def universe_with_edge(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Return ticker grid with edge metrics, in display order.
+
+    Each row: {ticker, category, phase, strategy, iterations, paperTrades,
+              edge: {pf_oos, pf_is, dd}}.
+
+    Joins ticker_state with strategies and config.TICKER_CATEGORY. NULL pf
+    values render as 0.0 (callers can detect via edge.pf_oos == 0). NULL
+    strategy is preserved as None.
+    """
+    from bullbot import config
+    rows = conn.execute(
+        "SELECT ts.ticker, ts.phase, ts.iteration_count, ts.paper_trade_count, "
+        "       ts.best_pf_is, ts.best_pf_oos, "
+        "       s.class_name AS strategy "
+        "FROM ticker_state ts "
+        "LEFT JOIN strategies s ON ts.best_strategy_id = s.id "
+        "ORDER BY ts.ticker"
+    ).fetchall()
+    result = []
+    for r in rows:
+        result.append({
+            "ticker": r["ticker"],
+            "category": config.TICKER_CATEGORY.get(r["ticker"], "income"),
+            "phase": r["phase"],
+            "strategy": r["strategy"],
+            "iterations": int(r["iteration_count"] or 0),
+            "paperTrades": int(r["paper_trade_count"] or 0),
+            "edge": {
+                "pf_oos": float(r["best_pf_oos"] or 0.0),
+                "pf_is": float(r["best_pf_is"] or 0.0),
+                "dd": 0.0,  # max_dd not currently tracked at ticker level
+            },
+        })
+    return result
