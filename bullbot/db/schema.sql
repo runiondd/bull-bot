@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS evolver_proposals (
     regime_breakdown    TEXT,    -- JSON blob
     passed_gate         INTEGER NOT NULL CHECK (passed_gate IN (0, 1)),
     created_at          INTEGER NOT NULL,
+    proposer_model      TEXT,    -- model ID used for this proposal (Phase 2 A/B)
     UNIQUE (ticker, iteration, strategy_id)
 ) STRICT;
 

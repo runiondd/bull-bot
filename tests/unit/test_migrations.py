@@ -137,3 +137,63 @@ def test_apply_schema_migrates_legacy_db_without_equity_snapshots():
     migrations.apply_schema(conn)
     rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='equity_snapshots'").fetchall()
     assert len(rows) == 1
+
+
+def test_evolver_proposals_has_proposer_model_column():
+    """Fresh DB should have proposer_model column on evolver_proposals."""
+    conn = sqlite3.connect(":memory:")
+    migrations.apply_schema(conn)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(evolver_proposals)")}
+    assert "proposer_model" in cols
+
+
+def test_apply_schema_migrates_legacy_evolver_proposals_missing_proposer_model():
+    """Pre-Phase-2 DB without proposer_model: apply_schema must ADD the column,
+    keep existing rows intact, and be idempotent on a second run."""
+    conn = sqlite3.connect(":memory:")
+    # Legacy shape — evolver_proposals without proposer_model (pre-2026-04-27 Phase 2).
+    conn.execute("""
+        CREATE TABLE strategies (
+            id INTEGER PRIMARY KEY, class_name TEXT NOT NULL, class_version INTEGER NOT NULL,
+            params TEXT NOT NULL, params_hash TEXT NOT NULL, parent_id INTEGER, created_at INTEGER NOT NULL,
+            UNIQUE (class_name, class_version, params_hash)
+        ) STRICT
+    """)
+    conn.execute("""
+        CREATE TABLE evolver_proposals (
+            id INTEGER PRIMARY KEY,
+            ticker TEXT NOT NULL,
+            iteration INTEGER NOT NULL,
+            strategy_id INTEGER NOT NULL REFERENCES strategies (id),
+            rationale TEXT,
+            llm_cost_usd REAL NOT NULL,
+            pf_is REAL, pf_oos REAL, sharpe_is REAL, max_dd_pct REAL,
+            trade_count INTEGER, regime_breakdown TEXT,
+            passed_gate INTEGER NOT NULL CHECK (passed_gate IN (0, 1)),
+            created_at INTEGER NOT NULL,
+            UNIQUE (ticker, iteration, strategy_id)
+        ) STRICT
+    """)
+    conn.execute(
+        "INSERT INTO strategies (id, class_name, class_version, params, params_hash, created_at) "
+        "VALUES (1, 'PCS', 1, '{}', 'h', 0)"
+    )
+    conn.execute(
+        "INSERT INTO evolver_proposals (ticker, iteration, strategy_id, llm_cost_usd, passed_gate, created_at) "
+        "VALUES ('AAPL', 1, 1, 0.05, 1, 0)"
+    )
+
+    migrations.apply_schema(conn)  # should ADD proposer_model, not throw
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(evolver_proposals)")}
+    assert "proposer_model" in cols
+
+    # Pre-existing row preserved; new column NULL on legacy rows.
+    row = conn.execute(
+        "SELECT ticker, proposer_model FROM evolver_proposals WHERE ticker='AAPL'"
+    ).fetchone()
+    assert row == ("AAPL", None)
+
+    # Second apply must be a no-op (idempotent).
+    migrations.apply_schema(conn)
+    cols_after = {r[1] for r in conn.execute("PRAGMA table_info(evolver_proposals)")}
+    assert cols_after == cols

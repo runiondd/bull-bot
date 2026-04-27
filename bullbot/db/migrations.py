@@ -30,3 +30,9 @@ def _apply_column_migrations(conn: sqlite3.Connection) -> None:
     cols = {row[1] for row in conn.execute("PRAGMA table_info(positions)")}
     if "unrealized_pnl" not in cols:
         conn.execute("ALTER TABLE positions ADD COLUMN unrealized_pnl REAL")
+
+    # evolver_proposals.proposer_model — added 2026-04-27 for the Phase 2
+    # Opus-vs-Sonnet A/B harness. NULL on legacy rows.
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(evolver_proposals)")}
+    if "proposer_model" not in cols:
+        conn.execute("ALTER TABLE evolver_proposals ADD COLUMN proposer_model TEXT")
