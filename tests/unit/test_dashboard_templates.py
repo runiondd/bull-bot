@@ -156,3 +156,23 @@ def test_page_shell_embeds_body_content():
     from bullbot.dashboard import templates
     html_str = templates.page_shell("ts", "<div id='test-marker'>marker</div>")
     assert "<div id='test-marker'>marker</div>" in html_str
+
+
+def test_header_section_includes_brand_and_pnl():
+    from bullbot.dashboard import templates
+    html_str = templates.header_section(
+        generated_at="2026-04-26 12:00 UTC",
+        total_pnl=123.45,
+    )
+    assert '<header class="app-header">' in html_str
+    assert "Bull-Bot" in html_str
+    assert "v3" in html_str  # version sub
+    assert "2026-04-26 12:00 UTC" in html_str
+    assert "+$123" in html_str  # signed money formatting
+
+
+def test_header_section_negative_pnl():
+    from bullbot.dashboard import templates
+    html_str = templates.header_section(generated_at="ts", total_pnl=-50.0)
+    assert "-$50" in html_str
+    assert "neg" in html_str  # pnl_class adds 'neg'

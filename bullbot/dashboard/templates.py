@@ -546,3 +546,32 @@ def costs_section(costs: dict) -> str:
     lines.append('</table>')
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# 10. Header section
+# ---------------------------------------------------------------------------
+
+def header_section(*, generated_at: str, total_pnl: float) -> str:
+    """The sticky top header: brand mark, status dot, generated-at timestamp,
+    and 30-day total P&L. Ports components-shell.jsx:Header."""
+    from bullbot.dashboard.fmt import fmt_money, pnl_class
+    pnl_cls = pnl_class(total_pnl)
+    pnl_str = fmt_money(total_pnl, signed=True)
+    return f"""<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark"></div>
+    <div>
+      <span class="brand-name">Bull-Bot</span>
+      <span class="brand-sub">v3.2 / paper</span>
+    </div>
+  </div>
+  <div class="header-meta">
+    <div class="item"><span class="dot"></span>Engine running</div>
+    <div class="item mono">{html.escape(generated_at)}</div>
+    <div class="item">
+      <span class="num" style="color: var(--fg-2)">P&amp;L 30d</span>
+      <span class="num {pnl_cls}">{pnl_str}</span>
+    </div>
+  </div>
+</header>"""
