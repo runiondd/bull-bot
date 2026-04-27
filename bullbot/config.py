@@ -108,6 +108,11 @@ HEALTH_DEAD_PAPER_DAYS = 3
 HEALTH_MIN_BARS_FOR_WF = WF_WINDOW_MONTHS * 21   # ~504 for 24mo walkforward window
 HEALTH_PF_OOS_ABSURD_THRESHOLD = 1e10            # catches IEEE inf and absurdly-large pf_oos values
 
+# --- Agentic throughput (Phase 1: caching + retired-ticker brief skip) ---
+
+PROPOSER_CACHE_ENABLED = True       # mark static prompt blocks as ephemeral-cacheable
+SKIP_BRIEFS_FOR_RETIRED = True      # don't generate regime briefs for no_edge / killed tickers
+
 PAPER_TRIAL_DAYS = 21
 PAPER_TRADE_COUNT_MIN = 10
 FAITHFULNESS_MIN_DAYS = 5

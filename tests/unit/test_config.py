@@ -117,3 +117,7 @@ def test_health_brief_config():
     assert config.HEALTH_DEAD_PAPER_DAYS == 3
     assert config.HEALTH_MIN_BARS_FOR_WF == config.WF_WINDOW_MONTHS * 21
     assert config.HEALTH_PF_OOS_ABSURD_THRESHOLD == 1e10
+
+def test_phase1_caching_config():
+    assert config.PROPOSER_CACHE_ENABLED is True
+    assert config.SKIP_BRIEFS_FOR_RETIRED is True
