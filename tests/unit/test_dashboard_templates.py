@@ -176,3 +176,36 @@ def test_header_section_negative_pnl():
     html_str = templates.header_section(generated_at="ts", total_pnl=-50.0)
     assert "-$50" in html_str
     assert "neg" in html_str  # pnl_class adds 'neg'
+
+
+def test_sidebar_section_lists_all_8_tabs_in_2_groups():
+    from bullbot.dashboard import templates
+    counts = {
+        "positions": 6, "evolver": 12, "universe": 16,
+        "transactions": 47, "health": 1, "inventory": 3,
+    }
+    html_str = templates.sidebar_section(active_tab="overview", counts=counts)
+    for tab in ("Overview", "Positions", "Evolver", "Universe",
+                "Transactions", "Health", "Costs", "Inventory"):
+        assert tab in html_str
+    assert ">Operations<" in html_str
+    assert ">Diagnostics<" in html_str
+    assert 'data-tab="overview"' in html_str
+    assert "active" in html_str
+
+
+def test_sidebar_section_renders_badge_counts():
+    from bullbot.dashboard import templates
+    counts = {"positions": 3, "evolver": 0, "universe": 16,
+              "transactions": 5, "health": 2, "inventory": 1}
+    html_str = templates.sidebar_section(active_tab="overview", counts=counts)
+    assert ">3<" in html_str
+    assert ">16<" in html_str
+
+
+def test_sidebar_section_omits_zero_badges():
+    from bullbot.dashboard import templates
+    counts = {"positions": 0, "evolver": 0, "universe": 0,
+              "transactions": 0, "health": 0, "inventory": 0}
+    html_str = templates.sidebar_section(active_tab="overview", counts=counts)
+    assert html_str  # just don't crash

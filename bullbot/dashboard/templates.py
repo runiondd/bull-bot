@@ -575,3 +575,47 @@ def header_section(*, generated_at: str, total_pnl: float) -> str:
     </div>
   </div>
 </header>"""
+
+
+# ---------------------------------------------------------------------------
+# 11. Sidebar section
+# ---------------------------------------------------------------------------
+
+def sidebar_section(*, active_tab: str, counts: dict[str, int]) -> str:
+    """Left sidebar nav. 2 groups: Operations, Diagnostics. Each item has
+    a stable data-tab attribute the JS uses to switch tabs.
+
+    counts: per-tab badge count. Zero or missing → no badge.
+    """
+    operations = [
+        ("overview", "Overview"),
+        ("positions", "Positions"),
+        ("evolver", "Evolver"),
+        ("universe", "Universe"),
+        ("transactions", "Transactions"),
+    ]
+    diagnostics = [
+        ("health", "Health"),
+        ("costs", "Costs"),
+        ("inventory", "Inventory"),
+    ]
+
+    def render_item(key: str, label: str) -> str:
+        active = " active" if key == active_tab else ""
+        n = counts.get(key, 0)
+        badge = f'<span class="badge">{n}</span>' if n else ""
+        return (
+            f'<div class="nav-item{active}" data-tab="{key}">'
+            f'<span>{html.escape(label)}</span>{badge}'
+            f'</div>'
+        )
+
+    ops_html = "".join(render_item(k, l) for k, l in operations)
+    diag_html = "".join(render_item(k, l) for k, l in diagnostics)
+    return f"""<aside class="sidebar">
+  <div class="nav-group">Operations</div>
+  {ops_html}
+  <div class="nav-divider"></div>
+  <div class="nav-group">Diagnostics</div>
+  {diag_html}
+</aside>"""
