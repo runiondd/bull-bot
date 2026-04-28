@@ -18,7 +18,7 @@ None.
 ## Pending Work
 
 ### Agentic-throughput Phases 2-5 (priority: high)
-2. **Phase 2 — Sonnet swap + A/B harness.** Switch proposer from Opus 4.6 → Sonnet 4.6, tag each proposal with `proposer_model`, run for 7 days, ship Sonnet if pass rate ≥ 80% of Opus. ~2-3 days. Plan not yet written.
+2. **Phase 2 — Sonnet swap + A/B harness.** SHIPPED 2026-04-27 — Opus vs Sonnet split is live (`PROPOSER_MODEL_AB_ENABLED=True`). Each `evolver_proposals` row is tagged with `proposer_model`. **Decision window: 7 days from ship** — run `python -m bullbot.cli ab-report --days 7` and ship Sonnet (set `PROPOSER_MODEL_AB_ENABLED=False` and `PROPOSER_MODEL="claude-sonnet-4-6"`) if Sonnet's pass rate ≥ 80% of Opus's. Otherwise revert. Plan: `docs/superpowers/plans/2026-04-27-phase2-sonnet-ab-harness.md`. Branch: `phase2-sonnet-ab` (10 commits).
 3. **Phase 3 — Batched proposals (5 per LLM call).** Largest single throughput win. Parser change for `{"proposals": [...]}`; each batched proposal walk-forwarded independently. ~3-4 days.
 4. **Phase 4 — Raise `PLATEAU_COUNTER_MAX` 3→10 + `ITERATIONS_PER_TICK` 1→5.** Pure config + small loop change. Resurrects the 8 retired tickers. ~1 day.
 5. **Phase 5 — Universe expansion +10 tickers** (XLC, XLY, XLP, XLU, XLRE, XLB, TLT, UVXY, KRE, SMH). Yahoo bar backfill + config edit. ~1 day.
