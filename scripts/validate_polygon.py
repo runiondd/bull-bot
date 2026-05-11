@@ -48,6 +48,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlparse
 
 import requests
 from tenacity import (
@@ -178,6 +179,51 @@ def _http_get(
     return r.json()
 
 
+# Max bars we'll accumulate across paginated pages for a single probe.
+# Caps pathological queries (e.g. years of 1-min bars) without blocking
+# realistic multi-year intraday lookbacks.
+MAX_PAGINATED_BARS = 200_000
+
+
+def _follow_aggs_pagination(
+    session: requests.Session,
+    bucket: TokenBucket,
+    samples: list[ResponseSample],
+    first_body: dict[str, Any],
+) -> tuple[list[dict[str, Any]], bool, int]:
+    """Follow Polygon `next_url` cursors until exhausted or the bar cap is hit.
+
+    Polygon's /v2/aggs endpoint paginates regardless of the `limit` parameter
+    for multi-year intraday windows; the response includes a `next_url` cursor
+    pointing at the next page (a full absolute URL with apiKey embedded).
+    Returns (combined_results, hit_cap, pages_followed). `hit_cap` is True if
+    we stopped due to MAX_PAGINATED_BARS rather than running out of pages.
+    """
+    results = list(first_body.get("results") or [])
+    next_url = first_body.get("next_url")
+    pages_followed = 0
+    hit_cap = False
+    while next_url:
+        if len(results) >= MAX_PAGINATED_BARS:
+            hit_cap = True
+            break
+        parsed = urlparse(next_url)
+        # Strip apiKey from the cursor's query — _http_get adds it from config.
+        qs = {k: v for k, v in parse_qsl(parsed.query) if k != "apiKey"}
+        try:
+            body = _http_get(session, bucket, parsed.path, qs, samples)
+        except Exception as e:
+            log.error("pagination follow failed on %s: %s", parsed.path, e)
+            break
+        page = body.get("results") or []
+        if not page:
+            break
+        results.extend(page)
+        next_url = body.get("next_url")
+        pages_followed += 1
+    return results, hit_cap, pages_followed
+
+
 # ---------------------------------------------------------------------------
 # Probes
 # ---------------------------------------------------------------------------
@@ -232,9 +278,15 @@ def probe_aggregates(
     finally:
         set_log_context(probe=None)
 
-    results = body.get("results") or []
+    initial_count = len(body.get("results") or [])
+    results, hit_cap, pages_followed = _follow_aggs_pagination(
+        session, bucket, samples, body
+    )
     count = len(results)
-    next_url_present = bool(body.get("next_url"))
+    # next_url_present now means "we still had more pages but stopped at the cap"
+    # — i.e. only True when the result is truncated by our own safety cap, not
+    # by Polygon. Real freshness/depth checks below decide pass/fail.
+    next_url_present = hit_cap
     if count == 0:
         return ProbeResult(
             name=label,
@@ -284,7 +336,10 @@ def probe_aggregates(
             "fresh": fresh,
             "next_url_present": next_url_present,
             "status": body.get("status"),
-            "resultsTruncated": count >= 50_000,
+            "resultsTruncated": count >= MAX_PAGINATED_BARS,
+            "initial_page_bars": initial_count,
+            "pages_followed": pages_followed,
+            "hit_pagination_cap": hit_cap,
         },
     )
 
