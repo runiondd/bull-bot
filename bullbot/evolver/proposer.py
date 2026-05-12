@@ -210,19 +210,93 @@ def _extract_text(response: Any) -> str:
 
 
 def _strip_code_fences(raw: str) -> str:
-    """Remove markdown code fences if present."""
+    """Remove markdown code fences if present.
+
+    Handles three cases observed in real Haiku/Sonnet output:
+      1. Properly closed fence:  ```json\n{...}\n```
+      2. Open-only fence (truncated response): ```json\n{...}
+      3. No fence at all (returned as-is for the bare-JSON parser to handle).
+    """
+    # Closed fence — original behavior.
     m = re.search(r"```(?:json)?\s*\n?(.*?)```", raw, re.DOTALL)
-    return m.group(1).strip() if m else raw.strip()
+    if m:
+        return m.group(1).strip()
+
+    # Open-only fence (truncation case) — capture everything after it.
+    m = re.search(r"```(?:json)?\s*\n(.*)", raw, re.DOTALL)
+    if m:
+        return m.group(1).strip()
+
+    return raw.strip()
+
+
+def _extract_first_json_object(text: str) -> str | None:
+    """Find the first balanced ``{...}`` block in *text* and return it.
+
+    Walks the string tracking brace depth and JSON string boundaries (so
+    ``{`` inside string literals is ignored). Returns None if no balanced
+    object exists. Lets the parser recover from prose before/after a bare
+    JSON object — a Haiku failure mode seen in iteration_failures.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
 
 
 def _parse_json(raw: str) -> dict | None:
-    """Try to parse *raw* as JSON dict; return None on failure."""
-    try:
-        data = json.loads(_strip_code_fences(raw))
+    """Try to parse *raw* as a JSON dict; return None on failure.
+
+    Tries three strategies in order, returning the first that yields a dict:
+      1. ``json.loads`` on the fence-stripped text.
+      2. ``json.loads`` on the first balanced ``{...}`` block within the
+         fence-stripped text (handles prose before/after bare JSON).
+      3. ``json.loads`` on the first balanced ``{...}`` block within the
+         raw text (handles prose preambles outside fences).
+    """
+    candidates: list[str] = []
+
+    stripped = _strip_code_fences(raw)
+    candidates.append(stripped)
+
+    inner = _extract_first_json_object(stripped)
+    if inner and inner != stripped:
+        candidates.append(inner)
+
+    raw_inner = _extract_first_json_object(raw)
+    if raw_inner and raw_inner not in candidates:
+        candidates.append(raw_inner)
+
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
         if isinstance(data, dict):
             return data
-    except json.JSONDecodeError:
-        pass
     return None
 
 

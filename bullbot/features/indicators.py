@@ -106,12 +106,26 @@ def iv_percentile(current_iv: float, history: list[float]) -> float:
 
 
 def cagr(equity_curve: list[float], days: int) -> float:
-    """Compound annual growth rate over `days` calendar days."""
+    """Compound annual growth rate over `days` calendar days.
+
+    Guards against two degenerate equity-curve cases that produce non-real
+    results from ``a ** b``:
+
+      * ``start <= 0``: undefined growth from zero/negative capital → 0.0
+      * ``end   <= 0``: lost everything (or worse) → -1.0 (-100%)
+
+    Without the ``end <= 0`` guard, ``negative ** fractional`` returns a
+    Python ``complex``, which then crashes plateau classification with
+    ``TypeError: '>=' not supported between instances of 'complex' and 'float'``
+    (see iteration_failures id=18, TSLA 2026-04-10).
+    """
     if len(equity_curve) < 2 or days <= 0:
         return 0.0
     start, end = equity_curve[0], equity_curve[-1]
     if start <= 0:
         return 0.0
+    if end <= 0:
+        return -1.0
     years = days / 365.0
     return (end / start) ** (1.0 / years) - 1.0
 

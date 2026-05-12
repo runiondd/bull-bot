@@ -133,6 +133,79 @@ def test_propose_strips_code_fences(fake_anthropic, sample_indicators, sample_ke
     assert result.class_name == "PutCreditSpread"
 
 
+# --- Real-world Haiku failure modes (regression tests, added 2026-05-12) -------
+# These reproduce the iteration_failures table's ProposerJsonError pattern: the
+# model emits valid JSON but wraps/decorates it in ways the original parser
+# couldn't strip. Each test below MUST pass with the hardened parser.
+
+
+def test_propose_strips_unclosed_code_fence(fake_anthropic, sample_indicators, sample_key_levels):
+    """Haiku sometimes hits the token limit before closing the fence."""
+    fake_anthropic.queue_response(
+        "```json\n"
+        '{"class_name": "PutCreditSpread", '
+        '"params": {"dte": 21, "short_delta": 0.30, "width": 5}, '
+        '"rationale": "open fence"}'
+        # No closing ``` — truncated mid-response
+    )
+    snap = _make_snap()
+    result = proposer.propose(fake_anthropic, snap, history=[], best_strategy_id=None)
+    assert result.class_name == "PutCreditSpread"
+
+
+def test_propose_handles_prose_before_fence(fake_anthropic, sample_indicators, sample_key_levels):
+    fake_anthropic.queue_response(
+        "Here's my proposal for SPY:\n\n"
+        "```json\n"
+        '{"class_name": "PutCreditSpread", '
+        '"params": {"dte": 21, "short_delta": 0.30, "width": 5}, '
+        '"rationale": "leading prose"}\n'
+        "```"
+    )
+    snap = _make_snap()
+    result = proposer.propose(fake_anthropic, snap, history=[], best_strategy_id=None)
+    assert result.class_name == "PutCreditSpread"
+
+
+def test_propose_handles_prose_after_fence(fake_anthropic, sample_indicators, sample_key_levels):
+    fake_anthropic.queue_response(
+        "```json\n"
+        '{"class_name": "PutCreditSpread", '
+        '"params": {"dte": 21, "short_delta": 0.30, "width": 5}, '
+        '"rationale": "trailing prose"}\n'
+        "```\n\n"
+        "Hope this is helpful — let me know if you want me to adjust the delta."
+    )
+    snap = _make_snap()
+    result = proposer.propose(fake_anthropic, snap, history=[], best_strategy_id=None)
+    assert result.class_name == "PutCreditSpread"
+
+
+def test_propose_handles_bare_json_with_leading_prose(fake_anthropic, sample_indicators, sample_key_levels):
+    """Some models skip fences but still add a prose preamble."""
+    fake_anthropic.queue_response(
+        "Sure, here's the proposal: "
+        '{"class_name": "PutCreditSpread", '
+        '"params": {"dte": 21, "short_delta": 0.30, "width": 5}, '
+        '"rationale": "bare with preamble"}'
+    )
+    snap = _make_snap()
+    result = proposer.propose(fake_anthropic, snap, history=[], best_strategy_id=None)
+    assert result.class_name == "PutCreditSpread"
+
+
+def test_propose_handles_bare_json_with_trailing_prose(fake_anthropic, sample_indicators, sample_key_levels):
+    fake_anthropic.queue_response(
+        '{"class_name": "PutCreditSpread", '
+        '"params": {"dte": 21, "short_delta": 0.30, "width": 5}, '
+        '"rationale": "bare with trailing"}\n\n'
+        "Note: this assumes IV rank stays elevated."
+    )
+    snap = _make_snap()
+    result = proposer.propose(fake_anthropic, snap, history=[], best_strategy_id=None)
+    assert result.class_name == "PutCreditSpread"
+
+
 def test_propose_retries_on_bad_json(fake_anthropic, sample_indicators, sample_key_levels):
     fake_anthropic.queue_response("not json at all")
     fake_anthropic.queue_response(
