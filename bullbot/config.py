@@ -35,6 +35,12 @@ UNIVERSE: list[str] = [
     "XLK", "XLF", "XLE", "XLV", "XLI",
     # Credit (bond ETF) — different regime driver than equities
     "HYG",
+    # Dan-requested 2026-05-13: SATS (EchoStar, satellite/telecom, NASDAQ)
+    # and VCX (Fundrise Innovation Fund, NYSE). Both have Polygon coverage
+    # and options chains. VCX has thin history (listed ~2026-03-19, ~40 daily
+    # bars) — walk-forward window of 504 bars is not satisfied yet, so the
+    # bot will hold VCX in `discovering` until more data accumulates.
+    "SATS", "VCX",
 ]
 UNIVERSE_RETIRED: list[str] = []
 
@@ -88,6 +94,11 @@ TICKER_CATEGORY: dict[str, str] = {
     "XLV": "income",
     "XLI": "income",
     "HYG": "income",
+    # Dan-requested 2026-05-13. Defaulted to income; recategorize as growth
+    # if you want LEAPS treatment. SATS = EchoStar (satellite/telecom).
+    # VCX = Fundrise Innovation Fund (recently listed; very thin history).
+    "SATS": "income",
+    "VCX": "income",
 }
 
 GROWTH_FRAC_BULL = 0.40
@@ -204,6 +215,13 @@ TICKER_SECTOR_MAP: dict[str, str | None] = {
     "XLI": None,
     # HYG is credit, not equity — no sector analog.
     "HYG": None,
+    # Dan-requested 2026-05-13.
+    # SATS = EchoStar (satellite/telecom). XLC (communications) is the closest
+    # GICS sector analog. VCX = Fundrise Innovation Fund — closed-end fund of
+    # private growth equities; no clean public-equity sector analog, so None
+    # (regime_signals falls back to breadth_score).
+    "SATS": "XLC",
+    "VCX": None,
 }
 
 # Sector ETFs used for breadth calculation (all 11 GICS sectors)
