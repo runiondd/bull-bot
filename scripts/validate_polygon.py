@@ -8,7 +8,9 @@ know what tier the key actually has.
 Tests performed
 ---------------
 Historical depth (aggregates endpoint):
-    * SPY weekly, 10y lookback
+    * SPY weekly, 5y lookback   (was 10y; shortened 2026-05-13 — Polygon Starter
+      tier caps weekly history at ~5y. Decision: don't pay for the tier upgrade
+      until paper P&L justifies it. See .mentor/proposals/2026-05-13-polygon-tier-decision.md)
     * SPY daily,  5y lookback
     * TSLA 4-hour, 3y lookback
     * TSLA 1-hour, 2y lookback
@@ -744,7 +746,7 @@ def main() -> int:
     # range, tests pagination + freshness) AND a narrow probe (14-day window
     # at the far end, tests whether the tier actually exposes data that deep).
     depth_probes = [
-        ("SPY", 1, "week", 10, "spy_weekly_10y"),
+        ("SPY", 1, "week", 5, "spy_weekly_5y"),
         ("SPY", 1, "day", 5, "spy_daily_5y"),
         ("TSLA", 4, "hour", 3, "tsla_4h_3y"),
         ("TSLA", 1, "hour", 2, "tsla_1h_2y"),

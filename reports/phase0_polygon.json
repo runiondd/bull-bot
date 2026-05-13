@@ -1,11 +1,11 @@
 {
-  "generated": "2026-05-12T10:12:22.726840+00:00",
+  "generated": "2026-05-13T14:33:21.479316+00:00",
   "rps": 5.0,
   "results": [
     {
-      "name": "spy_weekly_10y",
-      "ok": false,
-      "detail": "262 bars, first=2021-05-09..last=2026-05-10, slack=1828d, age=2d, next_url=False [depth FAIL (slack=1828d)]",
+      "name": "spy_weekly_5y",
+      "ok": true,
+      "detail": "262 bars, first=2021-05-09..last=2026-05-10, slack=2d, age=3d, next_url=False [OK]",
       "meta": {
         "ticker": "SPY",
         "multiplier": 1,
@@ -13,11 +13,11 @@
         "count": 262,
         "first_ts": "2021-05-09T04:00:00+00:00",
         "last_ts": "2026-05-10T04:00:00+00:00",
-        "requested_start": "2016-05-07",
-        "requested_end": "2026-05-12",
-        "slack_days": 1828,
-        "last_bar_age_days": 2,
-        "meets_depth": false,
+        "requested_start": "2021-05-07",
+        "requested_end": "2026-05-13",
+        "slack_days": 2,
+        "last_bar_age_days": 3,
+        "meets_depth": true,
         "fresh": true,
         "next_url_present": false,
         "status": "DELAYED",
@@ -29,33 +29,42 @@
       "error": null
     },
     {
-      "name": "spy_weekly_10y_narrow",
-      "ok": false,
-      "detail": "request failed",
-      "meta": {},
-      "error": "403 on /v2/aggs/ticker/SPY/range/1/week/2016-05-07/2016-05-21: {\"status\":\"NOT_AUTHORIZED\",\"request_id\":\"a87701216757362b8f72fcb2ae4e1d07\",\"message\":\"Your plan doesn't include this data timeframe. Please upgrade your plan at https://polygon.io/pricing\"}"
+      "name": "spy_weekly_5y_narrow",
+      "ok": true,
+      "detail": "2 bars in far-end 14-day window 2021-05-07..2021-05-21 (first=2021-05-09, last=2021-05-16) \u2014 tier DOES support this depth",
+      "meta": {
+        "ticker": "SPY",
+        "multiplier": 1,
+        "timespan": "week",
+        "window_start": "2021-05-07",
+        "window_end": "2021-05-21",
+        "count": 2,
+        "first_ts": "2021-05-09T04:00:00+00:00",
+        "last_ts": "2021-05-16T04:00:00+00:00"
+      },
+      "error": null
     },
     {
       "name": "spy_daily_5y",
       "ok": true,
-      "detail": "1254 bars, first=2021-05-13..last=2026-05-11, slack=7d, age=1d, next_url=False [OK]",
+      "detail": "1255 bars, first=2021-05-14..last=2026-05-13, slack=7d, age=0d, next_url=False [OK]",
       "meta": {
         "ticker": "SPY",
         "multiplier": 1,
         "timespan": "day",
-        "count": 1254,
-        "first_ts": "2021-05-13T04:00:00+00:00",
-        "last_ts": "2026-05-11T04:00:00+00:00",
-        "requested_start": "2021-05-06",
-        "requested_end": "2026-05-12",
+        "count": 1255,
+        "first_ts": "2021-05-14T04:00:00+00:00",
+        "last_ts": "2026-05-13T04:00:00+00:00",
+        "requested_start": "2021-05-07",
+        "requested_end": "2026-05-13",
         "slack_days": 7,
-        "last_bar_age_days": 1,
+        "last_bar_age_days": 0,
         "meets_depth": true,
         "fresh": true,
         "next_url_present": false,
         "status": "DELAYED",
         "resultsTruncated": false,
-        "initial_page_bars": 1254,
+        "initial_page_bars": 1255,
         "pages_followed": 0,
         "hit_pagination_cap": false
       },
@@ -64,33 +73,33 @@
     {
       "name": "spy_daily_5y_narrow",
       "ok": true,
-      "detail": "6 bars in far-end 14-day window 2021-05-06..2021-05-20 (first=2021-05-13, last=2021-05-20) \u2014 tier DOES support this depth",
+      "detail": "6 bars in far-end 14-day window 2021-05-07..2021-05-21 (first=2021-05-14, last=2021-05-21) \u2014 tier DOES support this depth",
       "meta": {
         "ticker": "SPY",
         "multiplier": 1,
         "timespan": "day",
-        "window_start": "2021-05-06",
-        "window_end": "2021-05-20",
+        "window_start": "2021-05-07",
+        "window_end": "2021-05-21",
         "count": 6,
-        "first_ts": "2021-05-13T04:00:00+00:00",
-        "last_ts": "2021-05-20T04:00:00+00:00"
+        "first_ts": "2021-05-14T04:00:00+00:00",
+        "last_ts": "2021-05-21T04:00:00+00:00"
       },
       "error": null
     },
     {
       "name": "tsla_4h_3y",
       "ok": true,
-      "detail": "3270 bars, first=2023-05-08..last=2026-05-12, slack=2d, age=0d, next_url=False [OK]",
+      "detail": "3275 bars, first=2023-05-08..last=2026-05-13, slack=1d, age=0d, next_url=False [OK]",
       "meta": {
         "ticker": "TSLA",
         "multiplier": 4,
         "timespan": "hour",
-        "count": 3270,
+        "count": 3275,
         "first_ts": "2023-05-08T08:00:00+00:00",
-        "last_ts": "2026-05-12T08:00:00+00:00",
-        "requested_start": "2023-05-06",
-        "requested_end": "2026-05-12",
-        "slack_days": 2,
+        "last_ts": "2026-05-13T12:00:00+00:00",
+        "requested_start": "2023-05-07",
+        "requested_end": "2026-05-13",
+        "slack_days": 1,
         "last_bar_age_days": 0,
         "meets_depth": true,
         "fresh": true,
@@ -106,13 +115,13 @@
     {
       "name": "tsla_4h_3y_narrow",
       "ok": true,
-      "detail": "40 bars in far-end 14-day window 2023-05-06..2023-05-20 (first=2023-05-08, last=2023-05-19) \u2014 tier DOES support this depth",
+      "detail": "40 bars in far-end 14-day window 2023-05-07..2023-05-21 (first=2023-05-08, last=2023-05-19) \u2014 tier DOES support this depth",
       "meta": {
         "ticker": "TSLA",
         "multiplier": 4,
         "timespan": "hour",
-        "window_start": "2023-05-06",
-        "window_end": "2023-05-20",
+        "window_start": "2023-05-07",
+        "window_end": "2023-05-21",
         "count": 40,
         "first_ts": "2023-05-08T08:00:00+00:00",
         "last_ts": "2023-05-19T20:00:00+00:00"
@@ -122,17 +131,17 @@
     {
       "name": "tsla_1h_2y",
       "ok": true,
-      "detail": "8052 bars, first=2024-05-06..last=2026-05-12, slack=1d, age=0d, next_url=False [OK]",
+      "detail": "8073 bars, first=2024-05-06..last=2026-05-13, slack=0d, age=0d, next_url=False [OK]",
       "meta": {
         "ticker": "TSLA",
         "multiplier": 1,
         "timespan": "hour",
-        "count": 8052,
+        "count": 8073,
         "first_ts": "2024-05-06T08:00:00+00:00",
-        "last_ts": "2026-05-12T09:00:00+00:00",
-        "requested_start": "2024-05-05",
-        "requested_end": "2026-05-12",
-        "slack_days": 1,
+        "last_ts": "2026-05-13T14:00:00+00:00",
+        "requested_start": "2024-05-06",
+        "requested_end": "2026-05-13",
+        "slack_days": 0,
         "last_bar_age_days": 0,
         "meets_depth": true,
         "fresh": true,
@@ -148,32 +157,32 @@
     {
       "name": "tsla_1h_2y_narrow",
       "ok": true,
-      "detail": "160 bars in far-end 14-day window 2024-05-05..2024-05-19 (first=2024-05-06, last=2024-05-17) \u2014 tier DOES support this depth",
+      "detail": "176 bars in far-end 14-day window 2024-05-06..2024-05-20 (first=2024-05-06, last=2024-05-20) \u2014 tier DOES support this depth",
       "meta": {
         "ticker": "TSLA",
         "multiplier": 1,
         "timespan": "hour",
-        "window_start": "2024-05-05",
-        "window_end": "2024-05-19",
-        "count": 160,
+        "window_start": "2024-05-06",
+        "window_end": "2024-05-20",
+        "count": 176,
         "first_ts": "2024-05-06T08:00:00+00:00",
-        "last_ts": "2024-05-17T23:00:00+00:00"
+        "last_ts": "2024-05-20T23:00:00+00:00"
       },
       "error": null
     },
     {
       "name": "tsla_15m_1y",
       "ok": true,
-      "detail": "16323 bars, first=2025-05-05..last=2026-05-12, slack=0d, age=0d, next_url=False [OK]",
+      "detail": "16341 bars, first=2025-05-06..last=2026-05-13, slack=0d, age=0d, next_url=False [OK]",
       "meta": {
         "ticker": "TSLA",
         "multiplier": 15,
         "timespan": "minute",
-        "count": 16323,
-        "first_ts": "2025-05-05T08:00:00+00:00",
-        "last_ts": "2026-05-12T09:45:00+00:00",
-        "requested_start": "2025-05-05",
-        "requested_end": "2026-05-12",
+        "count": 16341,
+        "first_ts": "2025-05-06T08:00:00+00:00",
+        "last_ts": "2026-05-13T14:15:00+00:00",
+        "requested_start": "2025-05-06",
+        "requested_end": "2026-05-13",
         "slack_days": 0,
         "last_bar_age_days": 0,
         "meets_depth": true,
@@ -190,45 +199,45 @@
     {
       "name": "tsla_15m_1y_narrow",
       "ok": true,
-      "detail": "704 bars in far-end 14-day window 2025-05-05..2025-05-19 (first=2025-05-05, last=2025-05-19) \u2014 tier DOES support this depth",
+      "detail": "704 bars in far-end 14-day window 2025-05-06..2025-05-20 (first=2025-05-06, last=2025-05-20) \u2014 tier DOES support this depth",
       "meta": {
         "ticker": "TSLA",
         "multiplier": 15,
         "timespan": "minute",
-        "window_start": "2025-05-05",
-        "window_end": "2025-05-19",
+        "window_start": "2025-05-06",
+        "window_end": "2025-05-20",
         "count": 704,
-        "first_ts": "2025-05-05T08:00:00+00:00",
-        "last_ts": "2025-05-19T23:45:00+00:00"
+        "first_ts": "2025-05-06T08:00:00+00:00",
+        "last_ts": "2025-05-20T23:45:00+00:00"
       },
       "error": null
     },
     {
       "name": "tsla_options_chain",
       "ok": true,
-      "detail": "250 puts across 2 expirations; front month 2026-05-13 has 84 strikes; picked O:TSLA260513P00400000 @ strike 400",
+      "detail": "250 puts across 2 expirations; front month 2026-05-13 has 119 strikes; picked O:TSLA260513P00442500 @ strike 442.5",
       "meta": {
         "contract_count": 250,
         "front_expiration": "2026-05-13",
-        "picked_ticker": "O:TSLA260513P00400000",
-        "picked_strike": 400
+        "picked_ticker": "O:TSLA260513P00442500",
+        "picked_strike": 442.5
       },
       "error": null
     },
     {
       "name": "tsla_option_snapshot",
       "ok": true,
-      "detail": "snapshot ok for O:TSLA260513P00400000: iv=0.7471369250866753 delta=-0.02210276362023465 bid=None ask=None day_volume=5169",
+      "detail": "snapshot ok for O:TSLA260513P00442500: iv=0.6877817270768248 delta=-0.6544556896752068 bid=None ask=None day_volume=1198",
       "meta": {
-        "option_ticker": "O:TSLA260513P00400000",
-        "implied_volatility": 0.7471369250866753,
-        "delta": -0.02210276362023465,
-        "gamma": 0.0024383299467777343,
-        "theta": -0.36083267971783356,
-        "vega": 0.013992659818159918,
+        "option_ticker": "O:TSLA260513P00442500",
+        "implied_volatility": 0.6877817270768248,
+        "delta": -0.6544556896752068,
+        "gamma": 0.03795933485649646,
+        "theta": -4.699773258708006,
+        "vega": 0.050096058727969864,
         "bid": null,
         "ask": null,
-        "day_volume": 5169
+        "day_volume": 1198
       },
       "error": null
     }
@@ -236,231 +245,231 @@
   "samples": [
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/SPY/range/1/week/2016-05-07/2026-05-12",
+      "url_path": "/v2/aggs/ticker/SPY/range/1/week/2021-05-07/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 295.4
-    },
-    {
-      "status": 403,
-      "url_path": "/v2/aggs/ticker/SPY/range/1/week/2016-05-07/2016-05-21",
-      "rate_limit_headers": {},
-      "elapsed_ms": 51.3
+      "elapsed_ms": 339.3
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/SPY/range/1/day/2021-05-06/2026-05-12",
+      "url_path": "/v2/aggs/ticker/SPY/range/1/week/2021-05-07/2021-05-21",
       "rate_limit_headers": {},
-      "elapsed_ms": 140.4
+      "elapsed_ms": 225.9
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/SPY/range/1/day/2021-05-06/2021-05-20",
+      "url_path": "/v2/aggs/ticker/SPY/range/1/day/2021-05-07/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 59.6
+      "elapsed_ms": 181.3
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/2023-05-06/2026-05-12",
+      "url_path": "/v2/aggs/ticker/SPY/range/1/day/2021-05-07/2021-05-21",
       "rate_limit_headers": {},
-      "elapsed_ms": 627.6
+      "elapsed_ms": 72.1
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1690329600000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/2023-05-07/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 701.3
+      "elapsed_ms": 1197.9
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1697054400000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1690329600000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 797.3
+      "elapsed_ms": 959.5
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1704196800000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1697054400000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 607.7
+      "elapsed_ms": 1797.6
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1710979200000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1704196800000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 745.1
+      "elapsed_ms": 1140.0
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1718107200000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1710979200000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 703.4
+      "elapsed_ms": 1207.6
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1724932800000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1718107200000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 918.9
+      "elapsed_ms": 1066.9
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1731600000000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1724932800000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 880.4
+      "elapsed_ms": 1296.5
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1738756800000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1731600000000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 762.0
+      "elapsed_ms": 900.4
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1745352000000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1738756800000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 701.2
+      "elapsed_ms": 1621.3
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1752076800000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1745352000000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 825.2
+      "elapsed_ms": 807.5
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1758729600000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1752076800000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 1113.1
+      "elapsed_ms": 1032.2
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1765324800000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1758729600000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 823.9
+      "elapsed_ms": 1213.5
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1772222400000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1765324800000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 742.3
+      "elapsed_ms": 1261.4
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/2023-05-06/2023-05-20",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/1772222400000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 185.7
+      "elapsed_ms": 1569.9
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/2024-05-05/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/4/hour/2023-05-07/2023-05-21",
       "rate_limit_headers": {},
-      "elapsed_ms": 1000.7
+      "elapsed_ms": 241.1
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1722013200000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/2024-05-06/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 851.5
+      "elapsed_ms": 1104.0
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1728925200000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1722013200000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 932.3
+      "elapsed_ms": 3555.3
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1735668000000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1728925200000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 784.9
+      "elapsed_ms": 1202.9
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1742490000000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1735668000000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 872.4
+      "elapsed_ms": 1385.2
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1749081600000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1742490000000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 901.7
+      "elapsed_ms": 915.0
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1755806400000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1749081600000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 687.6
+      "elapsed_ms": 1361.8
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1762455600000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1755806400000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 830.1
+      "elapsed_ms": 1142.3
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1769518800000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1762455600000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 764.8
+      "elapsed_ms": 1194.3
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1776182400000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1769518800000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 482.9
+      "elapsed_ms": 1362.3
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/2024-05-05/2024-05-19",
+      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/1776182400000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 236.7
+      "elapsed_ms": 664.5
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/15/minute/2025-05-05/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/1/hour/2024-05-06/2024-05-20",
       "rate_limit_headers": {},
-      "elapsed_ms": 1016.1
+      "elapsed_ms": 244.1
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/15/minute/1753142400000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/15/minute/2025-05-06/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 952.4
+      "elapsed_ms": 1225.2
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/15/minute/1759837500000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/15/minute/1753228800000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 1302.6
+      "elapsed_ms": 1478.1
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/15/minute/1766432700000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/15/minute/1759923900000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 838.8
+      "elapsed_ms": 1292.2
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/15/minute/1773331200000/2026-05-12",
+      "url_path": "/v2/aggs/ticker/TSLA/range/15/minute/1766518200000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 668.7
+      "elapsed_ms": 1396.7
     },
     {
       "status": 200,
-      "url_path": "/v2/aggs/ticker/TSLA/range/15/minute/2025-05-05/2025-05-19",
+      "url_path": "/v2/aggs/ticker/TSLA/range/15/minute/1773417600000/2026-05-13",
       "rate_limit_headers": {},
-      "elapsed_ms": 226.6
+      "elapsed_ms": 1042.8
+    },
+    {
+      "status": 200,
+      "url_path": "/v2/aggs/ticker/TSLA/range/15/minute/2025-05-06/2025-05-20",
+      "rate_limit_headers": {},
+      "elapsed_ms": 478.0
     },
     {
       "status": 200,
       "url_path": "/v3/reference/options/contracts",
       "rate_limit_headers": {},
-      "elapsed_ms": 77.8
+      "elapsed_ms": 149.0
     },
     {
       "status": 200,
-      "url_path": "/v3/snapshot/options/TSLA/O:TSLA260513P00400000",
+      "url_path": "/v3/snapshot/options/TSLA/O:TSLA260513P00442500",
       "rate_limit_headers": {},
-      "elapsed_ms": 58.9
+      "elapsed_ms": 99.3
     }
   ]
 }
