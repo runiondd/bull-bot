@@ -30,7 +30,7 @@ Verify Python 3.11+, create venv, `pip install -r requirements.txt`, copy `.env.
 
 ### T0.1 Verify Polygon subscription + per-timeframe depth (M)
 Smoke test Polygon with Dan's real key. Confirm historical depth per timeframe:
-- Weekly bars going back to 2016-01-01 (10 years)
+- Weekly bars going back to 2021-01-01 (5 years) — *was 10y; shortened 2026-05-13 because Polygon Starter caps weekly at ~5y and we declined to pay for the tier upgrade until paper P&L justifies it. Decision in `.mentor/proposals/2026-05-13-polygon-tier-decision.md` (Option 1, accepted DR).*
 - Daily bars going back to 2021-01-01 (5 years)
 - 4h bars going back to 2023-01-01 (3 years)
 - 1h bars going back to 2024-04-01 (2 years)
