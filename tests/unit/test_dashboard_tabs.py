@@ -211,3 +211,44 @@ def test_costs_tab_zero_paper_trades_no_div_zero():
     }
     html_str = tabs.costs_tab(data)
     assert html_str  # don't crash on division-by-zero
+
+
+def test_leaderboard_tab_renders_table():
+    data = {"leaderboard": [
+        {"proposal_id": 412, "ticker": "AAPL", "class_name": "PutCreditSpread",
+         "regime_label": "trending", "score_a": 1.84, "size_units": 1,
+         "max_loss_per_trade": 250.0, "trade_count": 24, "rank": 1},
+        {"proposal_id": 410, "ticker": "TSLA", "class_name": "GrowthLEAPS",
+         "regime_label": "trending", "score_a": 1.42, "size_units": 1,
+         "max_loss_per_trade": 480.0, "trade_count": 12, "rank": 2},
+        {"proposal_id": 405, "ticker": "SPY", "class_name": "IronCondor",
+         "regime_label": "range", "score_a": 0.95, "size_units": 2,
+         "max_loss_per_trade": 320.0, "trade_count": 8, "rank": 3},
+    ]}
+    html_str = tabs.leaderboard_tab(data)
+    # Tickers visible
+    assert "AAPL" in html_str
+    assert "TSLA" in html_str
+    assert "SPY" in html_str
+    # Strategy class names visible
+    assert "PutCreditSpread" in html_str
+    assert "GrowthLEAPS" in html_str
+    assert "IronCondor" in html_str
+    # Regime labels visible
+    assert "trending" in html_str
+    assert "range" in html_str
+    # score_a formatted (1.84 → some readable form)
+    assert "1.84" in html_str or "184%" in html_str
+    # Proposal id surfaced for traceability
+    assert "412" in html_str
+    # Column header for ranking
+    assert "Rank" in html_str or "rank" in html_str
+
+
+def test_leaderboard_tab_empty_renders_empty_state():
+    html_str = tabs.leaderboard_tab({"leaderboard": []})
+    assert html_str  # non-empty
+    # Empty-state message mentions warming up / no entries — match pattern from
+    # other empty-state tabs (e.g. "No P&L yet — paper trial in progress").
+    lowered = html_str.lower()
+    assert "no entries" in lowered or "warming up" in lowered or "no leaderboard" in lowered

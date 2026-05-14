@@ -637,6 +637,76 @@ def health_tab(data: dict) -> str:
 </div>"""
 
 
+# ---- Leaderboard tab --------------------------------------------------------
+
+def leaderboard_tab(data: dict) -> str:
+    """Leaderboard tab: ranked strategy list sorted by score_a (annualized return).
+
+    Reads ``data['leaderboard']`` — a list of dicts produced by
+    ``queries.leaderboard_entries``. Renders as a single table card so the
+    static-HTML dashboard surfaces the top strategies discovered by the
+    search engine. No client-side sorting (this is static HTML); rows arrive
+    pre-sorted by ``score_a`` descending.
+    """
+    entries = data.get("leaderboard", [])
+
+    if not entries:
+        return ('<div class="card"><div class="card-body" '
+                'style="color: var(--fg-2); font-size: 12px; padding: 14px">'
+                'No entries yet &mdash; search engine warming up.'
+                '</div></div>')
+
+    def _row(e: dict) -> str:
+        ticker = html.escape(str(e.get("ticker", "")))
+        class_name = html.escape(str(e.get("class_name", "")))
+        regime = e.get("regime_label")
+        regime_cell = (html.escape(str(regime))
+                       if regime else '<span class="muted">&mdash;</span>')
+        score_a = e.get("score_a", 0.0) or 0.0
+        size_units = e.get("size_units", 0) or 0
+        max_loss = e.get("max_loss_per_trade", 0.0) or 0.0
+        trade_count = e.get("trade_count", 0) or 0
+        rank = e.get("rank", 0) or 0
+        proposal_id = e.get("proposal_id", "")
+
+        score_cls = "pos" if score_a >= 1.0 else "neg"
+
+        return f"""<tr>
+  <td class="num t-right">{rank}</td>
+  <td><strong>{ticker}</strong></td>
+  <td><span class="mono" style="font-size: 11.5px">{class_name}</span></td>
+  <td>{regime_cell}</td>
+  <td class="num t-right {score_cls}">{score_a:.2f}</td>
+  <td class="num t-right">{size_units}</td>
+  <td class="num t-right">{fmt_money(max_loss, decimals=0)}</td>
+  <td class="num t-right">{trade_count}</td>
+  <td class="num muted" style="font-size: 11px">ep_{html.escape(str(proposal_id))}</td>
+</tr>"""
+
+    rows = "".join(_row(e) for e in entries)
+
+    return f"""<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th class="t-right">Rank</th>
+        <th>Ticker</th>
+        <th>Strategy</th>
+        <th>Regime</th>
+        <th class="t-right">Score A</th>
+        <th class="t-right">Size</th>
+        <th class="t-right">Max Loss</th>
+        <th class="t-right">Trades</th>
+        <th>Proposal</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows}
+    </tbody>
+  </table>
+</div>"""
+
+
 # ---- Inventory tab ----------------------------------------------------------
 
 def inventory_tab(data: dict) -> str:

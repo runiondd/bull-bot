@@ -379,3 +379,77 @@ def test_universe_with_edge_handles_null_strategy(db_conn):
 
 def test_universe_with_edge_empty_db(db_conn):
     assert queries.universe_with_edge(db_conn) == []
+
+
+# ---------- test_leaderboard_entries ----------
+
+
+def _seed_gated_proposal(
+    db_conn,
+    *,
+    proposal_id: int,
+    ticker: str,
+    strategy_id: int,
+    score_a: float,
+    trade_count: int = 10,
+    size_units: int = 1,
+    max_loss_per_trade: float = 100.0,
+    regime_label: str | None = "trending",
+    created_at: int = 1000,
+) -> None:
+    """Insert an evolver_proposals row that satisfies the leaderboard view
+    gates: passed_gate=1, trade_count >= 5, score_a IS NOT NULL.
+    """
+    db_conn.execute(
+        "INSERT INTO evolver_proposals (id, ticker, iteration, strategy_id, rationale,"
+        " llm_cost_usd, passed_gate, trade_count, score_a, size_units,"
+        " max_loss_per_trade, regime_label, created_at)"
+        " VALUES (?, ?, 1, ?, 'r', 0.01, 1, ?, ?, ?, ?, ?, ?)",
+        (proposal_id, ticker, strategy_id, trade_count, score_a, size_units,
+         max_loss_per_trade, regime_label, created_at),
+    )
+
+
+def test_leaderboard_entries_returns_sorted_by_score_a(db_conn, _seed_strategy):
+    """Three gated proposals must come back sorted by score_a descending."""
+    _seed_gated_proposal(db_conn, proposal_id=10, ticker="SPY",
+                         strategy_id=1, score_a=1.40)
+    _seed_gated_proposal(db_conn, proposal_id=11, ticker="QQQ",
+                         strategy_id=1, score_a=2.10)
+    _seed_gated_proposal(db_conn, proposal_id=12, ticker="AAPL",
+                         strategy_id=1, score_a=0.85)
+
+    result = queries.leaderboard_entries(db_conn, n=10)
+
+    assert isinstance(result, list)
+    assert all(isinstance(r, dict) for r in result)
+    assert len(result) == 3
+    scores = [r["score_a"] for r in result]
+    assert scores == sorted(scores, reverse=True)
+    # First entry is the highest score
+    assert result[0]["ticker"] == "QQQ"
+    assert result[0]["score_a"] == pytest.approx(2.10)
+    # Each dict carries the rendering columns the tab needs
+    expected_keys = {"proposal_id", "ticker", "class_name", "regime_label",
+                     "score_a", "size_units", "max_loss_per_trade",
+                     "trade_count", "rank"}
+    assert expected_keys.issubset(set(result[0].keys()))
+
+
+def test_leaderboard_entries_respects_n_limit(db_conn, _seed_strategy):
+    for i in range(5):
+        _seed_gated_proposal(db_conn, proposal_id=20 + i,
+                             ticker=f"T{i}", strategy_id=1,
+                             score_a=1.0 + i * 0.1)
+    result = queries.leaderboard_entries(db_conn, n=3)
+    assert len(result) == 3
+
+
+def test_leaderboard_entries_empty_when_no_gated_proposals(db_conn, _seed_strategy):
+    """Proposal that fails the gate (passed_gate=0) is excluded."""
+    db_conn.execute(
+        "INSERT INTO evolver_proposals (ticker, iteration, strategy_id, rationale,"
+        " llm_cost_usd, passed_gate, trade_count, score_a, created_at)"
+        " VALUES ('SPY', 1, 1, 'r', 0.01, 0, 20, 1.5, 1000)",
+    )
+    assert queries.leaderboard_entries(db_conn, n=10) == []

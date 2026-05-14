@@ -27,6 +27,7 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
     orders = queries.orders_list(conn)
     costs = queries.cost_breakdown(conn)
     inventory = queries.long_inventory_summary(conn)
+    leaderboard = queries.leaderboard_entries(conn)
 
     metrics = {**summary, **extended}
     total_pnl = metrics.get("realized_pnl", 0) + metrics.get("unrealized_pnl", 0)
@@ -59,6 +60,7 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
         "orders": adapted_orders,
         "costs": adapted_costs,
         "inventory": adapted_inventory,
+        "leaderboard": leaderboard,
     }
 
     # Health data — pulled separately because health module owns the brief
@@ -76,6 +78,7 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
         "transactions": len(adapted_orders),
         "health": sum(1 for c in data["health"]["checks"] if c.get("status") != "ok"),
         "inventory": len(adapted_inventory),
+        "leaderboard": len(leaderboard),
     }
 
     body_parts = [
@@ -92,6 +95,7 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
         ("positions", tabs.positions_tab),
         ("evolver", tabs.evolver_tab),
         ("universe", tabs.universe_tab),
+        ("leaderboard", tabs.leaderboard_tab),
         ("transactions", tabs.transactions_tab),
         ("health", tabs.health_tab),
         ("costs", tabs.costs_tab),

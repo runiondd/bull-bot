@@ -592,6 +592,7 @@ def sidebar_section(*, active_tab: str, counts: dict[str, int]) -> str:
         ("positions", "Positions"),
         ("evolver", "Evolver"),
         ("universe", "Universe"),
+        ("leaderboard", "Leaderboard"),
         ("transactions", "Transactions"),
     ]
     diagnostics = [

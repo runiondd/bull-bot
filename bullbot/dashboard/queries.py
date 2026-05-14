@@ -444,6 +444,44 @@ def extended_metrics(conn: sqlite3.Connection, now: int | None = None) -> dict[s
 # ---------------------------------------------------------------------------
 
 
+def leaderboard_entries(
+    conn: sqlite3.Connection, n: int = 50
+) -> list[dict[str, Any]]:
+    """Return the top-N leaderboard entries as plain dicts for the dashboard tab.
+
+    Thin wrapper over ``bullbot.leaderboard.query.top_n`` (which reads the
+    ``leaderboard`` SQL view: passed_gate=1 AND trade_count >= 5 AND score_a
+    IS NOT NULL, sorted by score_a desc). The wrapper converts the dataclass
+    entries into snake_case dicts the tab renderer iterates over.
+
+    Default ``n=50`` matches the dashboard's "lifetime leaderboard" framing —
+    callers wanting fewer rows pass ``n`` explicitly.
+    """
+    from bullbot.leaderboard.query import top_n
+
+    try:
+        entries = top_n(conn, n)
+    except sqlite3.OperationalError:
+        # Older DB / partial schema with no leaderboard view yet — match the
+        # resilience pattern used by long_inventory_summary above.
+        return []
+    return [
+        {
+            "proposal_id": e.proposal_id,
+            "ticker": e.ticker,
+            "class_name": e.class_name,
+            "regime_label": e.regime_label,
+            "score_a": float(e.score_a) if e.score_a is not None else 0.0,
+            "size_units": int(e.size_units) if e.size_units is not None else 0,
+            "max_loss_per_trade": (float(e.max_loss_per_trade)
+                                   if e.max_loss_per_trade is not None else 0.0),
+            "trade_count": int(e.trade_count) if e.trade_count is not None else 0,
+            "rank": int(e.rank) if e.rank is not None else 0,
+        }
+        for e in entries
+    ]
+
+
 def universe_with_edge(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Return ticker grid with edge metrics, in display order.
 
