@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+import traceback as _traceback
 from dataclasses import dataclass
 from itertools import product
 from types import SimpleNamespace
@@ -182,3 +183,77 @@ def run_cell(
 
     # 7. Return new proposal_id
     return cur.lastrowid  # type: ignore[return-value]
+
+
+def _record_sweep_failure(
+    conn: sqlite3.Connection,
+    ticker: str,
+    cell: Cell,
+    exc: BaseException,
+) -> None:
+    """Insert one row into sweep_failures for a cell that raised an exception."""
+    conn.execute(
+        "INSERT INTO sweep_failures "
+        "(ts, ticker, class_name, cell_params_json, "
+        " exc_type, exc_message, traceback) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            int(time.time()),
+            ticker,
+            cell.class_name,
+            json.dumps(cell.params),
+            type(exc).__name__,
+            str(exc),
+            _traceback.format_exc(),
+        ),
+    )
+
+
+def sweep(
+    conn: sqlite3.Connection,
+    *,
+    ticker: str,
+    spec: StrategySpec,
+    regime_label: str,
+    portfolio_value: float,
+    run_id: str,
+    proposer_model: str,
+    n_cells_max: int = 200,
+    n_jobs: int = -1,
+) -> int:
+    """Run every cell of `spec` through walkforward in sequence.
+
+    For each cell:
+        - On success: writes one row to `evolver_proposals` via `run_cell`.
+        - On exception: writes one row to `sweep_failures` with the trace.
+
+    Returns the count of successful proposals. `n_jobs` is accepted for API
+    compatibility with the future parallel implementation (which requires
+    per-worker SQLite connections and is tracked as a follow-up); currently
+    sweeps run sequentially and `n_jobs` is ignored.
+
+    The `iteration` value passed to `run_cell` is the cell's position in
+    `expand_spec`'s output (0-indexed). This satisfies the UNIQUE constraint
+    on `evolver_proposals(ticker, iteration, strategy_id)` since every cell
+    in one sweep has a distinct iteration.
+    """
+    cells = expand_spec(spec, n_cells_max=n_cells_max)
+    successes = 0
+    for i, cell in enumerate(cells):
+        try:
+            run_cell(
+                conn,
+                ticker=ticker,
+                cell=cell,
+                spec=spec,
+                regime_label=regime_label,
+                portfolio_value=portfolio_value,
+                run_id=run_id,
+                proposer_model=proposer_model,
+                iteration=i,
+            )
+            successes += 1
+        except Exception as exc:
+            _record_sweep_failure(conn, ticker, cell, exc)
+    conn.commit()
+    return successes
