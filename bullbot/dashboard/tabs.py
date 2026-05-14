@@ -669,6 +669,9 @@ def leaderboard_tab(data: dict) -> str:
         rank = e.get("rank", 0) or 0
         proposal_id = e.get("proposal_id", "")
 
+        # Green threshold = 100% annualized return on max-BP-held. Aggressive
+        # by design: this is the "deploy this" cutoff per the search-engine
+        # spec, not "merely profitable." Adjust if Dan re-tunes the bar.
         score_cls = "pos" if score_a >= 1.0 else "neg"
 
         return f"""<tr>
@@ -676,7 +679,7 @@ def leaderboard_tab(data: dict) -> str:
   <td><strong>{ticker}</strong></td>
   <td><span class="mono" style="font-size: 11.5px">{class_name}</span></td>
   <td>{regime_cell}</td>
-  <td class="num t-right {score_cls}">{score_a:.2f}</td>
+  <td class="num t-right {score_cls}">{score_a:.0%}</td>
   <td class="num t-right">{size_units}</td>
   <td class="num t-right">{fmt_money(max_loss, decimals=0)}</td>
   <td class="num t-right">{trade_count}</td>
@@ -693,7 +696,7 @@ def leaderboard_tab(data: dict) -> str:
         <th>Ticker</th>
         <th>Strategy</th>
         <th>Regime</th>
-        <th class="t-right">Score A</th>
+        <th class="t-right">Score A (ann.)</th>
         <th class="t-right">Size</th>
         <th class="t-right">Max Loss</th>
         <th class="t-right">Trades</th>

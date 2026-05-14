@@ -237,8 +237,8 @@ def test_leaderboard_tab_renders_table():
     # Regime labels visible
     assert "trending" in html_str
     assert "range" in html_str
-    # score_a formatted (1.84 → some readable form)
-    assert "1.84" in html_str or "184%" in html_str
+    # score_a rendered as annualized-return percent (1.84 → "184%")
+    assert "184%" in html_str
     # Proposal id surfaced for traceability
     assert "412" in html_str
     # Column header for ranking
