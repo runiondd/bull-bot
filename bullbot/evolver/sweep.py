@@ -67,6 +67,7 @@ def run_cell(
     portfolio_value: float,
     run_id: str,
     proposer_model: str,
+    iteration: int,
 ) -> int:
     """Run one cell through walkforward + sizer + scorer, persist the
     result row in evolver_proposals, return the new proposal_id.
@@ -85,8 +86,12 @@ def run_cell(
       dispatcher but is not persisted — evolver_proposals has no run_id column.
     - Equity strategies (``spec.stop_loss_pct is not None``) are out of scope;
       a NotImplementedError is raised if one is detected.
-    - ``iteration`` is always 0 for sweep-originated rows (no iteration
-      counter in the sweep path — the proposer flow uses iteration_count).
+    - ``iteration`` is a caller-supplied counter (typically read from
+      ``ticker_state.iteration_count``) that distinguishes the same
+      ``(ticker, strategy)`` evaluated multiple times across sweeps. The UNIQUE
+      constraint on ``evolver_proposals(ticker, iteration, strategy_id)``
+      requires each sweep call for the same strategy to use a distinct
+      iteration value.
     """
     if spec.stop_loss_pct is not None:
         raise NotImplementedError(
@@ -107,10 +112,11 @@ def run_cell(
         (cell.class_name, class_version, p_hash),
     ).fetchone()
 
+    now_ts = int(time.time())
+
     if existing is not None:
         strategy_id: int = existing[0]
     else:
-        now_ts = int(time.time())
         cur = conn.execute(
             "INSERT INTO strategies (class_name, class_version, params, params_hash, parent_id, created_at) "
             "VALUES (?, ?, ?, ?, NULL, ?)",
@@ -139,11 +145,10 @@ def run_cell(
 
     # 6. Persist
     passed_gate = 1 if size.passes_gate else 0
-    created_at = int(time.time())
     regime_breakdown_json = (
-        json.dumps(metrics.regime_breakdown)
-        if isinstance(metrics.regime_breakdown, dict)
-        else metrics.regime_breakdown
+        metrics.regime_breakdown
+        if isinstance(metrics.regime_breakdown, str)
+        else json.dumps(metrics.regime_breakdown)
     )
 
     cur = conn.execute(
@@ -155,7 +160,7 @@ def run_cell(
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             ticker,
-            0,              # iteration — sweep rows always use 0
+            iteration,
             strategy_id,
             None,           # rationale — LLM-generated; not applicable for sweeps
             0.0,            # llm_cost_usd — no LLM call in sweep path
@@ -166,7 +171,7 @@ def run_cell(
             metrics.trade_count,
             regime_breakdown_json,
             passed_gate,
-            created_at,
+            now_ts,
             proposer_model,
             regime_label,
             score_a,
