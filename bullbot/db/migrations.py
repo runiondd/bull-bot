@@ -64,3 +64,33 @@ def _apply_column_migrations(conn: sqlite3.Connection) -> None:
     cols = {row[1] for row in conn.execute("PRAGMA table_info(evolver_proposals)")}
     if "max_loss_per_trade" not in cols:
         conn.execute("ALTER TABLE evolver_proposals ADD COLUMN max_loss_per_trade REAL")
+
+    # leaderboard view — added 2026-05-14 for strategy-search-engine
+    # Phase C. Ranks proposals by score_a (annualized return on BP held),
+    # gated by passed_gate=1 and trade_count >= 5 (statistical noise floor).
+    # Joined to strategies so consumers don't have to look up class_name
+    # separately. Idempotent via CREATE VIEW IF NOT EXISTS.
+    conn.execute("""
+        CREATE VIEW IF NOT EXISTS leaderboard AS
+        SELECT
+            ep.id              AS proposal_id,
+            ep.ticker          AS ticker,
+            ep.strategy_id     AS strategy_id,
+            s.class_name       AS class_name,
+            ep.regime_label    AS regime_label,
+            ep.score_a         AS score_a,
+            ep.size_units      AS size_units,
+            ep.max_loss_per_trade AS max_loss_per_trade,
+            ep.trade_count     AS trade_count,
+            ep.pf_is           AS pf_is,
+            ep.pf_oos          AS pf_oos,
+            ep.proposer_model  AS proposer_model,
+            ep.created_at      AS created_at,
+            RANK() OVER (ORDER BY ep.score_a DESC) AS rank
+        FROM evolver_proposals ep
+        JOIN strategies s ON s.id = ep.strategy_id
+        WHERE ep.passed_gate = 1
+          AND ep.trade_count >= 5
+          AND ep.score_a IS NOT NULL
+        ORDER BY ep.score_a DESC
+    """)
