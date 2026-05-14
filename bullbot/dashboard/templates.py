@@ -160,6 +160,7 @@ def page_shell(generated_at: str, body: str) -> str:
         '<head>\n'
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=1280">\n'
+        '<meta http-equiv="refresh" content="60">\n'
         '<title>Bull-Bot — Dashboard</title>\n'
         '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
@@ -568,7 +569,7 @@ def header_section(*, generated_at: str, total_pnl: float) -> str:
   </div>
   <div class="header-meta">
     <div class="item"><span class="dot"></span>Engine running</div>
-    <div class="item mono">{html.escape(generated_at)}</div>
+    <div class="item mono" title="Page auto-refreshes every 60 seconds"><span style="color: var(--fg-2)">Last updated</span> {html.escape(generated_at)}</div>
     <div class="item">
       <span class="num" style="color: var(--fg-2)">P&amp;L 30d</span>
       <span class="num {pnl_cls}">{pnl_str}</span>
@@ -592,6 +593,7 @@ def sidebar_section(*, active_tab: str, counts: dict[str, int]) -> str:
         ("positions", "Positions"),
         ("evolver", "Evolver"),
         ("universe", "Universe"),
+        ("leaderboard", "Leaderboard"),
         ("transactions", "Transactions"),
     ]
     diagnostics = [
@@ -619,6 +621,32 @@ def sidebar_section(*, active_tab: str, counts: dict[str, int]) -> str:
   <div class="nav-group">Diagnostics</div>
   {diag_html}
 </aside>"""
+
+
+def status_tiles(daemon: dict, cost: dict, sweep: dict) -> str:
+    """Render three operational-status tiles: daemon heartbeat, today's LLM
+    cost vs cap, and 24h sweep success rate. Each dict provides
+    ``value`` and ``color`` (one of green/amber/red/gray); the color
+    drives the ``tile-{color}`` CSS class. Visual style mirrors
+    ``kpi_strip`` — small grid of bordered cards above the main KPI strip.
+    """
+    def _tile(label: str, value: str, color: str) -> str:
+        safe_value = html.escape(value)
+        safe_label = html.escape(label)
+        return (
+            f'<div class="tile tile-{color}">'
+            f'<div class="label">{safe_label}</div>'
+            f'<div class="value">{safe_value}</div>'
+            f'</div>'
+        )
+
+    return (
+        '<div class="status-tiles">'
+        + _tile("Daemon", daemon.get("value", ""), daemon.get("color", "gray"))
+        + _tile("LLM Cost", cost.get("value", ""), cost.get("color", "gray"))
+        + _tile("Sweep Success", sweep.get("value", ""), sweep.get("color", "gray"))
+        + '</div>'
+    )
 
 
 def kpi_strip(*, account: dict, metrics: dict, equity_curve: list) -> str:

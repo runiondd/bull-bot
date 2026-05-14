@@ -276,3 +276,19 @@ CREATE TABLE IF NOT EXISTS long_inventory (
 );
 
 CREATE INDEX IF NOT EXISTS idx_long_inv_ticker ON long_inventory (ticker, removed_at);
+
+-- ---------------------------------------------------------------------------
+-- sweep_failures: records of failed strategy-sweep evaluation attempts
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS sweep_failures (
+    id                  INTEGER PRIMARY KEY,
+    ts                  INTEGER NOT NULL,
+    ticker              TEXT    NOT NULL,
+    class_name          TEXT    NOT NULL,
+    cell_params_json    TEXT    NOT NULL,
+    exc_type            TEXT    NOT NULL,
+    exc_message         TEXT    NOT NULL,
+    traceback           TEXT
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_sweep_failures_ts ON sweep_failures (ts DESC);

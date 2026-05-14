@@ -158,6 +158,26 @@ def test_page_shell_embeds_body_content():
     assert "<div id='test-marker'>marker</div>" in html_str
 
 
+def test_page_shell_has_meta_refresh_60s():
+    """G.2: dashboard auto-refreshes every 60s so the served HTML stays current
+    without a Flask process. Renders as a meta refresh tag in <head>."""
+    from bullbot.dashboard import templates
+    html_str = templates.page_shell("ts", "")
+    assert '<meta http-equiv="refresh" content="60">' in html_str
+
+
+def test_header_section_includes_last_updated_label():
+    """G.2: the generated-at timestamp is labeled 'Last updated' so a PM
+    glancing at the dashboard understands what the timestamp means."""
+    from bullbot.dashboard import templates
+    html_str = templates.header_section(
+        generated_at="2026-05-14 21:00 UTC",
+        total_pnl=0.0,
+    )
+    assert "Last updated" in html_str
+    assert "2026-05-14 21:00 UTC" in html_str
+
+
 def test_header_section_includes_brand_and_pnl():
     from bullbot.dashboard import templates
     html_str = templates.header_section(
@@ -242,3 +262,42 @@ def test_kpi_strip_empty_metrics_no_crash():
     html_out = templates.kpi_strip(account=account, metrics=metrics,
                                      equity_curve=[])
     assert '<div class="kpi-grid">' in html_out
+
+
+# ---------- test_status_tiles (G.3) ----------
+
+
+def test_status_tiles_renders_three_tiles():
+    """status_tiles renders three labelled tiles with per-color CSS classes."""
+    daemon = {"status": "fresh", "value": "<5m ago", "color": "green"}
+    cost = {"value": "$0.50 / $5.00", "color": "green", "cost": 0.5, "cap": 5.0}
+    sweep = {"value": "92%", "color": "amber", "successes": 23, "failures": 2}
+
+    html_out = templates.status_tiles(daemon, cost, sweep)
+
+    # Three tile labels
+    assert "Daemon" in html_out
+    assert "LLM Cost" in html_out
+    assert "Sweep Success" in html_out
+
+    # Each value appears (the daemon "<" is HTML-escaped)
+    assert "5m ago" in html_out
+    assert "$0.50 / $5.00" in html_out
+    assert "92%" in html_out
+
+    # Per-color tile classes are present
+    assert "tile-green" in html_out
+    assert "tile-amber" in html_out
+
+
+def test_status_tiles_red_and_gray_classes():
+    """Red and gray colors map to corresponding tile classes."""
+    daemon = {"status": "down", "value": "no heartbeat", "color": "red"}
+    cost = {"value": "$5.00 / $5.00", "color": "red", "cost": 5.0, "cap": 5.0}
+    sweep = {"value": "no sweeps yet", "color": "gray", "successes": 0, "failures": 0}
+
+    html_out = templates.status_tiles(daemon, cost, sweep)
+    assert "tile-red" in html_out
+    assert "tile-gray" in html_out
+    assert "no heartbeat" in html_out
+    assert "no sweeps yet" in html_out

@@ -49,6 +49,14 @@ class BacktestMetrics:
     fold_metrics: list[FoldMetrics] = field(default_factory=list)
     cagr_oos: float | None = None
     sortino_oos: float | None = None
+    # Score-A inputs — populated by aggregate() from OOS fold pnls.
+    # max_bp_held and days_held are stubs (default 0.0) until follow-up
+    # task adds real aggregation from the orders table. Callers receiving
+    # 0.0 for either of these should treat score_a as not-yet-meaningful
+    # (compute_score_a returns 0.0 when either denominator is 0).
+    realized_pnl: float = 0.0
+    max_bp_held: float = 0.0
+    days_held: float = 0.0
 
 
 def compute_folds(
@@ -128,9 +136,11 @@ def aggregate(fold_metrics: list[FoldMetrics], category: str = "income") -> Back
     else:
         pf_oos = 0.0
     max_dd = max(f.max_dd_pct for f in fold_metrics)
+    realized_pnl = sum(sum(fm.oos_pnls) for fm in fold_metrics)
     metrics = BacktestMetrics(
         pf_is=pf_is, pf_oos=pf_oos, sharpe_is=0.0, max_dd_pct=max_dd,
         trade_count=total_oos, fold_metrics=fold_metrics,
+        realized_pnl=realized_pnl,
     )
 
     if category == "growth":

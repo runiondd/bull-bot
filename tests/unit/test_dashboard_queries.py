@@ -379,3 +379,276 @@ def test_universe_with_edge_handles_null_strategy(db_conn):
 
 def test_universe_with_edge_empty_db(db_conn):
     assert queries.universe_with_edge(db_conn) == []
+
+
+# ---------- test_leaderboard_entries ----------
+
+
+def _seed_gated_proposal(
+    db_conn,
+    *,
+    proposal_id: int,
+    ticker: str,
+    strategy_id: int,
+    score_a: float,
+    trade_count: int = 10,
+    size_units: int = 1,
+    max_loss_per_trade: float = 100.0,
+    regime_label: str | None = "trending",
+    created_at: int = 1000,
+) -> None:
+    """Insert an evolver_proposals row that satisfies the leaderboard view
+    gates: passed_gate=1, trade_count >= 5, score_a IS NOT NULL.
+    """
+    db_conn.execute(
+        "INSERT INTO evolver_proposals (id, ticker, iteration, strategy_id, rationale,"
+        " llm_cost_usd, passed_gate, trade_count, score_a, size_units,"
+        " max_loss_per_trade, regime_label, created_at)"
+        " VALUES (?, ?, 1, ?, 'r', 0.01, 1, ?, ?, ?, ?, ?, ?)",
+        (proposal_id, ticker, strategy_id, trade_count, score_a, size_units,
+         max_loss_per_trade, regime_label, created_at),
+    )
+
+
+def test_leaderboard_entries_returns_sorted_by_score_a(db_conn, _seed_strategy):
+    """Three gated proposals must come back sorted by score_a descending."""
+    _seed_gated_proposal(db_conn, proposal_id=10, ticker="SPY",
+                         strategy_id=1, score_a=1.40)
+    _seed_gated_proposal(db_conn, proposal_id=11, ticker="QQQ",
+                         strategy_id=1, score_a=2.10)
+    _seed_gated_proposal(db_conn, proposal_id=12, ticker="AAPL",
+                         strategy_id=1, score_a=0.85)
+
+    result = queries.leaderboard_entries(db_conn, n=10)
+
+    assert isinstance(result, list)
+    assert all(isinstance(r, dict) for r in result)
+    assert len(result) == 3
+    scores = [r["score_a"] for r in result]
+    assert scores == sorted(scores, reverse=True)
+    # First entry is the highest score
+    assert result[0]["ticker"] == "QQQ"
+    assert result[0]["score_a"] == pytest.approx(2.10)
+    # Each dict carries the rendering columns the tab needs
+    expected_keys = {"proposal_id", "ticker", "class_name", "regime_label",
+                     "score_a", "size_units", "max_loss_per_trade",
+                     "trade_count", "rank"}
+    assert expected_keys.issubset(set(result[0].keys()))
+
+
+def test_leaderboard_entries_respects_n_limit(db_conn, _seed_strategy):
+    for i in range(5):
+        _seed_gated_proposal(db_conn, proposal_id=20 + i,
+                             ticker=f"T{i}", strategy_id=1,
+                             score_a=1.0 + i * 0.1)
+    result = queries.leaderboard_entries(db_conn, n=3)
+    assert len(result) == 3
+
+
+def test_leaderboard_entries_empty_when_no_gated_proposals(db_conn, _seed_strategy):
+    """Proposal that fails the gate (passed_gate=0) is excluded."""
+    db_conn.execute(
+        "INSERT INTO evolver_proposals (ticker, iteration, strategy_id, rationale,"
+        " llm_cost_usd, passed_gate, trade_count, score_a, created_at)"
+        " VALUES ('SPY', 1, 1, 'r', 0.01, 0, 20, 1.5, 1000)",
+    )
+    assert queries.leaderboard_entries(db_conn, n=10) == []
+
+
+# ---------- test_daemon_status (G.3) ----------
+
+
+def test_daemon_status_no_heartbeat_file(tmp_path):
+    """Missing heartbeat file → status 'down', color 'red'."""
+    missing = tmp_path / "does_not_exist.txt"
+    res = queries.daemon_status(heartbeat_path=missing)
+    assert res["status"] == "down"
+    assert res["color"] == "red"
+    assert res["value"] == "no heartbeat"
+
+
+def test_daemon_status_fresh(tmp_path):
+    """Heartbeat 2 minutes old → green / '<5m ago'."""
+    from datetime import datetime, timezone, timedelta
+    hb = tmp_path / "hb.txt"
+    ts = datetime.now(timezone.utc) - timedelta(minutes=2)
+    hb.write_text(ts.isoformat())
+    res = queries.daemon_status(heartbeat_path=hb)
+    assert res["color"] == "green"
+    assert res["status"] == "fresh"
+    assert res["value"] == "<5m ago"
+
+
+def test_daemon_status_recent(tmp_path):
+    """Heartbeat 30 minutes old → green / 'Nm ago' (60-min cadence)."""
+    from datetime import datetime, timezone, timedelta
+    hb = tmp_path / "hb.txt"
+    ts = datetime.now(timezone.utc) - timedelta(minutes=30)
+    hb.write_text(ts.isoformat())
+    res = queries.daemon_status(heartbeat_path=hb)
+    assert res["color"] == "green"
+    assert res["status"] == "recent"
+    assert "m ago" in res["value"]
+
+
+def test_daemon_status_stale(tmp_path):
+    """Heartbeat 3 hours old → amber."""
+    from datetime import datetime, timezone, timedelta
+    hb = tmp_path / "hb.txt"
+    ts = datetime.now(timezone.utc) - timedelta(hours=3)
+    hb.write_text(ts.isoformat())
+    res = queries.daemon_status(heartbeat_path=hb)
+    assert res["color"] == "amber"
+    assert res["status"] == "stale"
+    assert "h ago" in res["value"]
+
+
+def test_daemon_status_dead(tmp_path):
+    """Heartbeat > 12 hours old → red / 'dead'."""
+    from datetime import datetime, timezone, timedelta
+    hb = tmp_path / "hb.txt"
+    ts = datetime.now(timezone.utc) - timedelta(hours=24)
+    hb.write_text(ts.isoformat())
+    res = queries.daemon_status(heartbeat_path=hb)
+    assert res["color"] == "red"
+    assert res["status"] == "dead"
+    assert "h ago" in res["value"]
+
+
+# ---------- test_today_llm_cost (G.3) ----------
+
+
+def test_today_llm_cost_under_cap(db_conn, _seed_strategy):
+    """Today's LLM cost well under cap → green."""
+    import time as _time
+    from datetime import datetime, timezone
+    now = int(_time.time())
+    today_midnight = int(datetime.now(tz=timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0).timestamp())
+    # two proposals today, total $0.50
+    db_conn.execute(
+        "INSERT INTO evolver_proposals (ticker, iteration, strategy_id, rationale,"
+        " llm_cost_usd, passed_gate, created_at)"
+        " VALUES ('AAPL', 1, 1, 'r', 0.30, 1, ?)",
+        (today_midnight + 100,),
+    )
+    db_conn.execute(
+        "INSERT INTO evolver_proposals (ticker, iteration, strategy_id, rationale,"
+        " llm_cost_usd, passed_gate, created_at)"
+        " VALUES ('TSLA', 1, 1, 'r', 0.20, 1, ?)",
+        (today_midnight + 200,),
+    )
+    # yesterday — must not be counted
+    db_conn.execute(
+        "INSERT INTO evolver_proposals (ticker, iteration, strategy_id, rationale,"
+        " llm_cost_usd, passed_gate, created_at)"
+        " VALUES ('QQQ', 1, 1, 'r', 99.0, 1, ?)",
+        (today_midnight - 3600,),
+    )
+
+    res = queries.today_llm_cost(db_conn, cap_usd=5.0)
+    assert res["color"] == "green"
+    assert "$0.50" in res["value"]
+    assert "$5.00" in res["value"]
+
+
+def test_today_llm_cost_amber_above_half_cap(db_conn, _seed_strategy):
+    """Today's LLM cost between 0.5*cap and cap → amber."""
+    from datetime import datetime, timezone
+    today_midnight = int(datetime.now(tz=timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0).timestamp())
+    db_conn.execute(
+        "INSERT INTO evolver_proposals (ticker, iteration, strategy_id, rationale,"
+        " llm_cost_usd, passed_gate, created_at)"
+        " VALUES ('AAPL', 1, 1, 'r', 3.50, 1, ?)",
+        (today_midnight + 100,),
+    )
+    res = queries.today_llm_cost(db_conn, cap_usd=5.0)
+    assert res["color"] == "amber"
+
+
+def test_today_llm_cost_at_cap(db_conn, _seed_strategy):
+    """Today's LLM cost at or above cap → red."""
+    from datetime import datetime, timezone
+    today_midnight = int(datetime.now(tz=timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0).timestamp())
+    db_conn.execute(
+        "INSERT INTO evolver_proposals (ticker, iteration, strategy_id, rationale,"
+        " llm_cost_usd, passed_gate, created_at)"
+        " VALUES ('AAPL', 1, 1, 'r', 6.00, 1, ?)",
+        (today_midnight + 100,),
+    )
+    res = queries.today_llm_cost(db_conn, cap_usd=5.0)
+    assert res["color"] == "red"
+    assert "$6.00" in res["value"]
+
+
+# ---------- test_sweep_success_24h (G.3) ----------
+
+
+def test_sweep_success_24h_with_failures_and_successes(db_conn, _seed_strategy):
+    """Mix of successes + failures in last 24h → correct rate + threshold color."""
+    import time as _time
+    now = int(_time.time())
+    recent = now - 3600  # 1 hour ago
+    # 18 grid:baseline successes
+    for i in range(18):
+        db_conn.execute(
+            "INSERT INTO evolver_proposals (ticker, iteration, strategy_id, rationale,"
+            " llm_cost_usd, passed_gate, created_at, proposer_model)"
+            " VALUES (?, ?, 1, 'r', 0.0, 1, ?, 'grid:baseline')",
+            (f"T{i}", i, recent),
+        )
+    # 2 failures
+    for i in range(2):
+        db_conn.execute(
+            "INSERT INTO sweep_failures (ts, ticker, class_name, cell_params_json,"
+            " exc_type, exc_message)"
+            " VALUES (?, 'AAPL', 'BearPutSpread', '{}', 'ValueError', 'bad params')",
+            (recent,),
+        )
+    res = queries.sweep_success_24h(db_conn)
+    # 18 / 20 = 0.90
+    assert res["value"] == "90%"
+    # 0.90 is > 0.80 and not > 0.95 → amber
+    assert res["color"] == "amber"
+
+
+def test_sweep_success_24h_high_rate_is_green(db_conn, _seed_strategy):
+    """>95% success → green."""
+    import time as _time
+    now = int(_time.time())
+    recent = now - 600
+    for i in range(20):
+        db_conn.execute(
+            "INSERT INTO evolver_proposals (ticker, iteration, strategy_id, rationale,"
+            " llm_cost_usd, passed_gate, created_at, proposer_model)"
+            " VALUES (?, ?, 1, 'r', 0.0, 1, ?, 'grid:baseline')",
+            (f"S{i}", i, recent),
+        )
+    res = queries.sweep_success_24h(db_conn)
+    assert res["value"] == "100%"
+    assert res["color"] == "green"
+
+
+def test_sweep_success_24h_no_data_returns_gray(db_conn, _seed_strategy):
+    """Empty DB → 'no sweeps yet' / gray."""
+    res = queries.sweep_success_24h(db_conn)
+    assert res["color"] == "gray"
+    assert res["value"] == "no sweeps yet"
+
+
+def test_sweep_success_24h_excludes_old_rows(db_conn, _seed_strategy):
+    """Successes outside the 24h window must not be counted."""
+    import time as _time
+    now = int(_time.time())
+    old = now - 48 * 3600  # 2 days ago
+    db_conn.execute(
+        "INSERT INTO evolver_proposals (ticker, iteration, strategy_id, rationale,"
+        " llm_cost_usd, passed_gate, created_at, proposer_model)"
+        " VALUES ('AAPL', 1, 1, 'r', 0.0, 1, ?, 'grid:baseline')",
+        (old,),
+    )
+    res = queries.sweep_success_24h(db_conn)
+    assert res["color"] == "gray"
+    assert res["value"] == "no sweeps yet"

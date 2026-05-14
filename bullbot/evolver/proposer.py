@@ -24,6 +24,7 @@ from bullbot.config import (
     HISTORY_BLOCK_SIZE,
     PROPOSER_MAX_TOKENS,
 )
+from bullbot.evolver.sweep import StrategySpec
 from bullbot.strategies import registry
 from bullbot.strategies.base import StrategySnapshot
 
@@ -298,6 +299,94 @@ def _parse_json(raw: str) -> dict | None:
         if isinstance(data, dict):
             return data
     return None
+
+
+# ---------------------------------------------------------------------------
+# New-schema parser (Engine E.1)
+# ---------------------------------------------------------------------------
+
+
+def parse_proposer_response(payload: dict) -> StrategySpec:
+    """Parse an LLM proposer response into a ``StrategySpec``.
+
+    Expected payload keys: ``class`` (str), ``ranges`` (dict[str, list]),
+    ``max_loss_per_trade`` (float). Optional: ``stop_loss_pct`` (float | None),
+    ``rationale`` (str — silently dropped; recorded at proposal level, not spec level).
+
+    Raises
+    ------
+    KeyError
+        If a required field (``class``, ``ranges``, or ``max_loss_per_trade``) is absent.
+    """
+    return StrategySpec(
+        class_name=payload["class"],
+        ranges=payload["ranges"],
+        max_loss_per_trade=payload["max_loss_per_trade"],
+        stop_loss_pct=payload.get("stop_loss_pct"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# New-schema prompt builder (Engine E.2)
+# ---------------------------------------------------------------------------
+
+
+def build_prompt(
+    *,
+    ticker: str,
+    regime_label: str,
+    eligible_classes: list[str],
+    explore_classes: list[str],
+    iv_rank_distribution: dict[str, float],
+) -> str:
+    """Build the proposer prompt asking the LLM for a strategy class and
+    parameter ranges, given the current regime and per-ticker IV-rank
+    distribution. The returned prompt is a string suitable for the
+    user message in an Anthropic chat completion (system prompt may
+    live elsewhere).
+
+    ``eligible_classes`` are the bandit's top-ranked options for this
+    regime — the LLM should generally pick from these. ``explore_classes``
+    are underexplored candidates — the LLM may pick one to gather data.
+
+    The function does NOT call the LLM; it is a pure string builder.
+    """
+    eligible_lines = "\n".join(f"  - {c}" for c in eligible_classes) or "  (none)"
+    explore_lines = "\n".join(f"  - {c}" for c in explore_classes) or "  (none)"
+    p10 = iv_rank_distribution.get("p10", "?")
+    p50 = iv_rank_distribution.get("p50", "?")
+    p90 = iv_rank_distribution.get("p90", "?")
+    return f"""\
+You are choosing a strategy class and parameter ranges for {ticker}.
+
+Current market regime: {regime_label}
+Ticker IV-rank distribution over the last 252 trading days:
+  - 10th percentile: {p10}
+  - 50th percentile (median): {p50}
+  - 90th percentile: {p90}
+
+Eligible classes (exploit — top-ranked for this regime by historical score_a):
+{eligible_lines}
+
+Explore classes (underexplored — pick one if you want to gather data, otherwise stay in the eligible set):
+{explore_lines}
+
+Respond with JSON of shape:
+{{
+    "class": "<class name from the lists above>",
+    "rationale": "<one sentence why>",
+    "ranges": {{
+        "<param_name>": [<value1>, <value2>, ...],
+        ...
+    }},
+    "max_loss_per_trade": <float, dollars>,
+    "stop_loss_pct": <float | null, only for equity classes>
+}}
+
+The `ranges` field is a dict mapping parameter names to lists of candidate
+values. The bot will sweep the cartesian product. Aim for 3-5 values per
+parameter and 4-6 parameters total.
+"""
 
 
 # ---------------------------------------------------------------------------
