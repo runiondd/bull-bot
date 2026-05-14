@@ -158,6 +158,26 @@ def test_page_shell_embeds_body_content():
     assert "<div id='test-marker'>marker</div>" in html_str
 
 
+def test_page_shell_has_meta_refresh_60s():
+    """G.2: dashboard auto-refreshes every 60s so the served HTML stays current
+    without a Flask process. Renders as a meta refresh tag in <head>."""
+    from bullbot.dashboard import templates
+    html_str = templates.page_shell("ts", "")
+    assert '<meta http-equiv="refresh" content="60">' in html_str
+
+
+def test_header_section_includes_last_updated_label():
+    """G.2: the generated-at timestamp is labeled 'Last updated' so a PM
+    glancing at the dashboard understands what the timestamp means."""
+    from bullbot.dashboard import templates
+    html_str = templates.header_section(
+        generated_at="2026-05-14 21:00 UTC",
+        total_pnl=0.0,
+    )
+    assert "Last updated" in html_str
+    assert "2026-05-14 21:00 UTC" in html_str
+
+
 def test_header_section_includes_brand_and_pnl():
     from bullbot.dashboard import templates
     html_str = templates.header_section(

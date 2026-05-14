@@ -160,6 +160,7 @@ def page_shell(generated_at: str, body: str) -> str:
         '<head>\n'
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=1280">\n'
+        '<meta http-equiv="refresh" content="60">\n'
         '<title>Bull-Bot — Dashboard</title>\n'
         '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
@@ -568,7 +569,7 @@ def header_section(*, generated_at: str, total_pnl: float) -> str:
   </div>
   <div class="header-meta">
     <div class="item"><span class="dot"></span>Engine running</div>
-    <div class="item mono">{html.escape(generated_at)}</div>
+    <div class="item mono" title="Page auto-refreshes every 60 seconds"><span style="color: var(--fg-2)">Last updated</span> {html.escape(generated_at)}</div>
     <div class="item">
       <span class="num" style="color: var(--fg-2)">P&amp;L 30d</span>
       <span class="num {pnl_cls}">{pnl_str}</span>
