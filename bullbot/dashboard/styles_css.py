@@ -317,6 +317,47 @@ main {
   opacity: 0.85;
 }
 
+/* ============ Status tiles (operational health) ============ */
+.status-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.tile {
+  background: var(--bg-1);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-left: 3px solid var(--line-strong);
+}
+.tile .label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-2);
+  font-weight: 500;
+}
+.tile .value {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.tile-green { border-left-color: var(--pos); }
+.tile-green .value { color: var(--pos); }
+.tile-amber { border-left-color: var(--warn); }
+.tile-amber .value { color: var(--warn); }
+.tile-red   { border-left-color: var(--neg); }
+.tile-red   .value { color: var(--neg); }
+.tile-gray  { border-left-color: var(--line-strong); }
+.tile-gray  .value { color: var(--fg-2); }
+
 /* ============ Cards ============ */
 .card {
   background: var(--bg-1);

@@ -623,6 +623,32 @@ def sidebar_section(*, active_tab: str, counts: dict[str, int]) -> str:
 </aside>"""
 
 
+def status_tiles(daemon: dict, cost: dict, sweep: dict) -> str:
+    """Render three operational-status tiles: daemon heartbeat, today's LLM
+    cost vs cap, and 24h sweep success rate. Each dict provides
+    ``value`` and ``color`` (one of green/amber/red/gray); the color
+    drives the ``tile-{color}`` CSS class. Visual style mirrors
+    ``kpi_strip`` — small grid of bordered cards above the main KPI strip.
+    """
+    def _tile(label: str, value: str, color: str) -> str:
+        safe_value = html.escape(value)
+        safe_label = html.escape(label)
+        return (
+            f'<div class="tile tile-{color}">'
+            f'<div class="label">{safe_label}</div>'
+            f'<div class="value">{safe_value}</div>'
+            f'</div>'
+        )
+
+    return (
+        '<div class="status-tiles">'
+        + _tile("Daemon", daemon.get("value", ""), daemon.get("color", "gray"))
+        + _tile("LLM Cost", cost.get("value", ""), cost.get("color", "gray"))
+        + _tile("Sweep Success", sweep.get("value", ""), sweep.get("color", "gray"))
+        + '</div>'
+    )
+
+
 def kpi_strip(*, account: dict, metrics: dict, equity_curve: list) -> str:
     """Top-of-overview KPI strip: 5 cards. Ports components-shell.jsx:KPIStrip."""
     from bullbot.dashboard.fmt import fmt_money, fmt_pct, pnl_class

@@ -81,12 +81,19 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
         "leaderboard": len(leaderboard),
     }
 
+    # G.3: operational status tiles (daemon heartbeat / today's LLM cost /
+    # 24h sweep success rate). Cheap reads; safe to compute every render.
+    daemon = queries.daemon_status()
+    llm_cost = queries.today_llm_cost(conn)
+    sweep = queries.sweep_success_24h(conn)
+
     body_parts = [
         templates.header_section(generated_at=now_str, total_pnl=total_pnl),
         '<div class="layout">',
         templates.sidebar_section(active_tab="overview", counts=counts),
         '<main>',
         '<div class="page-title-row"><div><div class="page-title">Overview</div></div></div>',
+        templates.status_tiles(daemon, llm_cost, sweep),
         templates.kpi_strip(account=account, metrics=data["metrics"], equity_curve=eq_curve),
     ]
 

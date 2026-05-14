@@ -482,6 +482,162 @@ def leaderboard_entries(
     ]
 
 
+# ---------------------------------------------------------------------------
+# Status-tile helpers (G.3)
+# ---------------------------------------------------------------------------
+
+
+def daemon_status(heartbeat_path: Any = None) -> dict[str, str]:
+    """Return daemon heartbeat status as ``{status, value, color}``.
+
+    Reads the ISO-8601 UTC timestamp written by ``scripts/run_continuous.py``
+    after each scheduler round (default ``cache/last_continuous_run.txt``).
+
+    Color thresholds (matched to the 60-min daemon cadence):
+      - missing            → down  / red    / "no heartbeat"
+      - age <  5 minutes   → fresh / green  / "<5m ago"
+      - age < 90 minutes   → recent/ green  / "<Nm ago>"
+      - age < 12 hours     → stale / amber  / "<Nh ago>"
+      - else               → dead  / red    / "<Nh ago>"
+    """
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from bullbot import config
+
+    if heartbeat_path is None:
+        heartbeat_path = config.DB_PATH.parent / "last_continuous_run.txt"
+    path = Path(heartbeat_path)
+
+    if not path.exists():
+        return {"status": "down", "value": "no heartbeat", "color": "red"}
+
+    try:
+        raw = path.read_text().strip()
+        ts = datetime.fromisoformat(raw)
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+    except (ValueError, OSError):
+        return {"status": "down", "value": "no heartbeat", "color": "red"}
+
+    age_seconds = (datetime.now(timezone.utc) - ts).total_seconds()
+    age_minutes = age_seconds / 60.0
+
+    if age_minutes < 5:
+        return {"status": "fresh", "value": "<5m ago", "color": "green"}
+    if age_minutes < 90:
+        return {"status": "recent", "value": f"{age_minutes:.0f}m ago", "color": "green"}
+    if age_minutes < 12 * 60:
+        return {"status": "stale", "value": f"{age_minutes / 60:.1f}h ago", "color": "amber"}
+    return {"status": "dead", "value": f"{age_minutes / 60:.0f}h ago", "color": "red"}
+
+
+def today_llm_cost(conn: sqlite3.Connection, cap_usd: float | None = None) -> dict[str, Any]:
+    """Return today's LLM cost vs daily cap as ``{value, color, cost, cap}``.
+
+    Sums ``evolver_proposals.llm_cost_usd`` where ``created_at`` is at or
+    after the current UTC day's midnight. Default cap is
+    ``config.MAX_LLM_USD_PER_DAY`` when defined, else $5.00.
+
+    Color thresholds:
+      - cost <  0.5 * cap  → green
+      - cost <  cap        → amber
+      - cost >= cap        → red
+    """
+    from datetime import datetime, timezone
+    from bullbot import config
+
+    if cap_usd is None:
+        cap_usd = float(getattr(config, "MAX_LLM_USD_PER_DAY", 5.0))
+
+    midnight = int(datetime.now(tz=timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0).timestamp())
+    try:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(llm_cost_usd), 0) AS cost"
+            " FROM evolver_proposals WHERE created_at >= ?",
+            (midnight,),
+        ).fetchone()
+        cost = float(row["cost"])
+    except sqlite3.OperationalError:
+        # Older / partial schemas without the column or table
+        cost = 0.0
+
+    if cost >= cap_usd:
+        color = "red"
+    elif cost < 0.5 * cap_usd:
+        color = "green"
+    else:
+        color = "amber"
+
+    return {
+        "value": f"${cost:.2f} / ${cap_usd:.2f}",
+        "color": color,
+        "cost": cost,
+        "cap": cap_usd,
+    }
+
+
+def sweep_success_24h(conn: sqlite3.Connection, now: int | None = None) -> dict[str, Any]:
+    """Return last-24h sweep success rate as ``{value, color, successes, failures}``.
+
+    "Success" = a row in ``evolver_proposals`` with ``proposer_model`` starting
+    with ``"grid:"`` (the sweep code stores ``grid:baseline``). "Failure" = a
+    row in ``sweep_failures``. Both windowed to the last 24 hours.
+
+    No data in the window → ``{"value": "no sweeps yet", "color": "gray"}``.
+
+    Color thresholds on rate = successes / (successes + failures):
+      - rate >  0.95 → green
+      - rate >  0.80 → amber
+      - else         → red
+    """
+    import time as _time
+    now = int(now if now is not None else _time.time())
+    cutoff = now - 24 * 3600
+
+    try:
+        succ_row = conn.execute(
+            "SELECT COUNT(*) AS n FROM evolver_proposals"
+            " WHERE created_at >= ? AND proposer_model LIKE 'grid:%'",
+            (cutoff,),
+        ).fetchone()
+        successes = int(succ_row["n"])
+    except sqlite3.OperationalError:
+        successes = 0
+
+    try:
+        fail_row = conn.execute(
+            "SELECT COUNT(*) AS n FROM sweep_failures WHERE ts >= ?",
+            (cutoff,),
+        ).fetchone()
+        failures = int(fail_row["n"])
+    except sqlite3.OperationalError:
+        failures = 0
+
+    total = successes + failures
+    if total == 0:
+        return {
+            "value": "no sweeps yet",
+            "color": "gray",
+            "successes": 0,
+            "failures": 0,
+        }
+
+    rate = successes / total
+    if rate > 0.95:
+        color = "green"
+    elif rate > 0.80:
+        color = "amber"
+    else:
+        color = "red"
+    return {
+        "value": f"{rate:.0%}",
+        "color": color,
+        "successes": successes,
+        "failures": failures,
+    }
+
+
 def universe_with_edge(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Return ticker grid with edge metrics, in display order.
 
