@@ -39,11 +39,11 @@ def size_strategy(strategy, portfolio_value: float, max_loss_pct: float = 0.02
     else:
         per_unit_loss = strategy.max_loss_per_contract
         if per_unit_loss <= 0:
-            return SizingResult(0, per_unit_loss, False, "zero max loss per contract")
+            return SizingResult(0, 0.0, False, "max_loss_per_contract must be positive")
 
     units = floor(budget / per_unit_loss)
     if units <= 0:
-        return SizingResult(0, per_unit_loss, False, "smallest unit exceeds budget")
+        return SizingResult(0, 0.0, False, "smallest unit exceeds budget")
 
     worst = units * per_unit_loss
     return SizingResult(units, worst, True, f"sized for ${budget:.0f} budget")

@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import pytest
 from bullbot.risk.sizing import size_strategy, SizingResult
 
 
@@ -27,7 +26,7 @@ def test_equity_with_stop_loss_at_20pct():
     res = size_strategy(strat, portfolio_value=265_000, max_loss_pct=0.02)
     # max loss per share = 500 * 0.20 = $100. shares allowed = 5300 / 100 = 53
     assert res.size_units == 53
-    assert res.worst_case_loss == pytest.approx(5300, abs=10)
+    assert res.worst_case_loss == 5300.0
     assert res.passes_gate
 
 
@@ -37,6 +36,7 @@ def test_equity_with_no_stop_loss_sized_tiny():
     res = size_strategy(strat, portfolio_value=265_000, max_loss_pct=0.02)
     # no stop loss -> assume 100% loss possible -> shares = 5300 / 500 = 10
     assert res.size_units == 10
+    assert res.worst_case_loss == 5000.0
     assert res.passes_gate
 
 
@@ -45,4 +45,5 @@ def test_strategy_whose_min_contract_exceeds_cap():
     strat = FakeStrategy(class_name="LongCall", max_loss_per_contract=10_000)
     res = size_strategy(strat, portfolio_value=265_000, max_loss_pct=0.02)
     assert res.size_units == 0
+    assert res.worst_case_loss == 0.0
     assert not res.passes_gate
