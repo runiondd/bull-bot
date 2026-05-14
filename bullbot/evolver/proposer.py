@@ -24,6 +24,7 @@ from bullbot.config import (
     HISTORY_BLOCK_SIZE,
     PROPOSER_MAX_TOKENS,
 )
+from bullbot.evolver.sweep import StrategySpec
 from bullbot.strategies import registry
 from bullbot.strategies.base import StrategySnapshot
 
@@ -298,6 +299,31 @@ def _parse_json(raw: str) -> dict | None:
         if isinstance(data, dict):
             return data
     return None
+
+
+# ---------------------------------------------------------------------------
+# New-schema parser (Engine E.1)
+# ---------------------------------------------------------------------------
+
+
+def parse_proposer_response(payload: dict) -> StrategySpec:
+    """Parse an LLM proposer response into a ``StrategySpec``.
+
+    Expected payload keys: ``class`` (str), ``ranges`` (dict[str, list]),
+    ``max_loss_per_trade`` (float). Optional: ``stop_loss_pct`` (float | None),
+    ``rationale`` (str — silently dropped; recorded at proposal level, not spec level).
+
+    Raises
+    ------
+    KeyError
+        If a required field (``class``, ``ranges``, or ``max_loss_per_trade``) is absent.
+    """
+    return StrategySpec(
+        class_name=payload["class"],
+        ranges=payload["ranges"],
+        max_loss_per_trade=payload["max_loss_per_trade"],
+        stop_loss_pct=payload.get("stop_loss_pct"),
+    )
 
 
 # ---------------------------------------------------------------------------
