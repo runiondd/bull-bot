@@ -34,14 +34,17 @@ def test_three_crashes_within_an_hour_exits_loop(tmp_path, monkeypatch):
     """
     monkeypatch.setattr("bullbot.clock.is_market_open_now", lambda: True)
 
+    call_count = {"n": 0}
+
     def boom(*a, **kw):
+        call_count["n"] += 1
         raise RuntimeError("synthetic crash")
 
     monkeypatch.setattr("bullbot.scheduler.tick", boom)
 
     # The real run_loop builds an Anthropic client; bypass that by
     # injecting pre-built (None) clients.
-    from scripts.run_continuous import run_loop
+    from scripts.run_continuous import MAX_CRASHES, run_loop
 
     rc = run_loop(
         heartbeat_path=tmp_path / "hb.txt",
@@ -52,3 +55,6 @@ def test_three_crashes_within_an_hour_exits_loop(tmp_path, monkeypatch):
     )
 
     assert rc != 0
+    assert call_count["n"] == MAX_CRASHES, (
+        f"expected {MAX_CRASHES} crashes before back-off; got {call_count['n']}"
+    )

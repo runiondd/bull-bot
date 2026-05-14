@@ -1,4 +1,4 @@
-"""Continuous daemon: scheduler.tick on an hourly cadence with heartbeat.
+"""Continuous daemon: scheduler.tick on the bullbot.main cadence (60s in-market, 5s off-hours) with heartbeat.
 
 Companion to ``scripts/run_one_tick.py`` (the cron one-shot) and
 ``bullbot.main`` (the legacy infinite-loop entry point). This script is
@@ -135,15 +135,16 @@ def run_loop(
 
 
 def _build_clients() -> tuple[Any, Any, Any]:
-    """Construct the real DB / Anthropic / UW clients. Mirrors bullbot.main."""
+    """Construct the real DB + Anthropic clients. Mirrors scripts/run_one_tick.py."""
     import anthropic
-    from bullbot.data import fetchers
     from bullbot.db import connection as db_connection
 
     conn = db_connection.open_persistent_connection(config.DB_PATH)
     anthropic_client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-    uw_client = fetchers.UWHttpClient(api_key=config.UW_API_KEY)
-    return conn, anthropic_client, uw_client
+    # UW is canceled (2026-05-11) — pass None. evolver.iteration.run does not
+    # call any methods on data_client; the snapshot path reads from the DB.
+    data_client = None
+    return conn, anthropic_client, data_client
 
 
 def main(argv: list[str] | None = None) -> int:
