@@ -34,7 +34,10 @@ class Cell:
 
 def expand_spec(spec: StrategySpec, n_cells_max: int = 200) -> list[Cell]:
     """Return up to `n_cells_max` cells from the cartesian product of
-    `spec.ranges`. Keys are sorted alphabetically for deterministic order."""
+    `spec.ranges`. Keys are sorted alphabetically for deterministic order.
+    Returns an empty list when `n_cells_max < 1`."""
+    if n_cells_max < 1:
+        return []
     keys = sorted(spec.ranges.keys())
     cells: list[Cell] = []
     for combo in product(*(spec.ranges[k] for k in keys)):
