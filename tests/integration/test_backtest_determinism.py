@@ -93,3 +93,10 @@ def test_run_walkforward_is_deterministic(db_conn):
     assert m1.realized_pnl == m2.realized_pnl, (
         f"realized_pnl differs: {m1.realized_pnl} vs {m2.realized_pnl}"
     )
+    assert m1.max_bp_held == m2.max_bp_held, (
+        f"max_bp_held differs: {m1.max_bp_held} vs {m2.max_bp_held}"
+    )
+    assert m1.days_held == m2.days_held, f"days_held differs: {m1.days_held} vs {m2.days_held}"
+    assert m1.fold_metrics == m2.fold_metrics, (
+        f"fold_metrics differs: {m1.fold_metrics} vs {m2.fold_metrics}"
+    )
