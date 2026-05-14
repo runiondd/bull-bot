@@ -4,7 +4,8 @@ from bullbot import config
 
 def test_universe_contents():
     # Equity singles + indexes + promoted sector ETFs + HYG (credit) +
-    # Dan-requested SATS/VCX (2026-05-13).
+    # Dan-requested SATS/VCX (2026-05-13) +
+    # Dan-requested MSTR/BSOL/IBIT (2026-05-14, crypto-adjacent equity/ETFs).
     # Sector ETFs (2026-04-22) added to broaden evolver search space; they
     # remain in REGIME_DATA_TICKERS for regime feature synthesis as well.
     assert set(config.UNIVERSE) == {
@@ -13,6 +14,7 @@ def test_universe_contents():
         "XLK", "XLF", "XLE", "XLV", "XLI",
         "HYG",
         "SATS", "VCX",
+        "MSTR", "BSOL", "IBIT",
     }
     assert len(config.UNIVERSE) == len(set(config.UNIVERSE))  # no dupes
 

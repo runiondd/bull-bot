@@ -41,6 +41,12 @@ UNIVERSE: list[str] = [
     # bars) — walk-forward window of 504 bars is not satisfied yet, so the
     # bot will hold VCX in `discovering` until more data accumulates.
     "SATS", "VCX",
+    # Dan-requested 2026-05-14: crypto-adjacent equity exposure.
+    # MSTR = MicroStrategy (NASDAQ), Bitcoin-treasury proxy with a deep
+    # options chain. BSOL = Bitwise Solana ETF (NASDAQ). IBIT = iShares
+    # Bitcoin Trust (NASDAQ). All three are standard equities — no crypto
+    # data adapter needed; they trade like any other ETF/stock.
+    "MSTR", "BSOL", "IBIT",
 ]
 UNIVERSE_RETIRED: list[str] = []
 
@@ -99,6 +105,13 @@ TICKER_CATEGORY: dict[str, str] = {
     # VCX = Fundrise Innovation Fund (recently listed; very thin history).
     "SATS": "income",
     "VCX": "income",
+    # Dan-requested 2026-05-14. MSTR/BSOL/IBIT default to growth — these are
+    # high-volatility crypto-proxy assets that won't yield clean
+    # premium-collection strategies; LEAPS / directional plays are the
+    # natural fit. Recategorize to income if desired.
+    "MSTR": "growth",
+    "BSOL": "growth",
+    "IBIT": "growth",
 }
 
 GROWTH_FRAC_BULL = 0.40
@@ -222,6 +235,12 @@ TICKER_SECTOR_MAP: dict[str, str | None] = {
     # (regime_signals falls back to breadth_score).
     "SATS": "XLC",
     "VCX": None,
+    # Dan-requested 2026-05-14. Crypto-adjacent equities — no clean GICS
+    # sector analog. Bitcoin/Solana track their own asset class, not a
+    # traditional sector. regime_signals falls back to breadth_score.
+    "MSTR": None,
+    "BSOL": None,
+    "IBIT": None,
 }
 
 # Sector ETFs used for breadth calculation (all 11 GICS sectors)
