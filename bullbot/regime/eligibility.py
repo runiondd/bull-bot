@@ -14,6 +14,7 @@ Returns a menu the proposer can pick from:
 from __future__ import annotations
 
 import sqlite3
+import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -22,6 +23,7 @@ import numpy as np
 MIN_OBS_FOR_EXPLOIT = 5
 COLD_PRIOR_MEAN = 0.0
 COLD_PRIOR_VARIANCE = 1.0
+HALF_LIFE_DAYS = 180
 
 
 @dataclass(frozen=True)
@@ -29,35 +31,49 @@ class MenuEntry:
     class_name: str
     status: str  # "exploit" or "explore"
     posterior_mean: float
-    posterior_n: int
+    posterior_n: float
 
 
 @dataclass(frozen=True)
 class _CellStats:
-    n: int
+    n: float
     mean: float
     std: float
 
 
 def _cell_stats(conn: sqlite3.Connection, regime_label: str, class_name: str) -> _CellStats:
-    row = conn.execute(
-        "SELECT COUNT(ep.id) AS n, "
-        "       AVG(ep.score_a) AS mean, "
-        "       COALESCE("
-        "         SQRT(AVG(ep.score_a*ep.score_a) - AVG(ep.score_a)*AVG(ep.score_a)),"
-        "         0.0"
-        "       ) AS std "
+    """Weighted stats with exponential decay (half-life=HALF_LIFE_DAYS).
+
+    Each observation is weighted by 0.5 ** (age_days / HALF_LIFE_DAYS) so
+    stale observations fade naturally. n_effective is the sum of weights —
+    cells whose observations are all old fall below MIN_OBS_FOR_EXPLOIT and
+    revert to cold-start (explore) mode.
+    """
+    now_ts = int(time.time())
+    rows = conn.execute(
+        "SELECT ep.score_a, ep.created_at "
         "FROM evolver_proposals ep "
         "JOIN strategies s ON s.id = ep.strategy_id "
         "WHERE ep.regime_label = ? "
         "  AND s.class_name = ? "
         "  AND ep.score_a IS NOT NULL",
         (regime_label, class_name),
-    ).fetchone()
-    n = row[0] or 0
-    mean = row[1] if row[1] is not None else 0.0
-    std = row[2] if row[2] is not None else 0.0
-    return _CellStats(n=n, mean=mean, std=std)
+    ).fetchall()
+    if not rows:
+        return _CellStats(n=0.0, mean=0.0, std=0.0)
+    weights = []
+    scores = []
+    for score_a, created_at in rows:
+        age_days = (now_ts - created_at) / 86400.0
+        weights.append(0.5 ** (age_days / HALF_LIFE_DAYS))
+        scores.append(score_a)
+    total_w = sum(weights)
+    if total_w == 0:
+        return _CellStats(n=0.0, mean=0.0, std=0.0)
+    weighted_mean = sum(w * s for w, s in zip(weights, scores)) / total_w
+    weighted_var = sum(w * (s - weighted_mean) ** 2 for w, s in zip(weights, scores)) / total_w
+    weighted_std = weighted_var ** 0.5
+    return _CellStats(n=total_w, mean=weighted_mean, std=weighted_std)
 
 
 def menu_for(
