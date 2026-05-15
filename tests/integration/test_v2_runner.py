@@ -69,3 +69,38 @@ def test_run_once_is_idempotent(conn):
     runner.run_once(conn, asof_ts=1_700_000_000 + 250 * 86400)
     n = conn.execute("SELECT COUNT(*) FROM directional_signals").fetchone()[0]
     assert n == 2
+
+
+def test_run_once_also_dispatches_paper_trades(conn):
+    """The runner should both write signals AND open paper trades."""
+    # Add the trades table to the fixture
+    conn.executescript("""
+        CREATE TABLE v2_paper_trades (
+            id INTEGER PRIMARY KEY,
+            ticker TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            shares REAL NOT NULL,
+            entry_price REAL NOT NULL,
+            entry_ts INTEGER NOT NULL,
+            exit_price REAL,
+            exit_ts INTEGER,
+            pnl_realized REAL,
+            exit_reason TEXT,
+            signal_id INTEGER,
+            created_at INTEGER NOT NULL
+        );
+    """)
+
+    from bullbot.v2 import runner
+    runner.run_once(conn, asof_ts=1_700_000_000 + 250 * 86400)
+
+    # AAPL bullish high-conf → long position opened.
+    aapl = conn.execute("SELECT direction, shares FROM v2_paper_trades WHERE ticker='AAPL'").fetchone()
+    assert aapl is not None
+    assert aapl["direction"] == "long"
+    assert aapl["shares"] >= 1
+
+    # TSLA bearish high-conf → short position opened.
+    tsla = conn.execute("SELECT direction FROM v2_paper_trades WHERE ticker='TSLA'").fetchone()
+    assert tsla is not None
+    assert tsla["direction"] == "short"
