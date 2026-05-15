@@ -151,6 +151,7 @@ def build_user_prompt(
     snapshot: StrategySnapshot,
     history: list[dict],
     best_strategy_id: str | None,
+    per_trade_budget_usd: float | None = None,
 ) -> str:
     """Compose the full user-turn prompt."""
     history_block = build_history_block(history)
@@ -167,6 +168,12 @@ def build_user_prompt(
     if snapshot.ticker_brief:
         regime_block += f"\n=== Ticker Analysis ({snapshot.ticker}) ===\n{snapshot.ticker_brief}\n"
 
+    budget_line = (
+        f"Max loss per trade: ${per_trade_budget_usd:,.0f} (worst-case single-trade loss must fit this ceiling)\n"
+        if per_trade_budget_usd is not None
+        else ""
+    )
+
     return f"""=== Market Snapshot ===
 Ticker:     {snapshot.ticker}
 As-of Unix: {snapshot.asof_ts}
@@ -176,6 +183,8 @@ IV Rank:    {snapshot.iv_rank}
 Indicators: {json.dumps(snapshot.indicators)}
 ATM Greeks: {json.dumps(snapshot.atm_greeks)}
 {regime_block}
+=== Risk Budget ===
+{budget_line}
 === Evolver History ===
 {history_block}
 
