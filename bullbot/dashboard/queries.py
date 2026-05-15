@@ -483,7 +483,8 @@ def leaderboard_entries(
 
 
 def v2_signals(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Latest directional signal per ticker from the v2 directional_signals table.
+    """Latest directional signal per ticker, joined with the ticker's current
+    open paper trade (if any) and lifetime realized PnL.
 
     Returns one row per ticker (most recent asof_ts), already sorted by ticker.
     Empty list if the table doesn't exist (legacy DB) or has no rows yet.
@@ -502,18 +503,52 @@ def v2_signals(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         """).fetchall()
     except sqlite3.OperationalError:
         return []
-    return [
-        {
-            "ticker": r["ticker"],
+
+    # Per-ticker open position + lifetime realized PnL (best-effort — if the
+    # v2_paper_trades table doesn't exist yet, just leave those fields zero.)
+    try:
+        open_rows = conn.execute("""
+            SELECT ticker, direction, shares, entry_price, entry_ts
+            FROM v2_paper_trades
+            WHERE exit_ts IS NULL
+        """).fetchall()
+        open_by_ticker = {
+            r["ticker"]: {
+                "direction": r["direction"],
+                "shares": float(r["shares"]),
+                "entry_price": float(r["entry_price"]),
+                "entry_ts": int(r["entry_ts"]),
+            }
+            for r in open_rows
+        }
+        pnl_rows = conn.execute("""
+            SELECT ticker, COALESCE(SUM(pnl_realized), 0.0) AS pnl
+            FROM v2_paper_trades
+            WHERE exit_ts IS NOT NULL
+            GROUP BY ticker
+        """).fetchall()
+        pnl_by_ticker = {r["ticker"]: float(r["pnl"]) for r in pnl_rows}
+    except sqlite3.OperationalError:
+        open_by_ticker, pnl_by_ticker = {}, {}
+
+    out = []
+    for r in rows:
+        ticker = r["ticker"]
+        open_pos = open_by_ticker.get(ticker)
+        out.append({
+            "ticker": ticker,
             "asof_ts": int(r["asof_ts"]),
             "direction": r["direction"],
             "confidence": float(r["confidence"]),
             "horizon_days": int(r["horizon_days"]),
             "rationale": r["rationale"] or "",
             "rules_version": r["rules_version"],
-        }
-        for r in rows
-    ]
+            "open_direction": open_pos["direction"] if open_pos else None,
+            "open_shares": open_pos["shares"] if open_pos else 0.0,
+            "open_entry": open_pos["entry_price"] if open_pos else 0.0,
+            "realized_pnl": pnl_by_ticker.get(ticker, 0.0),
+        })
+    return out
 
 
 # ---------------------------------------------------------------------------
