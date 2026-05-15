@@ -73,6 +73,29 @@ def _apply_column_migrations(conn: sqlite3.Connection) -> None:
     if "best_cagr_oos" not in cols:
         conn.execute("ALTER TABLE ticker_state ADD COLUMN best_cagr_oos REAL")
 
+    # directional_signals — added 2026-05-15 for v2 decoupled architecture.
+    # One row per (ticker, asof_ts) produced by the rules-based underlying
+    # agent. `direction` is one of "bullish"/"bearish"/"chop"/"no_edge".
+    # `confidence` is 0.0–1.0. `horizon_days` is the trade window the signal
+    # is valid over. `rules_version` lets us A/B different rule packs.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS directional_signals (
+            id              INTEGER PRIMARY KEY,
+            ticker          TEXT    NOT NULL,
+            asof_ts         INTEGER NOT NULL,
+            direction       TEXT    NOT NULL,
+            confidence      REAL    NOT NULL,
+            horizon_days    INTEGER NOT NULL,
+            rationale       TEXT,
+            rules_version   TEXT    NOT NULL,
+            created_at      INTEGER NOT NULL,
+            UNIQUE (ticker, asof_ts, rules_version)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ds_ticker_ts ON directional_signals (ticker, asof_ts DESC)"
+    )
+
     # leaderboard view — added 2026-05-14 for strategy-search-engine
     # Phase C. Ranks proposals by score_a (annualized return on BP held),
     # gated by passed_gate=1 and trade_count >= 5 (statistical noise floor).

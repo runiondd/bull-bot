@@ -271,3 +271,15 @@ def test_migration_adds_best_cagr_oos_column():
 
     # Idempotent — second run must not raise.
     migrations.apply_schema(conn)
+
+
+def test_migration_creates_directional_signals_table():
+    conn = sqlite3.connect(":memory:")
+    migrations.apply_schema(conn)
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(directional_signals)")}
+    assert cols == {
+        "id", "ticker", "asof_ts", "direction", "confidence",
+        "horizon_days", "rationale", "rules_version", "created_at",
+    }, f"unexpected columns: {cols}"
+    # Idempotent
+    migrations.apply_schema(conn)
