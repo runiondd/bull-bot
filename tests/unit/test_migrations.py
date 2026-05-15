@@ -197,3 +197,77 @@ def test_apply_schema_migrates_legacy_evolver_proposals_missing_proposer_model()
     migrations.apply_schema(conn)
     cols_after = {r[1] for r in conn.execute("PRAGMA table_info(evolver_proposals)")}
     assert cols_after == cols
+
+
+def test_migration_adds_best_cagr_oos_column():
+    """ticker_state.best_cagr_oos column for growth-category tickers.
+
+    Splits the best_pf_oos overload — CAGR and profit-factor are distinct
+    metrics; storing CAGR in a column named "pf_oos" was misleading the
+    dashboard, nightly briefs, and research-health absurd-value detector.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+
+    # Pre-migration schema: no best_cagr_oos column yet.
+    # Include all required tables and columns so apply_schema doesn't error.
+    conn.execute("""
+        CREATE TABLE strategies (
+            id INTEGER PRIMARY KEY,
+            class_name TEXT NOT NULL,
+            class_version INTEGER NOT NULL,
+            params TEXT NOT NULL,
+            params_hash TEXT NOT NULL,
+            parent_id INTEGER,
+            created_at INTEGER NOT NULL,
+            UNIQUE (class_name, class_version, params_hash)
+        ) STRICT
+    """)
+    conn.execute("""
+        CREATE TABLE evolver_proposals (
+            id INTEGER PRIMARY KEY,
+            ticker TEXT NOT NULL,
+            iteration INTEGER NOT NULL,
+            strategy_id INTEGER NOT NULL REFERENCES strategies (id),
+            rationale TEXT,
+            llm_cost_usd REAL NOT NULL,
+            pf_is REAL,
+            pf_oos REAL,
+            sharpe_is REAL,
+            max_dd_pct REAL,
+            trade_count INTEGER,
+            regime_breakdown TEXT,
+            passed_gate INTEGER NOT NULL CHECK (passed_gate IN (0, 1)),
+            created_at INTEGER NOT NULL,
+            proposer_model TEXT,
+            UNIQUE (ticker, iteration, strategy_id)
+        ) STRICT
+    """)
+    conn.execute("""
+        CREATE TABLE ticker_state (
+            id INTEGER PRIMARY KEY,
+            ticker TEXT NOT NULL UNIQUE,
+            phase TEXT NOT NULL CHECK (phase IN ('discovering', 'paper_trial', 'live', 'no_edge', 'killed')),
+            iteration_count INTEGER NOT NULL DEFAULT 0,
+            plateau_counter INTEGER NOT NULL DEFAULT 0,
+            best_strategy_id INTEGER REFERENCES strategies (id),
+            best_pf_is REAL,
+            best_pf_oos REAL,
+            cumulative_llm_usd REAL NOT NULL DEFAULT 0.0,
+            paper_started_at INTEGER,
+            paper_trade_count INTEGER NOT NULL DEFAULT 0,
+            live_started_at INTEGER,
+            verdict_at INTEGER,
+            retired INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL
+        ) STRICT
+    """)
+
+    # Run migration — should ADD best_cagr_oos column.
+    migrations.apply_schema(conn)
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(ticker_state)")}
+    assert "best_cagr_oos" in cols, f"expected best_cagr_oos column; got {cols}"
+
+    # Idempotent — second run must not raise.
+    migrations.apply_schema(conn)

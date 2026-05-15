@@ -65,6 +65,14 @@ def _apply_column_migrations(conn: sqlite3.Connection) -> None:
     if "max_loss_per_trade" not in cols:
         conn.execute("ALTER TABLE evolver_proposals ADD COLUMN max_loss_per_trade REAL")
 
+    # ticker_state.best_cagr_oos — added 2026-05-15 to stop overloading best_pf_oos
+    # with CAGR for growth-category tickers. Profit-factor and CAGR mean different
+    # things; storing CAGR in a column named "pf_oos" was misleading the dashboard,
+    # nightly briefs, and the research-health absurd-value detector.
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(ticker_state)")}
+    if "best_cagr_oos" not in cols:
+        conn.execute("ALTER TABLE ticker_state ADD COLUMN best_cagr_oos REAL")
+
     # leaderboard view — added 2026-05-14 for strategy-search-engine
     # Phase C. Ranks proposals by score_a (annualized return on BP held),
     # gated by passed_gate=1 and trade_count >= 5 (statistical noise floor).
