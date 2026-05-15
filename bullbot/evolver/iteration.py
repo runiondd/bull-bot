@@ -212,12 +212,38 @@ def run(
 
     passed_gate = 1 if result.verdict == "edge_found" else 0
 
+    # Sizing + score so the proposal can appear on the leaderboard alongside
+    # sweep-path proposals. Mirrors bullbot/evolver/sweep.py:142-145.
+    from types import SimpleNamespace
+    from bullbot.leaderboard.scoring import compute_score_a
+    from bullbot.risk.sizing import size_strategy
+
+    portfolio_value = (
+        config.GROWTH_CAPITAL_USD if category == "growth" else config.INITIAL_CAPITAL_USD
+    )
+    sizing_input = SimpleNamespace(
+        class_name=proposal.class_name,
+        max_loss_per_contract=getattr(metrics, "max_loss_per_trade", 0.0) or 0.0,
+        is_equity=(proposal.class_name == "GrowthEquity"),
+    )
+    size = size_strategy(sizing_input, portfolio_value, max_loss_pct=0.02)
+    score_a = compute_score_a(
+        getattr(metrics, "realized_pnl", 0.0) or 0.0,
+        getattr(metrics, "max_bp_held", 0.0) or 0.0,
+        getattr(metrics, "days_held", 0.0) or 0.0,
+    )
+    # Honor the gate result from sizing — if it didn't pass, leave passed_gate=0.
+    if not size.passes_gate:
+        passed_gate = 0
+
     # 10. write proposal + update state
     conn.execute(
         "INSERT INTO evolver_proposals "
         "(ticker, iteration, strategy_id, rationale, llm_cost_usd, "
-        " pf_is, pf_oos, sharpe_is, max_dd_pct, trade_count, regime_breakdown, passed_gate, created_at, proposer_model) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " pf_is, pf_oos, sharpe_is, max_dd_pct, trade_count, regime_breakdown, "
+        " passed_gate, created_at, proposer_model, regime_label, score_a, "
+        " size_units, max_loss_per_trade) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             ticker, iteration_num, strategy_id, proposal.rationale,
             proposal.llm_cost_usd,
@@ -226,6 +252,10 @@ def run(
             json.dumps(metrics.regime_breakdown),
             passed_gate, now_ts,
             proposer_model,
+            getattr(snapshot, "regime", None),
+            score_a,
+            int(size.size_units),
+            float(sizing_input.max_loss_per_contract),
         ),
     )
 

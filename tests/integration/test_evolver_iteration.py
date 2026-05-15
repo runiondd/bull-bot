@@ -66,3 +66,26 @@ def test_dedup_short_circuit_fires_on_identical_proposal(db_conn, fake_anthropic
     n_proposals = db_conn.execute("SELECT COUNT(*) FROM evolver_proposals").fetchone()[0]
     assert n_strategies == 1
     assert n_proposals == 2
+
+
+def test_llm_proposal_writes_score_a_and_size_units(db_conn, fake_anthropic):
+    """LLM-pathed proposals must write score_a/size_units/max_loss_per_trade
+    so they're eligible for the leaderboard view."""
+    _seed_ticker_state(db_conn, ticker="SPY", phase="discovering")
+    _seed_bars(db_conn, ticker="SPY", n_days=500)
+    fake_anthropic.queue_response(json.dumps({
+        "class_name": "PutCreditSpread",
+        "params": {"dte": 14, "short_delta": 0.25, "width": 5, "iv_rank_min": 50},
+        "rationale": "leaderboard-eligibility test",
+    }))
+
+    iteration.run(conn=db_conn, anthropic_client=fake_anthropic, data_client=None, ticker="SPY")
+
+    row = db_conn.execute(
+        "SELECT score_a, size_units, max_loss_per_trade FROM evolver_proposals "
+        "WHERE ticker='SPY' ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    assert row is not None, "iteration did not write a proposal"
+    assert row["score_a"] is not None, "score_a was NULL — proposal can't reach leaderboard"
+    assert row["size_units"] is not None, "size_units was NULL"
+    assert row["max_loss_per_trade"] is not None, "max_loss_per_trade was NULL"
