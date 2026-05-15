@@ -42,7 +42,13 @@ def test_rearm_requires_ticker_and_flag(db_conn, monkeypatch):
 
 
 def test_run_daily_refreshes_bars_then_ticks(db_conn, monkeypatch):
-    """`run-daily` must refresh bars for tracked tickers, then call scheduler.tick once."""
+    """`run-daily` must refresh bars for tracked tickers, then call scheduler.tick once.
+
+    `discover_tracked_tickers` now returns the union of bars ∪ config.UNIVERSE ∪
+    non-retired ticker_state, so a brand-new UNIVERSE ticker gets bootstrapped on
+    daily refresh instead of being silently skipped. SPY and TSLA must still be
+    in the refresh list, and tick must follow.
+    """
     db_conn.execute(
         "INSERT INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
         "VALUES ('SPY', '1d', 1, 1, 1, 1, 1, 0)"
@@ -69,4 +75,8 @@ def test_run_daily_refreshes_bars_then_ticks(db_conn, monkeypatch):
 
     rc = cli.main(["run-daily"])
     assert rc == 0
-    assert calls == [("refresh", ("SPY", "TSLA")), ("tick", ())]
+    assert len(calls) == 2
+    assert calls[0][0] == "refresh"
+    refreshed = set(calls[0][1])
+    assert {"SPY", "TSLA"}.issubset(refreshed)
+    assert calls[1] == ("tick", ())
