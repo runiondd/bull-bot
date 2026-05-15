@@ -108,6 +108,20 @@ def cmd_run_daily(args):
     return 0
 
 
+def cmd_run_v2_daily(args):
+    """v2 daily entry point — emit DirectionalSignal per UNIVERSE ticker."""
+    from bullbot.v2 import runner
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    log = logging.getLogger("bullbot.cli.run_v2_daily")
+
+    conn = _open_db()
+    n = runner.run_once(conn)
+    log.info("run-v2-daily: wrote %d signals", n)
+    conn.commit()
+    return 0
+
+
 def cmd_rearm(args):
     if not args.acknowledge_risk:
         print("Error: --acknowledge-risk flag required", file=sys.stderr)
@@ -175,6 +189,8 @@ def main(argv=None):
     p_rearm.set_defaults(fn=cmd_rearm)
     p_run_daily = sub.add_parser("run-daily", help="Refresh bars and run one scheduler tick.")
     p_run_daily.set_defaults(fn=cmd_run_daily)
+    p_v2_daily = sub.add_parser("run-v2-daily", help="v2 daily underlying-signal pass over UNIVERSE.")
+    p_v2_daily.set_defaults(fn=cmd_run_v2_daily)
     p_ab = sub.add_parser("ab-report", help="Print Phase 2 A/B comparison (Opus vs Sonnet) by proposer_model.")
     p_ab.add_argument("--days", type=int, default=30, help="How many days back to include (default: 30).")
     p_ab.set_defaults(fn=cmd_ab_report)

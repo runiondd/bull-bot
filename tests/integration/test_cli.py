@@ -80,3 +80,19 @@ def test_run_daily_refreshes_bars_then_ticks(db_conn, monkeypatch):
     refreshed = set(calls[0][1])
     assert {"SPY", "TSLA"}.issubset(refreshed)
     assert calls[1] == ("tick", ())
+
+
+def test_run_v2_daily_calls_runner(db_conn, monkeypatch):
+    """`run-v2-daily` must invoke v2.runner.run_once and return its count."""
+    calls: list[int] = []
+
+    def fake_run_once(conn, asof_ts=None):
+        calls.append(1)
+        return 7
+
+    monkeypatch.setattr("bullbot.cli._open_db", lambda: db_conn)
+    monkeypatch.setattr("bullbot.v2.runner.run_once", fake_run_once)
+
+    rc = cli.main(["run-v2-daily"])
+    assert rc == 0
+    assert calls == [1]
