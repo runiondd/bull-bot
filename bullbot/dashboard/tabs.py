@@ -710,6 +710,69 @@ def leaderboard_tab(data: dict) -> str:
 </div>"""
 
 
+# ---- v2 Signals tab ---------------------------------------------------------
+
+def v2_signals_tab(data: dict) -> str:
+    """V2 Signals tab: latest directional signal per ticker from the rules-based agent.
+
+    Reads ``data['v2_signals']`` — a list of dicts produced by
+    ``queries.v2_signals``. Renders as a single table card with one row per
+    ticker, color-coded by direction. Empty state when no signals exist yet.
+    """
+    entries = data.get("v2_signals", [])
+    if not entries:
+        return ('<div class="card"><div class="card-body" '
+                'style="color: var(--fg-2); font-size: 12px; padding: 14px">'
+                'No v2 signals yet &mdash; run-v2-daily has not fired.'
+                '</div></div>')
+
+    def _row(e: dict) -> str:
+        ticker = html.escape(str(e.get("ticker", "")))
+        direction = html.escape(str(e.get("direction", "")))
+        rationale = html.escape(str(e.get("rationale", "")))
+        confidence = e.get("confidence", 0.0) or 0.0
+        horizon = e.get("horizon_days", 0) or 0
+        asof_ts = e.get("asof_ts", 0) or 0
+        from datetime import datetime, timezone
+        asof = (datetime.fromtimestamp(asof_ts, tz=timezone.utc).strftime("%Y-%m-%d")
+                if asof_ts else "—")
+
+        dir_cls = {
+            "bullish": "pos",
+            "bearish": "neg",
+            "chop": "muted",
+            "no_edge": "muted",
+        }.get(direction, "muted")
+
+        return f"""<tr>
+  <td><strong>{ticker}</strong></td>
+  <td class="{dir_cls}"><strong>{direction}</strong></td>
+  <td class="num t-right">{confidence:.2f}</td>
+  <td class="num t-right">{horizon}d</td>
+  <td style="font-size: 11.5px">{rationale}</td>
+  <td class="muted" style="font-size: 11.5px">{asof}</td>
+</tr>"""
+
+    rows = "".join(_row(e) for e in entries)
+    return f"""<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Ticker</th>
+        <th>Direction</th>
+        <th class="t-right">Confidence</th>
+        <th class="t-right">Horizon</th>
+        <th>Rationale</th>
+        <th>As of</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows}
+    </tbody>
+  </table>
+</div>"""
+
+
 # ---- Inventory tab ----------------------------------------------------------
 
 def inventory_tab(data: dict) -> str:

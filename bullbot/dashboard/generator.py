@@ -28,6 +28,7 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
     costs = queries.cost_breakdown(conn)
     inventory = queries.long_inventory_summary(conn)
     leaderboard = queries.leaderboard_entries(conn)
+    v2_signals = queries.v2_signals(conn)
 
     metrics = {**summary, **extended}
     total_pnl = metrics.get("realized_pnl", 0) + metrics.get("unrealized_pnl", 0)
@@ -61,6 +62,7 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
         "costs": adapted_costs,
         "inventory": adapted_inventory,
         "leaderboard": leaderboard,
+        "v2_signals": v2_signals,
     }
 
     # Health data — pulled separately because health module owns the brief
@@ -79,6 +81,7 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
         "health": sum(1 for c in data["health"]["checks"] if c.get("status") != "ok"),
         "inventory": len(adapted_inventory),
         "leaderboard": len(leaderboard),
+        "v2_signals": len(v2_signals),
     }
 
     # G.3: operational status tiles (daemon heartbeat / today's LLM cost /
@@ -102,6 +105,7 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
         ("positions", tabs.positions_tab),
         ("evolver", tabs.evolver_tab),
         ("universe", tabs.universe_tab),
+        ("v2_signals", tabs.v2_signals_tab),
         ("leaderboard", tabs.leaderboard_tab),
         ("transactions", tabs.transactions_tab),
         ("health", tabs.health_tab),

@@ -482,6 +482,40 @@ def leaderboard_entries(
     ]
 
 
+def v2_signals(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Latest directional signal per ticker from the v2 directional_signals table.
+
+    Returns one row per ticker (most recent asof_ts), already sorted by ticker.
+    Empty list if the table doesn't exist (legacy DB) or has no rows yet.
+    """
+    try:
+        rows = conn.execute("""
+            SELECT ds.ticker, ds.asof_ts, ds.direction, ds.confidence,
+                   ds.horizon_days, ds.rationale, ds.rules_version
+            FROM directional_signals ds
+            INNER JOIN (
+                SELECT ticker, MAX(asof_ts) AS max_ts
+                FROM directional_signals
+                GROUP BY ticker
+            ) latest ON ds.ticker = latest.ticker AND ds.asof_ts = latest.max_ts
+            ORDER BY ds.ticker
+        """).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [
+        {
+            "ticker": r["ticker"],
+            "asof_ts": int(r["asof_ts"]),
+            "direction": r["direction"],
+            "confidence": float(r["confidence"]),
+            "horizon_days": int(r["horizon_days"]),
+            "rationale": r["rationale"] or "",
+            "rules_version": r["rules_version"],
+        }
+        for r in rows
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Status-tile helpers (G.3)
 # ---------------------------------------------------------------------------
