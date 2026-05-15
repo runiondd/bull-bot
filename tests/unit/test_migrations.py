@@ -283,3 +283,15 @@ def test_migration_creates_directional_signals_table():
     }, f"unexpected columns: {cols}"
     # Idempotent
     migrations.apply_schema(conn)
+
+
+def test_migration_creates_v2_paper_trades_table():
+    conn = sqlite3.connect(":memory:")
+    migrations.apply_schema(conn)
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(v2_paper_trades)")}
+    assert cols == {
+        "id", "ticker", "direction", "shares", "entry_price", "entry_ts",
+        "exit_price", "exit_ts", "pnl_realized", "exit_reason",
+        "signal_id", "created_at",
+    }, f"unexpected columns: {cols}"
+    migrations.apply_schema(conn)

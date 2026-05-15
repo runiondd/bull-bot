@@ -96,6 +96,31 @@ def _apply_column_migrations(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_ds_ticker_ts ON directional_signals (ticker, asof_ts DESC)"
     )
 
+    # v2_paper_trades — added 2026-05-15 for Phase B of the v2 architecture.
+    # One row per open-and-close cycle of a paper-traded share position
+    # entered from a v2 DirectionalSignal. `direction` is 'long' or 'short'.
+    # `exit_*` are NULL until the trade closes. `signal_id` ties the entry
+    # back to the signal row that triggered it (audit trail).
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS v2_paper_trades (
+            id              INTEGER PRIMARY KEY,
+            ticker          TEXT    NOT NULL,
+            direction       TEXT    NOT NULL,
+            shares          REAL    NOT NULL,
+            entry_price     REAL    NOT NULL,
+            entry_ts        INTEGER NOT NULL,
+            exit_price      REAL,
+            exit_ts         INTEGER,
+            pnl_realized    REAL,
+            exit_reason     TEXT,
+            signal_id       INTEGER REFERENCES directional_signals (id),
+            created_at      INTEGER NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_v2pt_open ON v2_paper_trades (ticker, exit_ts)"
+    )
+
     # leaderboard view — added 2026-05-14 for strategy-search-engine
     # Phase C. Ranks proposals by score_a (annualized return on BP held),
     # gated by passed_gate=1 and trade_count >= 5 (statistical noise floor).
