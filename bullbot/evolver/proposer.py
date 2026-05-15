@@ -25,6 +25,7 @@ from bullbot.config import (
     PROPOSER_MAX_TOKENS,
 )
 from bullbot.evolver.sweep import StrategySpec
+from bullbot.risk.budget import per_trade_budget_usd
 from bullbot.strategies import registry
 from bullbot.strategies.base import StrategySnapshot
 
@@ -433,7 +434,8 @@ def propose(
     system_prompt = _SYSTEM_PROMPT.format(
         strategy_names=", ".join(registry.list_all_names())
     ) + guidance
-    user_prompt = build_user_prompt(snapshot, history, best_strategy_id)
+    budget = per_trade_budget_usd(category=category)
+    user_prompt = build_user_prompt(snapshot, history, best_strategy_id, per_trade_budget_usd=budget)
 
     # Build cached/uncached system arg per config
     if bb_config.PROPOSER_CACHE_ENABLED:
