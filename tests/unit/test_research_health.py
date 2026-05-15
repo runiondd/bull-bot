@@ -117,6 +117,7 @@ def _make_conn_with_ticker_state() -> sqlite3.Connection:
             best_strategy_id INTEGER,
             best_pf_is REAL,
             best_pf_oos REAL,
+            best_cagr_oos REAL,
             cumulative_llm_usd REAL DEFAULT 0,
             paper_started_at INTEGER,
             paper_trade_count INTEGER DEFAULT 0,
@@ -461,6 +462,40 @@ def test_to_html_escapes_user_content():
     html = brief.to_html()
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
+
+
+# --- check_pf_inf: growth ticker uses best_cagr_oos -------------------------
+
+
+def test_health_absurd_detector_uses_cagr_column_for_growth(conn=None):
+    """Growth tickers' absurd-CAGR values must be flagged from best_cagr_oos,
+    not from best_pf_oos which now only holds profit-factor.
+    Uses 2.5e10 for best_cagr_oos so it exceeds HEALTH_PF_OOS_ABSURD_THRESHOLD (1e10)."""
+    import time as _time
+
+    c = sqlite3.connect(":memory:")
+    c.row_factory = sqlite3.Row
+    c.executescript("""
+        CREATE TABLE IF NOT EXISTS ticker_state (
+            id INTEGER PRIMARY KEY, ticker TEXT UNIQUE NOT NULL,
+            phase TEXT NOT NULL, best_pf_oos REAL, best_cagr_oos REAL,
+            best_strategy_id INTEGER, retired INTEGER DEFAULT 0,
+            updated_at INTEGER NOT NULL
+        );
+    """)
+    # MSTR: small pf_oos (sensible profit-factor), absurd CAGR (artifact > 1e10) — must flag.
+    c.execute(
+        "INSERT INTO ticker_state (ticker, phase, best_pf_oos, best_cagr_oos, updated_at) "
+        "VALUES ('MSTR','no_edge', 2.5, 2.5e10, ?)",
+        (int(_time.time()),),
+    )
+    issues = H.check_pf_inf(c)
+    # The growth ticker MSTR should be flagged because best_cagr_oos is absurd,
+    # not because best_pf_oos is (it's a sensible 2.5).
+    assert not issues.passed, f"expected MSTR flagged; got passed=True findings={issues.findings}"
+    assert any("MSTR" in f for f in issues.findings), (
+        f"expected MSTR in findings; got {issues.findings}"
+    )
 
 
 # --- write_latest_brief ------------------------------------------------------

@@ -126,23 +126,30 @@ def check_data_shortfalls(conn: sqlite3.Connection) -> CheckResult:
 
 
 def check_pf_inf(conn: sqlite3.Connection) -> CheckResult:
-    """Flag ticker_state rows whose best_pf_oos is IEEE inf or absurdly large."""
+    """Flag ticker_state rows whose best_pf_oos or best_cagr_oos is IEEE inf or absurdly large."""
     threshold = config.HEALTH_PF_OOS_ABSURD_THRESHOLD
     rows = conn.execute(
-        "SELECT ticker, best_pf_oos, best_strategy_id "
+        "SELECT ticker, best_pf_oos, best_cagr_oos, best_strategy_id "
         "FROM ticker_state "
-        "WHERE best_pf_oos IS NOT NULL AND best_pf_oos > ?",
-        (threshold,),
+        "WHERE (best_pf_oos IS NOT NULL AND best_pf_oos > ?) "
+        "   OR (best_cagr_oos IS NOT NULL AND best_cagr_oos > ?)",
+        (threshold, threshold),
     ).fetchall()
     findings: list[str] = []
     for row in rows:
         ticker = row[0]
-        pf = row[1]
-        strat_id = row[2]
-        pf_str = "inf" if math.isinf(pf) else f"{pf:.4g}"
+        pf_v = row[1]
+        cagr_v = row[2]
+        strat_id = row[3]
         sid_str = f"strategy {strat_id}" if strat_id is not None else "no strategy_id"
+        if pf_v is not None and pf_v > threshold:
+            val_str = "inf" if math.isinf(pf_v) else f"{pf_v:.4g}"
+            metric = f"best_pf_oos={val_str}"
+        else:
+            val_str = "inf" if math.isinf(cagr_v) else f"{cagr_v:.4g}"
+            metric = f"best_cagr_oos={val_str}"
         findings.append(
-            f"{ticker}: best_pf_oos={pf_str} ({sid_str}) — "
+            f"{ticker}: {metric} ({sid_str}) — "
             f"likely sample-size artifact or /0"
         )
     return CheckResult(

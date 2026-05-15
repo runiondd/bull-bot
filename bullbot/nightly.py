@@ -147,7 +147,7 @@ def _write_nightly_report(conn: sqlite3.Connection) -> None:
 
     # Gather summary data
     ticker_rows = conn.execute(
-        "SELECT ticker, phase, paper_trade_count, best_pf_is, best_pf_oos "
+        "SELECT ticker, phase, paper_trade_count, best_pf_is, best_pf_oos, best_cagr_oos "
         "FROM ticker_state ORDER BY ticker"
     ).fetchall()
 
@@ -165,13 +165,18 @@ def _write_nightly_report(conn: sqlite3.Connection) -> None:
         f"",
         f"## Ticker States",
         f"",
-        f"| Ticker | Phase | Trades | PF IS | PF OOS |",
-        f"|--------|-------|--------|-------|--------|",
+        f"| Ticker | Phase | Trades | PF IS | PF OOS / CAGR OOS |",
+        f"|--------|-------|--------|-------|-------------------|",
     ]
     for r in ticker_rows:
+        category = config.TICKER_CATEGORY.get(r['ticker'], 'income')
+        if category == 'growth':
+            oos_val = r['best_cagr_oos'] or 'n/a'
+        else:
+            oos_val = r['best_pf_oos'] or 'n/a'
         lines.append(
             f"| {r['ticker']} | {r['phase']} | {r['paper_trade_count']} "
-            f"| {r['best_pf_is'] or 'n/a'} | {r['best_pf_oos'] or 'n/a'} |"
+            f"| {r['best_pf_is'] or 'n/a'} | {oos_val} |"
         )
 
     lines += [

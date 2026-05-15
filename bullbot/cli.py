@@ -27,14 +27,26 @@ def cmd_status(args):
     kill_active = kill_switch.is_tripped(conn)
     print(f"Bull-Bot status — kill_switch_active={kill_active}")
     rows = conn.execute(
-        "SELECT ticker, phase, iteration_count, best_pf_oos, cumulative_llm_usd, retired "
+        "SELECT ticker, phase, iteration_count, best_pf_oos, best_cagr_oos, "
+        "cumulative_llm_usd, retired "
         "FROM ticker_state ORDER BY ticker"
     ).fetchall()
     if not rows:
         print("(no tickers in database)")
         return 0
     for r in rows:
-        print(f"  {r['ticker']:<8} {r['phase']:<15} iters={r['iteration_count']}")
+        category = config.TICKER_CATEGORY.get(r['ticker'], 'income')
+        if category == 'growth':
+            oos_label = "cagr_oos"
+            oos_val = r['best_cagr_oos']
+        else:
+            oos_label = "pf_oos"
+            oos_val = r['best_pf_oos']
+        oos_str = f"{oos_val:.4g}" if oos_val is not None else "n/a"
+        print(
+            f"  {r['ticker']:<8} {r['phase']:<15} iters={r['iteration_count']}"
+            f"  {oos_label}={oos_str}"
+        )
     print(f"\nTotal LLM spend: ${cost_ledger.cumulative_llm_usd(conn):.2f}")
     return 0
 
