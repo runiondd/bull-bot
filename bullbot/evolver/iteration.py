@@ -206,6 +206,7 @@ def run(
             self.iteration_count = s["iteration_count"]
             self.plateau_counter = s["plateau_counter"]
             self.best_pf_oos = s["best_pf_oos"] or 0.0
+            self.best_cagr_oos = s["best_cagr_oos"] or 0.0
 
     result = plateau.classify(_State(state), metrics, category=category)
 
@@ -232,6 +233,7 @@ def run(
         "iteration_count": iteration_num,
         "plateau_counter": result.new_plateau_counter,
         "best_pf_oos": result.new_best_pf_oos,
+        "best_cagr_oos": result.new_best_cagr_oos,
         "cumulative_llm_usd": state["cumulative_llm_usd"] + proposal.llm_cost_usd,
         "updated_at": now_ts,
     }

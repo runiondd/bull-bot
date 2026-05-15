@@ -22,6 +22,7 @@ class _StateLike(Protocol):
     iteration_count: int
     plateau_counter: int
     best_pf_oos: float
+    best_cagr_oos: float
 
 
 class _MetricsLike(Protocol):
@@ -40,6 +41,7 @@ class ClassifyResult:
     improved: bool
     new_plateau_counter: int
     new_best_pf_oos: float
+    new_best_cagr_oos: float = 0.0
 
 
 def classify(state: _StateLike, metrics: _MetricsLike, category: str = "income") -> ClassifyResult:
@@ -118,14 +120,15 @@ def _classify_growth(state: _StateLike, metrics: _MetricsLike) -> ClassifyResult
     if passed_gate:
         return ClassifyResult(
             verdict="edge_found",
-            improved=cagr_val > state.best_pf_oos + config.PLATEAU_IMPROVEMENT_MIN,
+            improved=cagr_val > state.best_cagr_oos + config.PLATEAU_IMPROVEMENT_MIN,
             new_plateau_counter=0,
-            new_best_pf_oos=max(state.best_pf_oos, cagr_val),
+            new_best_pf_oos=state.best_pf_oos,
+            new_best_cagr_oos=max(state.best_cagr_oos, cagr_val),
         )
 
     # Plateau detection uses CAGR as the improvement metric for growth
-    improved = cagr_val > state.best_pf_oos + config.PLATEAU_IMPROVEMENT_MIN
-    new_best = max(state.best_pf_oos, cagr_val)
+    improved = cagr_val > state.best_cagr_oos + config.PLATEAU_IMPROVEMENT_MIN
+    new_best = max(state.best_cagr_oos, cagr_val)
 
     if improved:
         new_plateau = 0
@@ -137,7 +140,8 @@ def _classify_growth(state: _StateLike, metrics: _MetricsLike) -> ClassifyResult
             verdict="no_edge",
             improved=improved,
             new_plateau_counter=new_plateau,
-            new_best_pf_oos=new_best,
+            new_best_pf_oos=state.best_pf_oos,
+            new_best_cagr_oos=new_best,
         )
 
     if new_plateau >= config.PLATEAU_COUNTER_MAX:
@@ -145,12 +149,14 @@ def _classify_growth(state: _StateLike, metrics: _MetricsLike) -> ClassifyResult
             verdict="no_edge",
             improved=improved,
             new_plateau_counter=new_plateau,
-            new_best_pf_oos=new_best,
+            new_best_pf_oos=state.best_pf_oos,
+            new_best_cagr_oos=new_best,
         )
 
     return ClassifyResult(
         verdict="continue",
         improved=improved,
         new_plateau_counter=new_plateau,
-        new_best_pf_oos=new_best,
+        new_best_pf_oos=state.best_pf_oos,
+        new_best_cagr_oos=new_best,
     )

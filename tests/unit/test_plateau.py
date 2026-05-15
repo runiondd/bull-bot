@@ -14,6 +14,7 @@ class FakeState:
     iteration_count: int = 0
     plateau_counter: int = 0
     best_pf_oos: float = 0.0
+    best_cagr_oos: float = 0.0
 
 
 @dataclass
@@ -150,5 +151,28 @@ def test_growth_uses_cagr_for_plateau_tracking():
     state = FakeState(iteration_count=3, plateau_counter=0, best_pf_oos=0.15)
     metrics = FakeGrowthMetrics(cagr_oos=0.30, sortino_oos=0.5, trade_count=3)
     result = plateau.classify(state, metrics, category="growth")
-    assert result.new_best_pf_oos == 0.30
+    assert result.new_best_cagr_oos == 0.30
     assert result.improved is True
+
+
+def test_growth_classify_returns_cagr_in_new_field():
+    from types import SimpleNamespace
+    from bullbot.evolver import plateau
+
+    state = SimpleNamespace(
+        best_pf_oos=0.0,
+        best_cagr_oos=0.0,
+        plateau_counter=0,
+        iteration_count=0,
+    )
+    metrics = SimpleNamespace(
+        pf_oos=10.0,                # capped PF, irrelevant for growth gate
+        cagr_oos=0.35,              # 35% CAGR — passes growth gate
+        sortino_oos=1.5,            # passes
+        max_dd_pct=0.20,            # passes
+        trade_count=8,              # passes
+    )
+    result = plateau.classify(state, metrics, category="growth")
+    assert result.new_best_cagr_oos == 0.35
+    # best_pf_oos must NOT be set to the CAGR value any more
+    assert result.new_best_pf_oos == 0.0
