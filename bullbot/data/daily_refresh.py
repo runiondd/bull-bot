@@ -16,6 +16,7 @@ from typing import Callable
 
 import pandas as pd
 
+from bullbot import config
 from bullbot.data.schemas import Bar
 
 log = logging.getLogger("bullbot.daily_refresh")
@@ -96,13 +97,17 @@ def refresh_all_bars(
     conn: sqlite3.Connection,
     tickers: list[str],
     period: str = "1mo",
+    bootstrap_period: str = "5y",
     fetch_fn: FetchFn | None = None,
     commit: bool = True,
 ) -> dict[str, int]:
     """Refresh daily bars for each ticker in `tickers`, upserting into `bars`.
 
-    `period` is passed through to `fetch_bars_yahoo` — defaults to "1mo"
-    for daily jobs; use "5y" or "max" for backfills.
+    `period` is the window for tickers that already have bars (default "1mo"
+    for daily incremental refresh). `bootstrap_period` is used instead for
+    tickers with zero bars in the DB, so that newly-added tickers pick up
+    enough history (default "5y") to clear the evolver's 60-bar snapshot
+    threshold on first run.
 
     `commit=True` (the default) calls `conn.commit()` after all upserts
     succeed, matching the daily-job use case where this function owns the
@@ -115,8 +120,12 @@ def refresh_all_bars(
     """
     result: dict[str, int] = {}
     for ticker in tickers:
+        has_existing = conn.execute(
+            "SELECT 1 FROM bars WHERE ticker=? LIMIT 1", (ticker,)
+        ).fetchone() is not None
+        effective_period = period if has_existing else bootstrap_period
         try:
-            bars = fetch_bars_yahoo(ticker, period=period, fetch_fn=fetch_fn)
+            bars = fetch_bars_yahoo(ticker, period=effective_period, fetch_fn=fetch_fn)
         except Exception as exc:
             log.warning("daily_refresh: %s failed: %s", ticker, exc)
             result[ticker] = 0
@@ -129,13 +138,37 @@ def refresh_all_bars(
                 (b.ticker, b.timeframe, b.ts, b.open, b.high, b.low, b.close, b.volume),
             )
         result[ticker] = len(bars)
-        log.info("daily_refresh: %s -> %d bars", ticker, len(bars))
+        log.info(
+            "daily_refresh: %s -> %d bars (period=%s)",
+            ticker,
+            len(bars),
+            effective_period,
+        )
     if commit:
         conn.commit()
     return result
 
 
 def discover_tracked_tickers(conn: sqlite3.Connection) -> list[str]:
-    """Return all distinct tickers that already have at least one row in `bars`."""
-    rows = conn.execute("SELECT DISTINCT ticker FROM bars").fetchall()
-    return [r[0] for r in rows]
+    """Return every ticker that should be refreshed daily.
+
+    Union of three sources:
+      - tickers that already have rows in `bars`
+      - tickers in `config.UNIVERSE` (newly added but not yet bootstrapped)
+      - non-retired tickers in `ticker_state` (auto-inserted by the scheduler)
+
+    Without this union, a ticker added to UNIVERSE never got an initial
+    backfill — the evolver would spin on it forever with "Not enough bar data".
+    """
+    have_bars = {
+        r[0] for r in conn.execute("SELECT DISTINCT ticker FROM bars").fetchall()
+    }
+    in_universe = set(config.UNIVERSE)
+    try:
+        state_rows = conn.execute(
+            "SELECT ticker FROM ticker_state WHERE retired=0"
+        ).fetchall()
+        in_state = {r[0] for r in state_rows}
+    except sqlite3.OperationalError:
+        in_state = set()
+    return sorted(have_bars | in_universe | in_state)

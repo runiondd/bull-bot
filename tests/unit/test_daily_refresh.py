@@ -28,6 +28,13 @@ def conn():
             volume INTEGER NOT NULL,
             UNIQUE(ticker, timeframe, ts)
         );
+        CREATE TABLE ticker_state (
+            id INTEGER PRIMARY KEY,
+            ticker TEXT NOT NULL UNIQUE,
+            phase TEXT NOT NULL,
+            retired INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL
+        );
         """
     )
     return c
@@ -147,7 +154,8 @@ def test_refresh_all_bars_passes_period(conn):
     assert seen == ["5y"]
 
 
-def test_discover_tracked_tickers_returns_distinct(conn):
+def test_discover_tracked_tickers_returns_distinct(conn, monkeypatch):
+    monkeypatch.setattr("bullbot.config.UNIVERSE", [])
     conn.executemany(
         "INSERT INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
         "VALUES (?, '1d', ?, 1, 1, 1, 1, 0)",
@@ -160,3 +168,46 @@ def test_discover_tracked_tickers_returns_distinct(conn):
     )
     tickers = daily_refresh.discover_tracked_tickers(conn)
     assert sorted(tickers) == ["NVDA", "SPY", "TSLA"]
+
+
+def test_discover_includes_universe_tickers_even_without_bars(conn, monkeypatch):
+    """New tickers added to config.UNIVERSE must be refreshable before they have bars."""
+    monkeypatch.setattr("bullbot.config.UNIVERSE", ["MSTR", "VCX", "AAPL"])
+    conn.execute(
+        "INSERT INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
+        "VALUES ('AAPL', '1d', 1, 1, 1, 1, 1, 0)"
+    )
+    tickers = daily_refresh.discover_tracked_tickers(conn)
+    assert sorted(tickers) == ["AAPL", "MSTR", "VCX"]
+
+
+def test_discover_includes_ticker_state_rows(conn, monkeypatch):
+    """Tickers the evolver auto-inserted into ticker_state should still get refreshed."""
+    monkeypatch.setattr("bullbot.config.UNIVERSE", [])
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, updated_at) VALUES ('BSOL','discovering',1)"
+    )
+    conn.execute(
+        "INSERT INTO ticker_state (ticker, phase, retired, updated_at) "
+        "VALUES ('OLD','no_edge',1,1)"
+    )
+    tickers = daily_refresh.discover_tracked_tickers(conn)
+    assert sorted(tickers) == ["BSOL"]
+
+
+def test_refresh_all_bars_uses_bootstrap_period_for_empty_ticker(conn):
+    """Tickers with no existing bars must request a longer history window."""
+    seen: dict[str, str] = {}
+
+    def fake_yf(symbol: str, period: str = "1mo") -> pd.DataFrame:
+        seen[symbol] = period
+        return _fake_df([("2026-04-15", 150.0, 155.0, 149.5, 154.0, 1_000_000)])
+
+    conn.execute(
+        "INSERT INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
+        "VALUES ('AAPL', '1d', 1, 1, 1, 1, 1, 0)"
+    )
+    daily_refresh.refresh_all_bars(
+        conn, ["AAPL", "NEW"], period="1mo", bootstrap_period="5y", fetch_fn=fake_yf
+    )
+    assert seen == {"AAPL": "1mo", "NEW": "5y"}
