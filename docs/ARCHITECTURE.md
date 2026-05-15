@@ -47,7 +47,7 @@ The human interface is Claude chat: Dan talks to Claude on his main machine to q
 │                                                                            │
 │  ┌─────────────────────┐  ┌─────────────────────┐                          │
 │  │ Data Fetchers       │  │ Historical Backfill │                          │
-│  │ (Polygon + UW,      │  │ (per-timeframe      │                          │
+│  │ (Polygon only,      │  │ (per-timeframe      │                          │
 │  │  live delta)        │  │  deep history)      │                          │
 │  └─────────┬───────────┘  └──────────┬──────────┘                          │
 │            │                         │                                     │
@@ -55,7 +55,7 @@ The human interface is Claude chat: Dan talks to Claude on his main machine to q
 │           ┌─────────────────────────────────┐                              │
 │           │         Data Cache              │                              │
 │           │  SQLite (hot) + Parquet (cold)  │                              │
-│           │  bars • options • flow • IV     │                              │
+│           │  bars • options • IV            │                              │
 │           │  regime_labels                  │                              │
 │           └───────────┬─────────────────────┘                              │
 │                       │                                                    │
@@ -201,7 +201,6 @@ All tables use WAL mode for concurrent reads and coarse-grained writes. PKs and 
 | `bars`          | OHLCV bars, all timeframes, all tickers    | (ticker, timeframe, bar_ts), O, H, L, C, V, VWAP, trans  |
 | `options_chain` | Options contract metadata snapshots        | (underlying, expiry, strike, right, snapshot_ts)         |
 | `options_quote` | Per-contract bid/ask/greeks snapshots      | (contract_id, snapshot_ts), bid, ask, iv, greeks         |
-| `flow_alerts`   | UW unusual flow prints                     | (ticker, alert_id, ts)                                   |
 | `iv_rank`       | Daily IV rank per ticker                   | (ticker, date), iv_rank, iv_percentile                   |
 | `earnings`      | Upcoming + historical earnings calendar    | (ticker, announce_date, session)                         |
 | `halts`         | Trading halts                              | (ticker, halt_start, halt_end, reason)                   |
@@ -297,7 +296,7 @@ All agents are Python functions that:
 3. Parse the response as JSON against a Pydantic schema
 4. Retry on failure, log the call to `agent_runs`, return the validated result
 
-Agents **do not** make their own API calls to Polygon/UW directly. They receive pre-fetched data from the data layer. This keeps agents fast, cheap, and deterministic to test — and critical for backtest replay consistency.
+Agents **do not** make their own API calls to Polygon directly. They receive pre-fetched data from the data layer. This keeps agents fast, cheap, and deterministic to test — and critical for backtest replay consistency.
 
 Research agent outputs are cached by `(strategy_version, ticker, timeframe, bar_ts)` so that `BACKTEST_CHEAP` mode can look them up instead of re-calling the LLM. Decision agent outputs are similarly cached by `(strategy_version, decision_ts)`.
 
@@ -526,7 +525,7 @@ The initial problem: when we first turn the system on, there's no live history t
 
 **Bootstrap sequence:**
 
-1. **T-week backfill:** populate `bars`, `options_chain`/`options_quote` (to the extent UW/Polygon history allows), `iv_rank`, `earnings`, `regime_labels` for the full per-timeframe depths.
+1. **T-week backfill:** populate `bars`, `options_chain`/`options_quote` (to the extent Polygon history allows), `iv_rank`, `earnings`, `regime_labels` for the full per-timeframe depths.
 2. **Initial FULL backtest:** run `engine.step()` in FULL mode across the history, generating historical signals and decisions. This populates `signals` with `origin=bootstrap_replay` and creates the first backtest baseline for the current config.
 3. **Baseline metrics frozen:** the baseline metrics from this run become the benchmark for every future evolver proposal.
 4. **Live mode starts:** cron enables live runs. Faithfulness checks start after 3 weeks of live data.
