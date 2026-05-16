@@ -261,3 +261,109 @@ def test_close_position_rejects_unknown_close_reason(conn):
             close_reason="for_fun",
             leg_exit_prices={pos.legs[0].id: 5.00},
         )
+
+
+def test_record_event_inserts_v2_position_events_row(conn):
+    pos = _open_simple(conn, ticker="AAPL", intent="accumulate", structure_kind="csp")
+    positions.record_event(
+        conn,
+        position_id=pos.id,
+        event_kind="expired_worthless",
+        occurred_ts=1_700_002_000,
+        source_leg_id=pos.legs[0].id,
+        linked_position_id=None,
+        original_credit_per_contract=None,
+        notes="OTM at expiry",
+    )
+    rows = conn.execute("SELECT * FROM v2_position_events").fetchall()
+    assert len(rows) == 1
+    assert rows[0]["event_kind"] == "expired_worthless"
+    assert rows[0]["position_id"] == pos.id
+    assert rows[0]["source_leg_id"] == pos.legs[0].id
+    assert rows[0]["notes"] == "OTM at expiry"
+
+
+def test_assign_csp_to_shares_creates_linked_shares_with_net_basis(conn):
+    """Grok review Tier 1 Finding 1: assigned CSP -> linked shares carry
+    net_basis = strike - (csp_credit_per_contract / 100). $2.00 credit on a
+    $100 strike -> shares.net_basis = $98.00. Subsequent P&L computed against
+    $98.00, not $100.00."""
+    csp_leg = positions.OptionLeg(
+        action="sell", kind="put", strike=100.0,
+        expiry="2026-06-19", qty=1, entry_price=2.00,
+    )
+    csp = positions.open_position(
+        conn,
+        ticker="AAPL", intent="accumulate", structure_kind="csp",
+        legs=[csp_leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, assignment_acceptable=True,
+        nearest_leg_expiry_dte=30, rationale="lower basis",
+    )
+
+    shares_pos = positions.assign_csp_to_shares(
+        conn,
+        csp_position=csp,
+        csp_leg_id=csp_leg.id,
+        original_credit_per_contract=200.0,  # $2.00 x 100
+        occurred_ts=1_700_500_000,
+        intent="accumulate",
+        profit_target_price=None,
+        stop_price=96.00,
+        time_stop_dte=None,
+        nearest_leg_expiry_dte=None,
+        rationale="post-assignment shares, signal still bullish",
+    )
+
+    assert shares_pos.structure_kind == "long_shares"
+    assert shares_pos.linked_position_id == csp.id
+    assert len(shares_pos.legs) == 1
+    share_leg = shares_pos.legs[0]
+    assert share_leg.kind == "share"
+    assert share_leg.action == "buy"
+    assert share_leg.qty == 100
+    assert share_leg.entry_price == 100.0
+    assert share_leg.net_basis == 98.0
+    assert share_leg.effective_basis() == 98.0
+
+    csp_reloaded = positions.load_position(conn, csp.id)
+    assert csp_reloaded.closed_ts == 1_700_500_000
+    assert csp_reloaded.close_reason == "assigned"
+
+    event_row = conn.execute(
+        "SELECT * FROM v2_position_events WHERE position_id=?", (csp.id,)
+    ).fetchone()
+    assert event_row["event_kind"] == "assigned"
+    assert event_row["linked_position_id"] == shares_pos.id
+    assert event_row["original_credit_per_contract"] == 200.0
+    assert event_row["source_leg_id"] == csp_leg.id
+
+
+def test_assign_csp_handles_multi_contract_csp(conn):
+    """3-contract CSP, $1.50 credit each -> 300 shares with net_basis = strike - 1.50."""
+    csp_leg = positions.OptionLeg(
+        action="sell", kind="put", strike=50.0,
+        expiry="2026-06-19", qty=3, entry_price=1.50,
+    )
+    csp = positions.open_position(
+        conn,
+        ticker="F", intent="accumulate", structure_kind="csp",
+        legs=[csp_leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, assignment_acceptable=True,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+    shares_pos = positions.assign_csp_to_shares(
+        conn,
+        csp_position=csp,
+        csp_leg_id=csp_leg.id,
+        original_credit_per_contract=150.0,
+        occurred_ts=1_700_500_000,
+        intent="accumulate",
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, nearest_leg_expiry_dte=None, rationale="",
+    )
+    share_leg = shares_pos.legs[0]
+    assert share_leg.qty == 300
+    assert share_leg.entry_price == 50.0
+    assert share_leg.net_basis == pytest.approx(48.50)

@@ -247,3 +247,118 @@ def close_position(
             (exit_price, leg_id),
         )
     conn.commit()
+
+
+VALID_EVENT_KINDS = (
+    "assigned", "called_away", "exercised", "expired_worthless",
+)
+
+
+def record_event(
+    conn: sqlite3.Connection,
+    *,
+    position_id: int,
+    event_kind: str,
+    occurred_ts: int,
+    source_leg_id: int | None,
+    linked_position_id: int | None,
+    original_credit_per_contract: float | None,
+    notes: str | None,
+) -> int:
+    """Insert a v2_position_events row. Returns the event id.
+
+    The trigger conditions for these events live in exits.py (C.3). This
+    helper only persists the row when something else asks it to.
+    """
+    if event_kind not in VALID_EVENT_KINDS:
+        raise ValueError(
+            f"event_kind must be one of {VALID_EVENT_KINDS}; got {event_kind!r}"
+        )
+    cur = conn.execute(
+        "INSERT INTO v2_position_events "
+        "(position_id, linked_position_id, event_kind, occurred_ts, "
+        "source_leg_id, original_credit_per_contract, notes) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            position_id, linked_position_id, event_kind, occurred_ts,
+            source_leg_id, original_credit_per_contract, notes,
+        ),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def assign_csp_to_shares(
+    conn: sqlite3.Connection,
+    *,
+    csp_position: Position,
+    csp_leg_id: int,
+    original_credit_per_contract: float,
+    occurred_ts: int,
+    intent: str,
+    profit_target_price: float | None,
+    stop_price: float | None,
+    time_stop_dte: int | None,
+    nearest_leg_expiry_dte: int | None,
+    rationale: str,
+) -> Position:
+    """Simulate CSP assignment: close the CSP, open a linked long-shares
+    position with the basis-adjusted net_basis, and record the event.
+
+    Per Grok review Tier 1 Finding 1:
+        net_basis = strike - (original_credit_per_contract / 100)
+        share_qty = csp_qty * 100
+
+    The post-assignment exit plan (intent, target, stop, dte) is supplied by
+    the caller — derivation from the current signal lives in
+    exits.compute_post_assignment_exit_plan in C.3.
+    """
+    csp_leg = next((leg for leg in csp_position.legs if leg.id == csp_leg_id), None)
+    if csp_leg is None or csp_leg.kind != "put" or csp_leg.action != "sell":
+        raise ValueError("csp_leg_id must reference a short-put leg on csp_position")
+    strike = csp_leg.strike
+    csp_qty = csp_leg.qty
+
+    net_basis = strike - (original_credit_per_contract / 100.0)
+    share_qty = csp_qty * 100
+
+    share_leg = OptionLeg(
+        action="buy", kind="share", strike=None, expiry=None,
+        qty=share_qty, entry_price=strike, net_basis=net_basis,
+    )
+    shares_pos = open_position(
+        conn,
+        ticker=csp_position.ticker,
+        intent=intent,
+        structure_kind="long_shares",
+        legs=[share_leg],
+        opened_ts=occurred_ts,
+        profit_target_price=profit_target_price,
+        stop_price=stop_price,
+        time_stop_dte=time_stop_dte,
+        assignment_acceptable=False,
+        nearest_leg_expiry_dte=nearest_leg_expiry_dte,
+        rationale=rationale,
+        linked_position_id=csp_position.id,
+    )
+
+    close_position(
+        conn,
+        position_id=csp_position.id,
+        closed_ts=occurred_ts,
+        close_reason="assigned",
+        leg_exit_prices={csp_leg_id: 0.0},
+    )
+
+    record_event(
+        conn,
+        position_id=csp_position.id,
+        event_kind="assigned",
+        occurred_ts=occurred_ts,
+        source_leg_id=csp_leg_id,
+        linked_position_id=shares_pos.id,
+        original_credit_per_contract=original_credit_per_contract,
+        notes=None,
+    )
+
+    return shares_pos
