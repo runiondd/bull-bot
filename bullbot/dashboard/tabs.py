@@ -747,14 +747,21 @@ def v2_signals_tab(data: dict) -> str:
         open_direction = e.get("open_direction")
         open_shares = e.get("open_shares", 0.0) or 0.0
         open_entry = e.get("open_entry", 0.0) or 0.0
+        current_price = e.get("current_price", 0.0) or 0.0
+        unrealized_pnl = e.get("unrealized_pnl", 0.0) or 0.0
         realized_pnl = e.get("realized_pnl", 0.0) or 0.0
         if open_direction:
             position_cell = (
                 f'<span class="{"pos" if open_direction == "long" else "neg"}">'
                 f'{html.escape(open_direction)} {open_shares:.0f}@${open_entry:.2f}</span>'
             )
+            current_cell = f"${current_price:.2f}" if current_price > 0 else "—"
+            unr_cls = "pos" if unrealized_pnl > 0 else ("neg" if unrealized_pnl < 0 else "muted")
+            unr_cell = f'<span class="{unr_cls}">${unrealized_pnl:+,.2f}</span>'
         else:
             position_cell = '<span class="muted">—</span>'
+            current_cell = '<span class="muted">—</span>'
+            unr_cell = '<span class="muted">—</span>'
         pnl_cls = "pos" if realized_pnl > 0 else ("neg" if realized_pnl < 0 else "muted")
         pnl_cell = f'<span class="{pnl_cls}">${realized_pnl:+,.2f}</span>'
 
@@ -764,6 +771,8 @@ def v2_signals_tab(data: dict) -> str:
   <td class="num t-right">{confidence:.2f}</td>
   <td class="num t-right">{horizon}d</td>
   <td>{position_cell}</td>
+  <td class="num t-right">{current_cell}</td>
+  <td class="num t-right">{unr_cell}</td>
   <td class="num t-right">{pnl_cell}</td>
   <td style="font-size: 11.5px">{rationale}</td>
   <td class="muted" style="font-size: 11.5px">{asof}</td>
@@ -779,6 +788,8 @@ def v2_signals_tab(data: dict) -> str:
         <th class="t-right">Confidence</th>
         <th class="t-right">Horizon</th>
         <th>Position</th>
+        <th class="t-right">Current</th>
+        <th class="t-right">Unrealized</th>
         <th class="t-right">Realized PnL</th>
         <th>Rationale</th>
         <th>As of</th>

@@ -117,10 +117,57 @@ def test_v2_signals_tab_renders_position_and_pnl(conn):
             "ticker": "AAPL", "asof_ts": 1_700_000_000, "direction": "bullish",
             "confidence": 0.65, "horizon_days": 30, "rationale": "x", "rules_version": "v1",
             "open_direction": "long", "open_shares": 3.0, "open_entry": 298.0,
+            "current_price": 310.0, "unrealized_pnl": 36.0,
             "realized_pnl": 50.0,
         },
     ]}
     html_out = tabs.v2_signals_tab(data)
     assert "long" in html_out
     assert "298" in html_out
-    assert "50" in html_out  # PnL
+    assert "50" in html_out
+    assert "310" in html_out  # current price
+    assert "36" in html_out  # unrealized PnL
+
+
+def test_v2_signals_query_computes_unrealized_pnl(conn):
+    """Mark-to-market: queries.v2_signals must compute unrealized_pnl using
+    the latest bar close vs entry price for the open position."""
+    conn.executescript("""
+        CREATE TABLE bars (
+            id INTEGER PRIMARY KEY,
+            ticker TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            ts INTEGER NOT NULL,
+            open REAL NOT NULL,
+            high REAL NOT NULL,
+            low REAL NOT NULL,
+            close REAL NOT NULL,
+            volume REAL NOT NULL,
+            UNIQUE(ticker, timeframe, ts)
+        );
+        CREATE TABLE v2_paper_trades (
+            id INTEGER PRIMARY KEY,
+            ticker TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            shares REAL NOT NULL,
+            entry_price REAL NOT NULL,
+            entry_ts INTEGER NOT NULL,
+            exit_price REAL,
+            exit_ts INTEGER,
+            pnl_realized REAL,
+            exit_reason TEXT,
+            signal_id INTEGER,
+            created_at INTEGER NOT NULL
+        );
+    """)
+    # Open AAPL long 10 shares @ $100. Latest bar close $110. Unrealized = +$100.
+    conn.execute("INSERT INTO bars (ticker, timeframe, ts, open, high, low, close, volume) "
+                 "VALUES ('AAPL', '1d', 1, 100, 110, 99, 110, 1)")
+    conn.execute("INSERT INTO v2_paper_trades (ticker, direction, shares, entry_price, "
+                 "entry_ts, signal_id, created_at) VALUES ('AAPL','long',10,100,1,NULL,1)")
+    rows = queries.v2_signals(conn)
+    aapl = next(r for r in rows if r["ticker"] == "AAPL")
+    assert aapl["current_price"] == pytest.approx(110.0)
+    assert aapl["unrealized_pnl"] == pytest.approx(100.0)
+
+

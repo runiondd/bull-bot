@@ -21,12 +21,14 @@ from bullbot.v2 import trades
 from bullbot.v2.signals import DirectionalSignal
 
 CONFIDENCE_THRESHOLD = 0.50
+STOP_LOSS_PCT = 0.10  # close any open position whose loss exceeds 10% of entry
 
 ACTION_KINDS = (
     "opened",
     "held",
     "flipped",
     "closed_to_flat",
+    "stopped_out",
     "skipped_low_confidence",
     "skipped_budget",
     "skipped_no_action",
@@ -64,6 +66,24 @@ def dispatch(
     """Decide and execute one paper-trade action for a single ticker."""
     ticker = signal.ticker
     open_pos = trades.open_position_for(conn, ticker)
+
+    # 0. Stop-loss takes precedence over any signal-based action. If the
+    # open position's loss exceeds STOP_LOSS_PCT of entry, close immediately
+    # and do not re-enter this tick — wait for the next signal cycle.
+    if open_pos is not None and spot > 0:
+        if open_pos.direction == "long":
+            loss_pct = (spot - open_pos.entry_price) / open_pos.entry_price
+        else:  # short
+            loss_pct = (open_pos.entry_price - spot) / open_pos.entry_price
+        if loss_pct <= -STOP_LOSS_PCT:
+            trades.close_trade(
+                conn, trade_id=open_pos.id, exit_price=spot, exit_ts=now_ts,
+                exit_reason="stop_loss",
+            )
+            return TraderAction(
+                kind="stopped_out", ticker=ticker,
+                reason=f"loss {loss_pct:.1%} <= -{STOP_LOSS_PCT:.0%}",
+            )
 
     # 1. Close-to-flat path: chop / no_edge always closes any open position.
     if signal.direction in ("chop", "no_edge"):

@@ -116,14 +116,15 @@ def test_bullish_signal_holds_existing_long(conn):
 def test_bullish_signal_flips_existing_short(conn):
     trades.open_trade(conn, ticker="AAPL", direction="short", shares=10, entry_price=100, entry_ts=1, signal_id=None)
     sig = _sig("bullish", 0.8)
+    # Spot $105 = -5% on short, below stop-loss threshold (-10%) so flip path runs.
     action = trader.dispatch(
-        conn, signal=sig, signal_id=99, spot=110.0, budget_usd=1000.0, now_ts=1_700_086_400,
+        conn, signal=sig, signal_id=99, spot=105.0, budget_usd=1000.0, now_ts=1_700_086_400,
     )
     assert action.kind == "flipped"
     pos = trades.open_position_for(conn, "AAPL")
     assert pos.direction == "long"
-    # Short closed at $110 entry $100 → -$100 PnL (loss).
-    assert trades.total_realized_pnl(conn) == pytest.approx(-100.0)
+    # Short closed at $105, entry $100 → -$50 PnL (loss on short).
+    assert trades.total_realized_pnl(conn) == pytest.approx(-50.0)
 
 
 def test_budget_too_small_to_buy_one_share(conn):
@@ -133,3 +134,35 @@ def test_budget_too_small_to_buy_one_share(conn):
     )
     assert action.kind == "skipped_budget"
     assert trades.open_position_for(conn, "AAPL") is None
+
+
+def test_stop_loss_triggers_close_on_long(conn):
+    """Long position with loss > STOP_LOSS_PCT must close even with bullish signal."""
+    trades.open_trade(conn, ticker="AAPL", direction="long", shares=10, entry_price=100, entry_ts=1, signal_id=None)
+    sig = _sig("bullish", 0.8)  # signal still says hold, but loss is too big
+    action = trader.dispatch(
+        conn, signal=sig, signal_id=99, spot=85.0, budget_usd=1000.0, now_ts=1_700_086_400,
+    )
+    assert action.kind == "stopped_out"
+    assert trades.open_position_for(conn, "AAPL") is None
+    assert trades.total_realized_pnl(conn) == pytest.approx(-150.0)  # (85-100)*10
+
+
+def test_stop_loss_triggers_on_short(conn):
+    """Short with loss > STOP_LOSS_PCT (i.e. price rose >= 10%) must close."""
+    trades.open_trade(conn, ticker="AAPL", direction="short", shares=10, entry_price=100, entry_ts=1, signal_id=None)
+    sig = _sig("bearish", 0.8)
+    action = trader.dispatch(
+        conn, signal=sig, signal_id=99, spot=115.0, budget_usd=1000.0, now_ts=1_700_086_400,
+    )
+    assert action.kind == "stopped_out"
+
+
+def test_small_loss_does_not_trigger_stop(conn):
+    """Loss below threshold = no stop-out."""
+    trades.open_trade(conn, ticker="AAPL", direction="long", shares=10, entry_price=100, entry_ts=1, signal_id=None)
+    sig = _sig("bullish", 0.8)
+    action = trader.dispatch(
+        conn, signal=sig, signal_id=99, spot=95.0, budget_usd=1000.0, now_ts=1_700_086_400,
+    )
+    assert action.kind == "held"  # -5% < 10% threshold, hold

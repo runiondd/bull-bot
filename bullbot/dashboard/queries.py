@@ -531,10 +531,34 @@ def v2_signals(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     except sqlite3.OperationalError:
         open_by_ticker, pnl_by_ticker = {}, {}
 
+    # Latest bar close per ticker — for mark-to-market on open positions.
+    latest_close: dict[str, float] = {}
+    try:
+        bar_rows = conn.execute("""
+            SELECT b.ticker, b.close
+            FROM bars b
+            INNER JOIN (
+                SELECT ticker, MAX(ts) AS max_ts FROM bars
+                WHERE timeframe='1d' GROUP BY ticker
+            ) latest ON b.ticker=latest.ticker AND b.ts=latest.max_ts
+            WHERE b.timeframe='1d'
+        """).fetchall()
+        latest_close = {r["ticker"]: float(r["close"]) for r in bar_rows}
+    except sqlite3.OperationalError:
+        latest_close = {}
+
     out = []
     for r in rows:
         ticker = r["ticker"]
         open_pos = open_by_ticker.get(ticker)
+        spot = latest_close.get(ticker, 0.0)
+        if open_pos and spot > 0:
+            if open_pos["direction"] == "long":
+                unrealized = (spot - open_pos["entry_price"]) * open_pos["shares"]
+            else:
+                unrealized = (open_pos["entry_price"] - spot) * open_pos["shares"]
+        else:
+            unrealized = 0.0
         out.append({
             "ticker": ticker,
             "asof_ts": int(r["asof_ts"]),
@@ -546,6 +570,8 @@ def v2_signals(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             "open_direction": open_pos["direction"] if open_pos else None,
             "open_shares": open_pos["shares"] if open_pos else 0.0,
             "open_entry": open_pos["entry_price"] if open_pos else 0.0,
+            "current_price": spot,
+            "unrealized_pnl": unrealized,
             "realized_pnl": pnl_by_ticker.get(ticker, 0.0),
         })
     return out
