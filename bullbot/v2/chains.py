@@ -94,3 +94,39 @@ def _iv_proxy(*, underlying_bars: list, vix_bars: list) -> float:
         multiplier = vix_today / vix_baseline if vix_baseline > 0 else 1.0
     iv = rv * multiplier
     return max(IV_PROXY_MIN, min(IV_PROXY_MAX, iv))
+
+
+from datetime import date
+
+from bullbot.data.synthetic_chain import bs_price
+from bullbot.v2.positions import OptionLeg
+
+try:
+    from bullbot.config import RISK_FREE_RATE as _RISK_FREE_RATE  # type: ignore[attr-defined]
+except (ImportError, AttributeError):
+    _RISK_FREE_RATE = 0.045  # 4.5% — matches v1 synthetic chain default
+
+
+def _price_leg_bs(
+    *,
+    leg: OptionLeg,
+    spot: float,
+    iv: float,
+    today: date,
+) -> float:
+    """Per-share Black-Scholes price for one OptionLeg.
+
+    Returns spot for share legs (no time value), max(intrinsic, 0) for expired
+    options, and the standard BS formula otherwise. The returned value is in
+    per-share dollars — callers multiply by qty * 100 (for option legs) or
+    qty (for share legs) to get position-level dollar value.
+    """
+    if leg.kind == "share":
+        return spot
+    expiry_date = date.fromisoformat(leg.expiry)
+    t_years = max(0.0, (expiry_date - today).days / 365.0)
+    bs_kind = "C" if leg.kind == "call" else "P"
+    return bs_price(
+        spot=spot, strike=leg.strike, t_years=t_years,
+        vol=iv, r=_RISK_FREE_RATE, kind=bs_kind,
+    )

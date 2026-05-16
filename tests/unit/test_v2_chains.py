@@ -160,3 +160,78 @@ def test_iv_proxy_falls_back_to_default_when_vix_bars_too_few():
     iv = chains._iv_proxy(underlying_bars=underlying_bars, vix_bars=vix_bars)
     # Multiplier defaults to 1.0; result is the realized vol of the alternating pattern.
     assert 0.05 < iv < 1.0
+
+
+def _call_leg(strike: float, expiry: str = "2026-12-18", qty: int = 1) -> OptionLeg:
+    return OptionLeg(
+        action="buy", kind="call", strike=strike,
+        expiry=expiry, qty=qty, entry_price=0.0,
+    )
+
+
+def _put_leg(strike: float, expiry: str = "2026-12-18", qty: int = 1) -> OptionLeg:
+    return OptionLeg(
+        action="buy", kind="put", strike=strike,
+        expiry=expiry, qty=qty, entry_price=0.0,
+    )
+
+
+def test_price_leg_bs_atm_call_with_30pct_iv_and_one_year_dte():
+    """ATM call, S=K=100, T=1yr, IV=0.30, r=0.045
+    -> textbook BS price ≈ 13.99 (per share)."""
+    leg = _call_leg(strike=100.0, expiry="2027-05-17")
+    today = date(2026, 5, 17)
+    price = chains._price_leg_bs(leg=leg, spot=100.0, iv=0.30, today=today)
+    assert price == pytest.approx(13.99, abs=0.10)
+
+
+def test_price_leg_bs_atm_put_with_30pct_iv_and_one_year_dte():
+    """ATM put, S=K=100, T=1yr, IV=0.30, r=0.045
+    -> textbook BS price ≈ 9.59 (per share, via put-call parity:
+    C - P = S - K*exp(-r*T) = 100 - 95.60 = 4.40, so P = 13.99 - 4.40 = 9.59)."""
+    leg = _put_leg(strike=100.0, expiry="2027-05-17")
+    today = date(2026, 5, 17)
+    price = chains._price_leg_bs(leg=leg, spot=100.0, iv=0.30, today=today)
+    assert price == pytest.approx(9.59, abs=0.10)
+
+
+def test_price_leg_bs_itm_call_intrinsic_floor_on_expiry_day():
+    """Call deep ITM on expiry day: BS returns max(spot - strike, 0)."""
+    leg = _call_leg(strike=90.0, expiry="2026-05-17")
+    today = date(2026, 5, 17)
+    price = chains._price_leg_bs(leg=leg, spot=100.0, iv=0.30, today=today)
+    assert price == pytest.approx(10.0)
+
+
+def test_price_leg_bs_otm_call_intrinsic_floor_on_expiry_day():
+    leg = _call_leg(strike=110.0, expiry="2026-05-17")
+    today = date(2026, 5, 17)
+    price = chains._price_leg_bs(leg=leg, spot=100.0, iv=0.30, today=today)
+    assert price == 0.0
+
+
+def test_price_leg_bs_otm_put_intrinsic_floor_on_expiry_day():
+    leg = _put_leg(strike=90.0, expiry="2026-05-17")
+    today = date(2026, 5, 17)
+    price = chains._price_leg_bs(leg=leg, spot=100.0, iv=0.30, today=today)
+    assert price == 0.0
+
+
+def test_price_leg_bs_share_leg_returns_spot():
+    """Share legs have no time value, no strike — BS doesn't apply.
+    The helper returns spot so the caller can sum leg values uniformly."""
+    leg = OptionLeg(
+        action="buy", kind="share", strike=None, expiry=None,
+        qty=100, entry_price=100.0,
+    )
+    today = date(2026, 5, 17)
+    price = chains._price_leg_bs(leg=leg, spot=99.50, iv=0.30, today=today)
+    assert price == 99.50
+
+
+def test_price_leg_bs_negative_dte_returns_intrinsic():
+    """Expiry already passed — BS returns intrinsic value."""
+    leg = _call_leg(strike=100.0, expiry="2026-04-01")
+    today = date(2026, 5, 17)
+    price = chains._price_leg_bs(leg=leg, spot=105.0, iv=0.30, today=today)
+    assert price == pytest.approx(5.0)
