@@ -259,3 +259,119 @@ def fetch_chain(
         return None
 
     return Chain(ticker=ticker, asof_ts=asof_ts, quotes=quotes)
+
+
+SNAPSHOT_FRESHNESS_SECONDS = 86_400  # 24h — Grok review Tier 1 Finding B
+
+
+def _load_bars(conn: sqlite3.Connection, ticker: str, asof_ts: int, limit: int = 100):
+    """Load daily bars for `ticker` with ts <= asof_ts, oldest-first. Same
+    shape as bullbot.v2.runner._load_bars (intentionally duplicated to keep
+    this module self-contained — runner._load_bars is a private symbol)."""
+    from types import SimpleNamespace
+    rows = conn.execute(
+        "SELECT ts, open, high, low, close, volume FROM bars "
+        "WHERE ticker=? AND timeframe='1d' AND ts<=? "
+        "ORDER BY ts DESC LIMIT ?",
+        (ticker, asof_ts, limit),
+    ).fetchall()
+    bars = [
+        SimpleNamespace(
+            ts=r["ts"], open=r["open"], high=r["high"],
+            low=r["low"], close=r["close"], volume=r["volume"],
+        )
+        for r in rows
+    ]
+    bars.reverse()
+    return bars
+
+
+def _snapshot_at(
+    conn: sqlite3.Connection, *, ticker: str, asof_ts: int,
+    expiry: str, strike: float, kind: str,
+) -> tuple[ChainQuote, int] | None:
+    """Look up the most recent snapshot for (ticker, expiry, strike, kind)
+    with asof_ts <= the requested asof_ts. Returns (ChainQuote, snapshot_asof)
+    or None if no row exists.
+
+    Returning the snapshot's own asof_ts (rather than checking freshness
+    inside this helper) lets the caller decide what 'fresh' means in context
+    (forward runner = strict 24h, backtest replay = might want longer)."""
+    row = conn.execute(
+        "SELECT asof_ts, bid, ask, last, iv, oi, source FROM v2_chain_snapshots "
+        "WHERE ticker=? AND asof_ts<=? AND expiry=? AND strike=? AND kind=? "
+        "ORDER BY asof_ts DESC LIMIT 1",
+        (ticker, asof_ts, expiry, strike, kind),
+    ).fetchone()
+    if row is None:
+        return None
+    quote = ChainQuote(
+        expiry=expiry, strike=strike, kind=kind,
+        bid=row["bid"], ask=row["ask"], last=row["last"],
+        iv=row["iv"], oi=row["oi"], source=row["source"],
+    )
+    return (quote, row["asof_ts"])
+
+
+def price_leg(
+    *,
+    conn: sqlite3.Connection,
+    ticker: str,
+    leg: OptionLeg,
+    spot: float,
+    today: date,
+    asof_ts: int,
+) -> tuple[float, str]:
+    """Return (per-share mid price, source) for one leg.
+
+    Resolution order:
+      1. Cached Yahoo snapshot at this (ticker, expiry, strike, kind) whose
+         own asof_ts is within SNAPSHOT_FRESHNESS_SECONDS (24h) of the caller's
+         asof_ts AND has a usable mid → return (mid, 'yahoo').
+      2. Black-Scholes fallback using:
+         - the snapshot's IV if a row exists with non-None IV (fresh OR stale
+           — a stale IV is still a better hint than no hint)
+         - else IV proxy over (ticker bars, VIX bars)
+         Return (bs_price, 'bs').
+
+    Share legs short-circuit: return (spot, 'bs') — shares have no chain.
+
+    Grok review Tier 1 Finding B: stale snapshots fall back to BS to prevent
+    weekend / market-closed re-runs from returning prices from days ago tagged
+    as 'yahoo'. The forward runner (C.5) only calls with current-day asof_ts;
+    the freshness window is a guardrail for unusual cases.
+    """
+    if leg.kind == "share":
+        return (spot, "bs")
+
+    snap_pair = _snapshot_at(
+        conn, ticker=ticker, asof_ts=asof_ts,
+        expiry=leg.expiry, strike=leg.strike, kind=leg.kind,
+    )
+    snap = None
+    snap_age = None
+    if snap_pair is not None:
+        snap, snap_age_asof = snap_pair
+        snap_age = asof_ts - snap_age_asof
+
+    if snap is not None and snap_age <= SNAPSHOT_FRESHNESS_SECONDS:
+        mid = snap.mid_price()
+        if mid is not None:
+            return (mid, "yahoo")
+
+    if snap is not None and snap_age > SNAPSHOT_FRESHNESS_SECONDS:
+        _log.info(
+            "price_leg: snapshot for %s %s %s %s is stale (%ds old), falling back to BS",
+            ticker, leg.expiry, leg.strike, leg.kind, snap_age,
+        )
+
+    # BS fallback — prefer snapshot IV if present (even stale), else IV proxy.
+    if snap is not None and snap.iv is not None:
+        iv = snap.iv
+    else:
+        underlying_bars = _load_bars(conn, ticker, asof_ts)
+        vix_bars = _load_bars(conn, "VIX", asof_ts, limit=60)
+        iv = _iv_proxy(underlying_bars=underlying_bars, vix_bars=vix_bars)
+
+    bs = _price_leg_bs(leg=leg, spot=spot, iv=iv, today=today)
+    return (bs, "bs")

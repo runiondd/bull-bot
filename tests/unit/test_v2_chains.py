@@ -430,3 +430,170 @@ def test_fetch_chain_partial_failure_persists_nothing(conn):
     assert result is None
     n = conn.execute("SELECT COUNT(*) AS n FROM v2_chain_snapshots").fetchone()["n"]
     assert n == 0
+
+
+def _insert_snapshot(
+    conn, *, ticker, asof_ts, expiry, strike, kind,
+    bid=None, ask=None, last=None, iv=None, oi=None,
+):
+    conn.execute(
+        "INSERT INTO v2_chain_snapshots "
+        "(ticker, asof_ts, expiry, strike, kind, bid, ask, last, iv, oi, source) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'yahoo')",
+        (ticker, asof_ts, expiry, strike, kind, bid, ask, last, iv, oi),
+    )
+    conn.commit()
+
+
+def _insert_bar(conn, *, ticker, ts, close, timeframe="1d"):
+    conn.execute(
+        "INSERT OR REPLACE INTO bars "
+        "(ticker, timeframe, ts, open, high, low, close, volume) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 1000000)",
+        (ticker, timeframe, ts, close, close, close, close),
+    )
+    conn.commit()
+
+
+def test_price_leg_uses_cached_yahoo_snapshot_when_bid_ask_present(conn):
+    """Snapshot at the exact (ticker, asof, expiry, strike, kind) exists with
+    bid+ask → price_leg returns the midpoint, source='yahoo'. No BS pricing
+    is invoked."""
+    _insert_snapshot(
+        conn, ticker="AAPL", asof_ts=1_700_000_000,
+        expiry="2026-06-19", strike=100.0, kind="call",
+        bid=3.20, ask=3.40, iv=0.30,
+    )
+    leg = OptionLeg(
+        action="buy", kind="call", strike=100.0,
+        expiry="2026-06-19", qty=1, entry_price=0.0,
+    )
+    price, source = chains.price_leg(
+        conn=conn, ticker="AAPL", leg=leg, spot=100.0,
+        today=date(2026, 5, 17), asof_ts=1_700_000_000,
+    )
+    assert price == pytest.approx(3.30)
+    assert source == "yahoo"
+
+
+def test_price_leg_falls_back_to_bs_when_no_snapshot_exists(conn):
+    """No snapshot row → BS fallback using IV proxy over bars. Returns source='bs'."""
+    # Seed 60 bars of underlying and VIX so _iv_proxy has data
+    for i in range(60):
+        _insert_bar(conn, ticker="AAPL", ts=1_700_000_000 - (60 - i) * 86400, close=100.0)
+        _insert_bar(conn, ticker="VIX", ts=1_700_000_000 - (60 - i) * 86400, close=18.0)
+
+    leg = OptionLeg(
+        action="buy", kind="call", strike=100.0,
+        expiry="2027-05-17", qty=1, entry_price=0.0,
+    )
+    price, source = chains.price_leg(
+        conn=conn, ticker="AAPL", leg=leg, spot=100.0,
+        today=date(2026, 5, 17), asof_ts=1_700_000_000,
+    )
+    assert source == "bs"
+    # Flat closes → realized_vol = 0 → IV = IV_PROXY_MIN (0.05) →
+    # ATM 1y call at IV=0.05 is small (~$4-5 per share).
+    assert 2.0 < price < 20.0
+
+
+def test_price_leg_falls_back_to_bs_when_snapshot_has_no_mid(conn):
+    """Snapshot exists but bid=ask=last=None — mid_price() returns None,
+    dispatcher falls back to BS using the snapshot's IV (if non-None)."""
+    _insert_snapshot(
+        conn, ticker="AAPL", asof_ts=1_700_000_000,
+        expiry="2027-05-17", strike=100.0, kind="call",
+        bid=None, ask=None, last=None, iv=0.30,
+    )
+    leg = OptionLeg(
+        action="buy", kind="call", strike=100.0,
+        expiry="2027-05-17", qty=1, entry_price=0.0,
+    )
+    price, source = chains.price_leg(
+        conn=conn, ticker="AAPL", leg=leg, spot=100.0,
+        today=date(2026, 5, 17), asof_ts=1_700_000_000,
+    )
+    assert source == "bs"
+    # ATM 1y call at IV=0.30 → ~13.99
+    assert price == pytest.approx(13.99, abs=0.20)
+
+
+def test_price_leg_share_leg_returns_spot_tagged_bs(conn):
+    leg = OptionLeg(
+        action="buy", kind="share", strike=None, expiry=None,
+        qty=100, entry_price=100.0,
+    )
+    price, source = chains.price_leg(
+        conn=conn, ticker="AAPL", leg=leg, spot=99.50,
+        today=date(2026, 5, 17), asof_ts=1_700_000_000,
+    )
+    assert price == 99.50
+    assert source == "bs"
+
+
+def test_price_leg_bs_path_uses_snapshot_iv_when_present(conn):
+    """If the snapshot at this strike has an IV but no usable mid, the BS
+    fallback should use THAT iv (not the proxy). High snapshot IV → expensive
+    price."""
+    _insert_snapshot(
+        conn, ticker="AAPL", asof_ts=1_700_000_000,
+        expiry="2027-05-17", strike=100.0, kind="call",
+        bid=None, ask=None, last=None, iv=0.80,
+    )
+    leg = OptionLeg(
+        action="buy", kind="call", strike=100.0,
+        expiry="2027-05-17", qty=1, entry_price=0.0,
+    )
+    high_iv_price, _ = chains.price_leg(
+        conn=conn, ticker="AAPL", leg=leg, spot=100.0,
+        today=date(2026, 5, 17), asof_ts=1_700_000_000,
+    )
+    # ATM 1y call at IV=0.80, r=0.045 → ~33 per share
+    assert 30.0 < high_iv_price < 40.0
+
+
+def test_price_leg_falls_back_to_bs_when_snapshot_is_stale(conn):
+    """Grok review Tier 1 Finding B: a snapshot older than
+    SNAPSHOT_FRESHNESS_SECONDS (24h) is treated as stale — price_leg
+    returns 'bs' not 'yahoo' even when the snapshot has usable bid/ask.
+    The stale snapshot's IV is still consulted by the BS fallback."""
+    asof = 1_700_000_000
+    stale_asof = asof - 2 * 86400  # 2 days old
+    _insert_snapshot(
+        conn, ticker="AAPL", asof_ts=stale_asof,
+        expiry="2027-05-17", strike=100.0, kind="call",
+        bid=3.20, ask=3.40, iv=0.30,
+    )
+    leg = OptionLeg(
+        action="buy", kind="call", strike=100.0,
+        expiry="2027-05-17", qty=1, entry_price=0.0,
+    )
+    price, source = chains.price_leg(
+        conn=conn, ticker="AAPL", leg=leg, spot=100.0,
+        today=date(2026, 5, 17), asof_ts=asof,
+    )
+    assert source == "bs"
+    # BS with the stale snapshot's IV=0.30 should land near 13.99
+    assert 12.0 < price < 16.0
+
+
+def test_price_leg_uses_snapshot_within_freshness_window(conn):
+    """Snapshot from 12h before asof_ts is still considered fresh →
+    returns 'yahoo' with the snapshot's mid."""
+    asof = 1_700_000_000
+    fresh_asof = asof - 12 * 3600  # 12 hours old
+    _insert_snapshot(
+        conn, ticker="AAPL", asof_ts=fresh_asof,
+        expiry="2026-06-19", strike=100.0, kind="call",
+        bid=3.20, ask=3.40, iv=0.30,
+    )
+    leg = OptionLeg(
+        action="buy", kind="call", strike=100.0,
+        expiry="2026-06-19", qty=1, entry_price=0.0,
+    )
+    price, source = chains.price_leg(
+        conn=conn, ticker="AAPL", leg=leg, spot=100.0,
+        today=date(2026, 5, 17), asof_ts=asof,
+    )
+    assert source == "yahoo"
+    assert price == pytest.approx(3.30)
