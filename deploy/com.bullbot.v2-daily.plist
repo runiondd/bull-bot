@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.bullbot.v2-daily</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/danielrunion/Projects/bull-bot/.venv/bin/python</string>
+        <string>-m</string>
+        <string>bullbot.cli</string>
+        <string>run-v2-daily</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/danielrunion/Projects/bull-bot</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONPATH</key>
+        <string>/Users/danielrunion/Projects/bull-bot</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>35</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/danielrunion/Projects/bull-bot/logs/bullbot.v2-daily.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/danielrunion/Projects/bull-bot/logs/bullbot.v2-daily.stderr.log</string>
+</dict>
+</plist>
