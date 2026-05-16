@@ -10,6 +10,7 @@ computed against net_basis instead of entry_price.
 """
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 
 VALID_ACTIONS = ("buy", "sell")
@@ -49,3 +50,139 @@ class OptionLeg:
         opened shares carry only entry_price).
         """
         return self.net_basis if self.net_basis is not None else self.entry_price
+
+
+@dataclass
+class Position:
+    ticker: str
+    intent: str
+    structure_kind: str
+    opened_ts: int
+    nearest_leg_expiry_dte: int | None
+    legs: list[OptionLeg]
+    id: int | None = None
+    exit_plan_version: int = 1
+    profit_target_price: float | None = None
+    stop_price: float | None = None
+    time_stop_dte: int | None = None
+    assignment_acceptable: bool = False
+    exit_plan_extra_json: str | None = None
+    closed_ts: int | None = None
+    close_reason: str | None = None
+    linked_position_id: int | None = None
+    rationale: str = ""
+
+    def __post_init__(self) -> None:
+        if self.intent not in ("trade", "accumulate"):
+            raise ValueError(
+                f"intent must be 'trade' or 'accumulate'; got {self.intent!r}"
+            )
+
+
+def open_position(
+    conn: sqlite3.Connection,
+    *,
+    ticker: str,
+    intent: str,
+    structure_kind: str,
+    legs: list[OptionLeg],
+    opened_ts: int,
+    profit_target_price: float | None,
+    stop_price: float | None,
+    time_stop_dte: int | None,
+    assignment_acceptable: bool,
+    nearest_leg_expiry_dte: int | None,
+    rationale: str,
+    linked_position_id: int | None = None,
+    exit_plan_extra_json: str | None = None,
+) -> Position:
+    """Insert a new position and its legs in one transaction. Returns the
+    Position with `id` populated on it and on each leg."""
+    if not legs:
+        raise ValueError("at least one leg required")
+
+    cur = conn.execute(
+        "INSERT INTO v2_positions "
+        "(ticker, intent, structure_kind, exit_plan_version, "
+        "profit_target_price, stop_price, time_stop_dte, "
+        "assignment_acceptable, nearest_leg_expiry_dte, exit_plan_extra_json, "
+        "opened_ts, linked_position_id, rationale) "
+        "VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            ticker, intent, structure_kind,
+            profit_target_price, stop_price, time_stop_dte,
+            1 if assignment_acceptable else 0,
+            nearest_leg_expiry_dte, exit_plan_extra_json,
+            opened_ts, linked_position_id, rationale,
+        ),
+    )
+    pid = cur.lastrowid
+    for leg in legs:
+        leg_cur = conn.execute(
+            "INSERT INTO v2_position_legs "
+            "(position_id, action, kind, strike, expiry, qty, entry_price, net_basis) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                pid, leg.action, leg.kind, leg.strike, leg.expiry,
+                leg.qty, leg.entry_price, leg.net_basis,
+            ),
+        )
+        leg.id = leg_cur.lastrowid
+        leg.position_id = pid
+    conn.commit()
+
+    return Position(
+        id=pid, ticker=ticker, intent=intent, structure_kind=structure_kind,
+        opened_ts=opened_ts, nearest_leg_expiry_dte=nearest_leg_expiry_dte,
+        legs=legs, profit_target_price=profit_target_price, stop_price=stop_price,
+        time_stop_dte=time_stop_dte, assignment_acceptable=assignment_acceptable,
+        exit_plan_extra_json=exit_plan_extra_json,
+        linked_position_id=linked_position_id, rationale=rationale,
+    )
+
+
+def load_position(conn: sqlite3.Connection, position_id: int) -> Position | None:
+    """Read a position + its legs back. Returns None if no such position."""
+    row = conn.execute(
+        "SELECT * FROM v2_positions WHERE id=?", (position_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    leg_rows = conn.execute(
+        "SELECT * FROM v2_position_legs WHERE position_id=? ORDER BY id",
+        (position_id,),
+    ).fetchall()
+    legs = [
+        OptionLeg(
+            id=lr["id"],
+            position_id=lr["position_id"],
+            action=lr["action"],
+            kind=lr["kind"],
+            strike=lr["strike"],
+            expiry=lr["expiry"],
+            qty=lr["qty"],
+            entry_price=lr["entry_price"],
+            net_basis=lr["net_basis"],
+            exit_price=lr["exit_price"],
+        )
+        for lr in leg_rows
+    ]
+    return Position(
+        id=row["id"],
+        ticker=row["ticker"],
+        intent=row["intent"],
+        structure_kind=row["structure_kind"],
+        exit_plan_version=row["exit_plan_version"],
+        profit_target_price=row["profit_target_price"],
+        stop_price=row["stop_price"],
+        time_stop_dte=row["time_stop_dte"],
+        assignment_acceptable=bool(row["assignment_acceptable"]) if row["assignment_acceptable"] is not None else False,
+        nearest_leg_expiry_dte=row["nearest_leg_expiry_dte"],
+        exit_plan_extra_json=row["exit_plan_extra_json"],
+        opened_ts=row["opened_ts"],
+        closed_ts=row["closed_ts"],
+        close_reason=row["close_reason"],
+        linked_position_id=row["linked_position_id"],
+        rationale=row["rationale"] or "",
+        legs=legs,
+    )
