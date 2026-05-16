@@ -235,3 +235,135 @@ def test_price_leg_bs_negative_dte_returns_intrinsic():
     today = date(2026, 5, 17)
     price = chains._price_leg_bs(leg=leg, spot=105.0, iv=0.30, today=today)
     assert price == pytest.approx(5.0)
+
+
+import pandas as pd
+
+
+class _FakeYFTicker:
+    """Mimics yfinance.Ticker minimally — just the two surface attributes
+    fetch_chain uses: .options (list[str] expiries) and .option_chain(expiry)
+    (returns a namespace with .calls / .puts DataFrames)."""
+
+    def __init__(self, options_by_expiry: dict[str, tuple]):
+        # options_by_expiry: {"2026-06-19": (calls_df, puts_df), ...}
+        self._chains = options_by_expiry
+        self.options = list(options_by_expiry.keys())
+
+    def option_chain(self, expiry: str):
+        calls_df, puts_df = self._chains[expiry]
+        return SimpleNamespace(calls=calls_df, puts=puts_df)
+
+
+def _make_calls_df():
+    return pd.DataFrame([
+        {"strike": 95.0, "bid": 6.10, "ask": 6.30, "lastPrice": 6.20,
+         "impliedVolatility": 0.32, "openInterest": 420},
+        {"strike": 100.0, "bid": 3.20, "ask": 3.40, "lastPrice": 3.30,
+         "impliedVolatility": 0.30, "openInterest": 1850},
+        {"strike": 105.0, "bid": 1.40, "ask": 1.55, "lastPrice": 1.47,
+         "impliedVolatility": 0.29, "openInterest": 730},
+    ])
+
+
+def _make_puts_df():
+    return pd.DataFrame([
+        {"strike": 95.0, "bid": 0.80, "ask": 0.95, "lastPrice": 0.87,
+         "impliedVolatility": 0.34, "openInterest": 510},
+        {"strike": 100.0, "bid": 2.60, "ask": 2.80, "lastPrice": 2.70,
+         "impliedVolatility": 0.31, "openInterest": 1240},
+    ])
+
+
+def test_fetch_chain_parses_yahoo_response_into_chain_quotes(conn):
+    fake_ticker = _FakeYFTicker({
+        "2026-06-19": (_make_calls_df(), _make_puts_df()),
+    })
+    fake_client = lambda symbol: fake_ticker  # noqa: E731
+
+    result = chains.fetch_chain(
+        conn=conn, ticker="AAPL", asof_ts=1_700_000_000, client=fake_client,
+    )
+    assert result is not None
+    assert result.ticker == "AAPL"
+    assert result.asof_ts == 1_700_000_000
+    # 3 calls + 2 puts = 5 quotes
+    assert len(result.quotes) == 5
+
+    call_at_100 = result.find_quote(expiry="2026-06-19", strike=100.0, kind="call")
+    assert call_at_100 is not None
+    assert call_at_100.bid == 3.20
+    assert call_at_100.ask == 3.40
+    assert call_at_100.last == 3.30
+    assert call_at_100.iv == pytest.approx(0.30)
+    assert call_at_100.oi == 1850
+    assert call_at_100.source == "yahoo"
+
+
+def test_fetch_chain_persists_quotes_to_v2_chain_snapshots(conn):
+    fake_ticker = _FakeYFTicker({
+        "2026-06-19": (_make_calls_df(), _make_puts_df()),
+    })
+    chains.fetch_chain(
+        conn=conn, ticker="AAPL", asof_ts=1_700_000_000,
+        client=lambda symbol: fake_ticker,
+    )
+    rows = conn.execute(
+        "SELECT * FROM v2_chain_snapshots WHERE ticker='AAPL' ORDER BY expiry, strike, kind"
+    ).fetchall()
+    assert len(rows) == 5
+    call_rows = [r for r in rows if r["kind"] == "call"]
+    assert {r["strike"] for r in call_rows} == {95.0, 100.0, 105.0}
+    assert all(r["source"] == "yahoo" for r in rows)
+
+
+def test_fetch_chain_multi_expiry_returns_all_quotes(conn):
+    fake_ticker = _FakeYFTicker({
+        "2026-06-19": (_make_calls_df(), _make_puts_df()),
+        "2026-07-17": (_make_calls_df(), _make_puts_df()),
+    })
+    result = chains.fetch_chain(
+        conn=conn, ticker="AAPL", asof_ts=1_700_000_000,
+        client=lambda symbol: fake_ticker,
+    )
+    assert len(result.quotes) == 10
+    expiries = {q.expiry for q in result.quotes}
+    assert expiries == {"2026-06-19", "2026-07-17"}
+
+
+def test_fetch_chain_idempotent_on_re_fetch_same_asof(conn):
+    """Re-fetching same (ticker, asof) overwrites prior rows — does not
+    accumulate duplicates."""
+    fake_ticker = _FakeYFTicker({
+        "2026-06-19": (_make_calls_df(), _make_puts_df()),
+    })
+    chains.fetch_chain(
+        conn=conn, ticker="AAPL", asof_ts=1_700_000_000,
+        client=lambda symbol: fake_ticker,
+    )
+    chains.fetch_chain(
+        conn=conn, ticker="AAPL", asof_ts=1_700_000_000,
+        client=lambda symbol: fake_ticker,
+    )
+    n = conn.execute(
+        "SELECT COUNT(*) AS n FROM v2_chain_snapshots WHERE ticker='AAPL'"
+    ).fetchone()["n"]
+    assert n == 5
+
+
+def test_fetch_chain_handles_nan_iv_and_zero_oi_as_none(conn):
+    """yfinance sometimes returns NaN for impliedVolatility and 0 for
+    openInterest on illiquid strikes. NaN → None, 0 OI → 0 (not None)."""
+    calls = pd.DataFrame([
+        {"strike": 100.0, "bid": 1.0, "ask": 1.2, "lastPrice": 1.1,
+         "impliedVolatility": float("nan"), "openInterest": 0},
+    ])
+    puts = pd.DataFrame([])
+    fake_ticker = _FakeYFTicker({"2026-06-19": (calls, puts)})
+    result = chains.fetch_chain(
+        conn=conn, ticker="XYZ", asof_ts=1_700_000_000,
+        client=lambda symbol: fake_ticker,
+    )
+    q = result.find_quote(expiry="2026-06-19", strike=100.0, kind="call")
+    assert q.iv is None
+    assert q.oi == 0

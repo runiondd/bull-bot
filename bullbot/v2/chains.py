@@ -130,3 +130,98 @@ def _price_leg_bs(
         spot=spot, strike=leg.strike, t_years=t_years,
         vol=iv, r=_RISK_FREE_RATE, kind=bs_kind,
     )
+
+
+import math
+import sqlite3
+from typing import Callable
+
+
+def _default_yf_client():
+    """Lazy yfinance import — keeps tests independent of yfinance availability.
+    Mirrors the pattern at bullbot/data/daily_refresh.py:36."""
+    import yfinance as yf
+    return lambda symbol: yf.Ticker(symbol)
+
+
+def _nan_to_none(x):
+    """yfinance frequently returns NaN for impliedVolatility on illiquid
+    strikes. Map NaN → None so downstream consumers can branch cleanly."""
+    if x is None:
+        return None
+    try:
+        if isinstance(x, float) and math.isnan(x):
+            return None
+    except (TypeError, ValueError):
+        return None
+    return x
+
+
+def _row_to_quote(row, *, expiry: str, kind: str) -> ChainQuote:
+    """Convert one yfinance DataFrame row to a ChainQuote.
+
+    yfinance column names: strike, bid, ask, lastPrice, impliedVolatility, openInterest.
+    """
+    return ChainQuote(
+        expiry=expiry,
+        strike=float(row["strike"]),
+        kind=kind,
+        bid=_nan_to_none(row.get("bid")),
+        ask=_nan_to_none(row.get("ask")),
+        last=_nan_to_none(row.get("lastPrice")),
+        iv=_nan_to_none(row.get("impliedVolatility")),
+        oi=int(row["openInterest"]) if row.get("openInterest") is not None else None,
+        source="yahoo",
+    )
+
+
+def _persist_quote(conn: sqlite3.Connection, *, ticker: str, asof_ts: int, quote: ChainQuote) -> None:
+    """INSERT OR REPLACE keyed on the PK (ticker, asof_ts, expiry, strike, kind).
+    Idempotent — re-fetching the same chain overwrites prior values."""
+    conn.execute(
+        "INSERT OR REPLACE INTO v2_chain_snapshots "
+        "(ticker, asof_ts, expiry, strike, kind, bid, ask, last, iv, oi, source) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            ticker, asof_ts, quote.expiry, quote.strike, quote.kind,
+            quote.bid, quote.ask, quote.last, quote.iv, quote.oi, quote.source,
+        ),
+    )
+
+
+def fetch_chain(
+    *,
+    conn: sqlite3.Connection,
+    ticker: str,
+    asof_ts: int,
+    client: Callable[[str], object] | None = None,
+) -> Chain | None:
+    """Pull a full Yahoo option chain for `ticker`, persist into
+    v2_chain_snapshots, and return the assembled Chain.
+
+    Returns None if the Yahoo fetch fails or returns no expiries (those
+    failure modes are tested in Task 5).
+
+    `client` is a callable `(symbol) -> Ticker-like object` injected for
+    testing; defaults to a lazy yfinance.Ticker factory.
+    """
+    if client is None:
+        client = _default_yf_client()
+
+    ticker_obj = client(ticker)
+    expiries: list[str] = list(ticker_obj.options)
+
+    quotes: list[ChainQuote] = []
+    for expiry in expiries:
+        chain_pair = ticker_obj.option_chain(expiry)
+        for _, row in chain_pair.calls.iterrows():
+            q = _row_to_quote(row, expiry=expiry, kind="call")
+            quotes.append(q)
+            _persist_quote(conn, ticker=ticker, asof_ts=asof_ts, quote=q)
+        for _, row in chain_pair.puts.iterrows():
+            q = _row_to_quote(row, expiry=expiry, kind="put")
+            quotes.append(q)
+            _persist_quote(conn, ticker=ticker, asof_ts=asof_ts, quote=q)
+
+    conn.commit()
+    return Chain(ticker=ticker, asof_ts=asof_ts, quotes=quotes)
