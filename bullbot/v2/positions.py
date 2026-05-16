@@ -186,3 +186,64 @@ def load_position(conn: sqlite3.Connection, position_id: int) -> Position | None
         rationale=row["rationale"] or "",
         legs=legs,
     )
+
+
+VALID_CLOSE_REASONS = (
+    "profit_target", "stop", "time_stop", "signal_flip",
+    "credit_profit_take", "assigned", "called_away", "exercised",
+    "expired_worthless", "safety_stop", "manual",
+)
+
+
+def open_for_ticker(conn: sqlite3.Connection, ticker: str) -> Position | None:
+    """Return the single open position for this ticker, or None.
+
+    Phase C invariant: at most one open position per ticker at a time.
+    """
+    row = conn.execute(
+        "SELECT id FROM v2_positions "
+        "WHERE ticker=? AND closed_ts IS NULL "
+        "ORDER BY id DESC LIMIT 1",
+        (ticker,),
+    ).fetchone()
+    if row is None:
+        return None
+    return load_position(conn, row["id"])
+
+
+def open_count(conn: sqlite3.Connection) -> int:
+    """Count positions that are currently open (closed_ts IS NULL)."""
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM v2_positions WHERE closed_ts IS NULL"
+    ).fetchone()
+    return int(row["n"])
+
+
+def close_position(
+    conn: sqlite3.Connection,
+    *,
+    position_id: int,
+    closed_ts: int,
+    close_reason: str,
+    leg_exit_prices: dict[int, float],
+) -> None:
+    """Mark a position closed with the given reason and per-leg exit prices.
+
+    leg_exit_prices maps leg.id -> per-contract (or per-share) exit price.
+    Realized P&L computation lives in risk.py / runner_c.py — this helper only
+    persists the exit fields.
+    """
+    if close_reason not in VALID_CLOSE_REASONS:
+        raise ValueError(
+            f"close_reason must be one of {VALID_CLOSE_REASONS}; got {close_reason!r}"
+        )
+    conn.execute(
+        "UPDATE v2_positions SET closed_ts=?, close_reason=? WHERE id=?",
+        (closed_ts, close_reason, position_id),
+    )
+    for leg_id, exit_price in leg_exit_prices.items():
+        conn.execute(
+            "UPDATE v2_position_legs SET exit_price=? WHERE id=?",
+            (exit_price, leg_id),
+        )
+    conn.commit()

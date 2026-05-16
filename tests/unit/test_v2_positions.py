@@ -191,3 +191,73 @@ def test_open_position_rejects_empty_legs(conn):
             time_stop_dte=21, assignment_acceptable=False,
             nearest_leg_expiry_dte=30, rationale="",
         )
+
+
+def _open_simple(conn, ticker="AAPL", intent="trade", structure_kind="long_call"):
+    leg = positions.OptionLeg(
+        action="buy", kind="call", strike=190.0,
+        expiry="2026-06-19", qty=1, entry_price=2.50,
+    )
+    return positions.open_position(
+        conn,
+        ticker=ticker, intent=intent, structure_kind=structure_kind,
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=200.0, stop_price=180.0,
+        time_stop_dte=21, assignment_acceptable=(intent == "accumulate"),
+        nearest_leg_expiry_dte=30, rationale="t",
+    )
+
+
+def test_open_for_ticker_returns_open_position(conn):
+    pos = _open_simple(conn, ticker="AAPL")
+    found = positions.open_for_ticker(conn, "AAPL")
+    assert found is not None
+    assert found.id == pos.id
+
+
+def test_open_for_ticker_returns_none_when_flat(conn):
+    assert positions.open_for_ticker(conn, "AAPL") is None
+
+
+def test_open_for_ticker_ignores_closed_positions(conn):
+    pos = _open_simple(conn, ticker="AAPL")
+    positions.close_position(
+        conn, position_id=pos.id, closed_ts=1_700_001_000,
+        close_reason="profit_target",
+        leg_exit_prices={pos.legs[0].id: 5.00},
+    )
+    assert positions.open_for_ticker(conn, "AAPL") is None
+
+
+def test_open_count_counts_only_open(conn):
+    _open_simple(conn, ticker="AAPL")
+    _open_simple(conn, ticker="MSFT")
+    closed = _open_simple(conn, ticker="GOOG")
+    positions.close_position(
+        conn, position_id=closed.id, closed_ts=1_700_001_000,
+        close_reason="stop", leg_exit_prices={closed.legs[0].id: 0.50},
+    )
+    assert positions.open_count(conn) == 2
+
+
+def test_close_position_persists_exit_fields(conn):
+    pos = _open_simple(conn, ticker="AAPL")
+    positions.close_position(
+        conn, position_id=pos.id, closed_ts=1_700_001_000,
+        close_reason="profit_target",
+        leg_exit_prices={pos.legs[0].id: 5.00},
+    )
+    reloaded = positions.load_position(conn, pos.id)
+    assert reloaded.closed_ts == 1_700_001_000
+    assert reloaded.close_reason == "profit_target"
+    assert reloaded.legs[0].exit_price == 5.00
+
+
+def test_close_position_rejects_unknown_close_reason(conn):
+    pos = _open_simple(conn, ticker="AAPL")
+    with pytest.raises(ValueError, match="close_reason must be one of"):
+        positions.close_position(
+            conn, position_id=pos.id, closed_ts=1_700_001_000,
+            close_reason="for_fun",
+            leg_exit_prices={pos.legs[0].id: 5.00},
+        )
