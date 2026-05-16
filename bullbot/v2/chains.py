@@ -62,3 +62,35 @@ class Chain:
             if q.expiry == expiry and q.strike == strike and q.kind == kind:
                 return q
         return None
+
+
+from statistics import median
+
+from bullbot.data.synthetic_chain import realized_vol
+
+IV_PROXY_MIN = 0.05   # 5% — floor; lower than this and BS produces nonsense
+IV_PROXY_MAX = 3.00   # 300% — ceiling; higher than this almost always means bad inputs
+
+
+def _iv_proxy(*, underlying_bars: list, vix_bars: list) -> float:
+    """Annualized IV estimate when Yahoo gives no IV for a strike.
+
+    Formula:  realized_vol_30(underlying) * (vix_today / median(vix_last_60))
+    Bounded to [IV_PROXY_MIN, IV_PROXY_MAX].
+
+    Bars expected to be ordered oldest-first with a `.close` attribute (matches
+    the shape that bullbot.v2.runner._load_bars and the bars table both produce).
+    Falls back gracefully when either series is too short for its respective
+    sub-computation:
+        - underlying < 31 bars → realized_vol returns its 0.30 default
+        - vix < 60 bars        → regime multiplier defaults to 1.0
+    """
+    rv = realized_vol(underlying_bars, window=30)
+    if len(vix_bars) < 60:
+        multiplier = 1.0
+    else:
+        vix_today = vix_bars[-1].close
+        vix_baseline = median(b.close for b in vix_bars[-60:])
+        multiplier = vix_today / vix_baseline if vix_baseline > 0 else 1.0
+    iv = rv * multiplier
+    return max(IV_PROXY_MIN, min(IV_PROXY_MAX, iv))
