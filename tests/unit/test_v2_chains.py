@@ -367,3 +367,66 @@ def test_fetch_chain_handles_nan_iv_and_zero_oi_as_none(conn):
     q = result.find_quote(expiry="2026-06-19", strike=100.0, kind="call")
     assert q.iv is None
     assert q.oi == 0
+
+
+def test_fetch_chain_returns_none_when_ticker_has_no_options(conn):
+    """yfinance Ticker.options returns [] for tickers with no options chain."""
+    fake_ticker = _FakeYFTicker({})  # no expiries
+    result = chains.fetch_chain(
+        conn=conn, ticker="XYZ", asof_ts=1_700_000_000,
+        client=lambda symbol: fake_ticker,
+    )
+    assert result is None
+    n = conn.execute("SELECT COUNT(*) AS n FROM v2_chain_snapshots").fetchone()["n"]
+    assert n == 0
+
+
+def test_fetch_chain_returns_none_when_yfinance_raises_on_construct(conn):
+    """Network timeout or 5xx during yfinance.Ticker(symbol) — returns None
+    and does not persist anything."""
+    def raising_client(symbol):
+        raise ConnectionError("simulated yahoo timeout")
+    result = chains.fetch_chain(
+        conn=conn, ticker="AAPL", asof_ts=1_700_000_000, client=raising_client,
+    )
+    assert result is None
+    n = conn.execute("SELECT COUNT(*) AS n FROM v2_chain_snapshots").fetchone()["n"]
+    assert n == 0
+
+
+def test_fetch_chain_returns_none_when_option_chain_call_raises(conn):
+    """yfinance occasionally returns expiries but then raises on the
+    follow-up option_chain(expiry) call. Same outcome: None, no persist."""
+
+    class RaisingTicker:
+        options = ["2026-06-19"]
+        def option_chain(self, expiry):
+            raise ValueError("simulated yahoo chain parse error")
+
+    result = chains.fetch_chain(
+        conn=conn, ticker="AAPL", asof_ts=1_700_000_000,
+        client=lambda symbol: RaisingTicker(),
+    )
+    assert result is None
+    n = conn.execute("SELECT COUNT(*) AS n FROM v2_chain_snapshots").fetchone()["n"]
+    assert n == 0
+
+
+def test_fetch_chain_partial_failure_persists_nothing(conn):
+    """If the first expiry succeeds but the second raises, the entire fetch
+    is treated as failed — no half-written chain in the DB."""
+
+    class PartiallyFailingTicker:
+        options = ["2026-06-19", "2026-07-17"]
+        def option_chain(self, expiry):
+            if expiry == "2026-06-19":
+                return SimpleNamespace(calls=_make_calls_df(), puts=_make_puts_df())
+            raise RuntimeError("simulated mid-fetch error")
+
+    result = chains.fetch_chain(
+        conn=conn, ticker="AAPL", asof_ts=1_700_000_000,
+        client=lambda symbol: PartiallyFailingTicker(),
+    )
+    assert result is None
+    n = conn.execute("SELECT COUNT(*) AS n FROM v2_chain_snapshots").fetchone()["n"]
+    assert n == 0

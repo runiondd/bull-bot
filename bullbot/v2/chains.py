@@ -189,6 +189,11 @@ def _persist_quote(conn: sqlite3.Connection, *, ticker: str, asof_ts: int, quote
     )
 
 
+import logging
+
+_log = logging.getLogger(__name__)
+
+
 def fetch_chain(
     *,
     conn: sqlite3.Connection,
@@ -199,8 +204,13 @@ def fetch_chain(
     """Pull a full Yahoo option chain for `ticker`, persist into
     v2_chain_snapshots, and return the assembled Chain.
 
-    Returns None if the Yahoo fetch fails or returns no expiries (those
-    failure modes are tested in Task 5).
+    Returns None if:
+      - the Yahoo client constructor raises (network error, bad ticker)
+      - the ticker has no listed options (Ticker.options is empty)
+      - any option_chain(expiry) call raises mid-fetch
+
+    On failure, NO rows are persisted (transaction is rolled back if any
+    persistence happened). On success, all rows are persisted atomically.
 
     `client` is a callable `(symbol) -> Ticker-like object` injected for
     testing; defaults to a lazy yfinance.Ticker factory.
@@ -208,20 +218,44 @@ def fetch_chain(
     if client is None:
         client = _default_yf_client()
 
-    ticker_obj = client(ticker)
-    expiries: list[str] = list(ticker_obj.options)
+    try:
+        ticker_obj = client(ticker)
+        expiries: list[str] = list(ticker_obj.options)
+    except Exception as exc:  # noqa: BLE001 — Yahoo can raise anything
+        _log.warning("fetch_chain: client construct failed for %s: %s", ticker, exc)
+        return None
+
+    if not expiries:
+        _log.info("fetch_chain: %s has no listed options", ticker)
+        return None
 
     quotes: list[ChainQuote] = []
-    for expiry in expiries:
-        chain_pair = ticker_obj.option_chain(expiry)
-        for _, row in chain_pair.calls.iterrows():
-            q = _row_to_quote(row, expiry=expiry, kind="call")
-            quotes.append(q)
-            _persist_quote(conn, ticker=ticker, asof_ts=asof_ts, quote=q)
-        for _, row in chain_pair.puts.iterrows():
-            q = _row_to_quote(row, expiry=expiry, kind="put")
-            quotes.append(q)
-            _persist_quote(conn, ticker=ticker, asof_ts=asof_ts, quote=q)
+    try:
+        for expiry in expiries:
+            chain_pair = ticker_obj.option_chain(expiry)
+            for _, row in chain_pair.calls.iterrows():
+                quotes.append(_row_to_quote(row, expiry=expiry, kind="call"))
+            for _, row in chain_pair.puts.iterrows():
+                quotes.append(_row_to_quote(row, expiry=expiry, kind="put"))
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("fetch_chain: parse failed for %s: %s", ticker, exc)
+        return None
 
-    conn.commit()
+    # All expiries parsed cleanly — persist atomically.
+    #
+    # Grok review Tier 1 Finding A: SQLite's default isolation behavior auto-
+    # begins a transaction on the first write but the semantics are fragile
+    # across Python versions. Use explicit BEGIN / COMMIT / ROLLBACK so the
+    # partial-failure test is a real guarantee, not a coincidence of
+    # autocommit timing.
+    try:
+        conn.execute("BEGIN")
+        for q in quotes:
+            _persist_quote(conn, ticker=ticker, asof_ts=asof_ts, quote=q)
+        conn.execute("COMMIT")
+    except Exception as exc:  # noqa: BLE001
+        conn.execute("ROLLBACK")
+        _log.warning("fetch_chain: persist failed for %s: %s", ticker, exc)
+        return None
+
     return Chain(ticker=ticker, asof_ts=asof_ts, quotes=quotes)
