@@ -157,3 +157,109 @@ def test_max_loss_returns_inf_for_unrecognized_multi_leg_shape():
         _call("sell", strike=120.0, premium=0.5, qty=1),
     ]
     assert risk.compute_max_loss(legs, spot=100.0) == float("inf")
+
+
+def test_size_position_returns_qty_fitting_max_loss_cap_long_call():
+    """Cap = 2% of $50,000 NAV = $1,000. A single contract at $2.50 premium
+    risks $250. 4 contracts risks $1000. Helper returns 4."""
+    leg_template = _call("buy", strike=190.0, premium=2.50, qty=1)
+    sized_qty = risk.size_position(
+        leg_template=leg_template, nav=50_000.0, max_loss_pct=0.02, spot=190.0,
+    )
+    assert sized_qty == 4
+
+
+def test_size_position_rounds_down_never_exceeds_cap():
+    """Cap = $1000. Single contract risks $300 (3.00 premium). Should return
+    3 contracts ($900 risk), not 4 ($1200)."""
+    leg_template = _call("buy", strike=190.0, premium=3.00, qty=1)
+    sized_qty = risk.size_position(
+        leg_template=leg_template, nav=50_000.0, max_loss_pct=0.02, spot=190.0,
+    )
+    assert sized_qty == 3
+
+
+def test_size_position_returns_zero_when_single_contract_exceeds_cap():
+    """Premium $15 → $1500 per contract. Cap $1000. Returns 0 → caller emits
+    skipped_max_loss_cap."""
+    leg_template = _call("buy", strike=190.0, premium=15.00, qty=1)
+    sized_qty = risk.size_position(
+        leg_template=leg_template, nav=50_000.0, max_loss_pct=0.02, spot=190.0,
+    )
+    assert sized_qty == 0
+
+
+def test_size_position_returns_zero_for_unbounded_loss():
+    leg_template = _call("sell", strike=110.0, premium=1.5, qty=1)
+    sized_qty = risk.size_position(
+        leg_template=leg_template, nav=50_000.0, max_loss_pct=0.02, spot=100.0,
+    )
+    assert sized_qty == 0
+
+
+def test_evaluate_caps_passes_when_all_three_satisfied():
+    legs = [_call("buy", strike=190.0, premium=2.50, qty=2)]
+    result = risk.evaluate_caps(
+        legs=legs, spot=190.0, nav=50_000.0,
+        per_trade_pct=0.02, per_ticker_pct=0.15, max_open_positions=12,
+        current_ticker_concentration_dollars=0.0,
+        current_open_positions=5,
+    )
+    assert result.ok is True
+    assert result.reason is None
+
+
+def test_evaluate_caps_fails_on_per_trade_overflow():
+    legs = [_call("buy", strike=190.0, premium=8.00, qty=2)]
+    # max_loss = $1600; cap = $1000.
+    result = risk.evaluate_caps(
+        legs=legs, spot=190.0, nav=50_000.0,
+        per_trade_pct=0.02, per_ticker_pct=0.15, max_open_positions=12,
+        current_ticker_concentration_dollars=0.0,
+        current_open_positions=5,
+    )
+    assert result.ok is False
+    assert result.reason == "skipped_max_loss_cap"
+
+
+def test_evaluate_caps_fails_on_ticker_concentration():
+    legs = [_call("buy", strike=190.0, premium=2.50, qty=1)]
+    # max_loss = $250. Ticker cap = 15% of $50k = $7500. We already have
+    # $7400 deployed in this ticker → $7650 > $7500 → reject.
+    result = risk.evaluate_caps(
+        legs=legs, spot=190.0, nav=50_000.0,
+        per_trade_pct=0.02, per_ticker_pct=0.15, max_open_positions=12,
+        current_ticker_concentration_dollars=7400.0,
+        current_open_positions=5,
+    )
+    assert result.ok is False
+    assert result.reason == "skipped_ticker_concentration"
+
+
+def test_evaluate_caps_fails_on_max_open_positions():
+    legs = [_call("buy", strike=190.0, premium=2.50, qty=1)]
+    result = risk.evaluate_caps(
+        legs=legs, spot=190.0, nav=50_000.0,
+        per_trade_pct=0.02, per_ticker_pct=0.15, max_open_positions=12,
+        current_ticker_concentration_dollars=0.0,
+        current_open_positions=12,
+    )
+    assert result.ok is False
+    assert result.reason == "skipped_max_positions"
+
+
+def test_evaluate_caps_checks_in_order_per_trade_first():
+    """If both per-trade and ticker would fail, per-trade is reported (it's
+    the cheapest to fix at the prompt level)."""
+    # Premium $11 → max_loss = $1100, exceeds per-trade cap of $1000.
+    # Ticker concentration: $7400 + $1100 = $8500, also exceeds $7500.
+    # Per-trade should be reported first.
+    legs = [_call("buy", strike=190.0, premium=11.00, qty=1)]
+    result = risk.evaluate_caps(
+        legs=legs, spot=190.0, nav=50_000.0,
+        per_trade_pct=0.02, per_ticker_pct=0.15, max_open_positions=12,
+        current_ticker_concentration_dollars=7400.0,
+        current_open_positions=12,
+    )
+    assert result.ok is False
+    assert result.reason == "skipped_max_loss_cap"

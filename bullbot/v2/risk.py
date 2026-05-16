@@ -18,6 +18,7 @@ read the new value.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 from bullbot.v2.positions import OptionLeg
 
@@ -233,3 +234,65 @@ def _single_leg_max_loss(leg: OptionLeg, *, spot: float) -> float:
         # Naked short call — theoretically unbounded.
         return math.inf
     return math.inf
+
+
+@dataclass(frozen=True)
+class CapEvalResult:
+    ok: bool
+    reason: str | None  # 'skipped_max_loss_cap' / 'skipped_ticker_concentration' / 'skipped_max_positions'
+
+
+def size_position(
+    *,
+    leg_template: OptionLeg,
+    nav: float,
+    max_loss_pct: float,
+    spot: float,
+) -> int:
+    """Return the largest integer qty such that compute_max_loss for that
+    qty is ≤ (nav × max_loss_pct). Returns 0 if even 1 contract exceeds the
+    cap or if the single-unit loss is unbounded.
+
+    Operates on single-leg structures only — multi-leg sizing is handled by
+    scaling the LLM's qty_ratios proportionally and re-running this for the
+    primary leg. That logic lives in vehicle.py (C.3); risk.py exposes only
+    the atomic single-leg sizer.
+    """
+    cap_dollars = nav * max_loss_pct
+    unit_leg = OptionLeg(
+        action=leg_template.action, kind=leg_template.kind,
+        strike=leg_template.strike, expiry=leg_template.expiry,
+        qty=1, entry_price=leg_template.entry_price,
+        net_basis=leg_template.net_basis,
+    )
+    unit_loss = compute_max_loss([unit_leg], spot=spot)
+    if math.isinf(unit_loss) or unit_loss <= 0:
+        return 0
+    return int(cap_dollars // unit_loss)
+
+
+def evaluate_caps(
+    *,
+    legs: list[OptionLeg],
+    spot: float,
+    nav: float,
+    per_trade_pct: float,
+    per_ticker_pct: float,
+    max_open_positions: int,
+    current_ticker_concentration_dollars: float,
+    current_open_positions: int,
+) -> CapEvalResult:
+    """Run the three Phase C caps in priority order:
+        1. per-trade max-loss cap
+        2. per-ticker concentration cap
+        3. total open-positions cap
+    First failure short-circuits and is reported. All three pass → ok=True."""
+    proposed_loss = compute_max_loss(legs, spot=spot)
+    if proposed_loss > nav * per_trade_pct:
+        return CapEvalResult(ok=False, reason="skipped_max_loss_cap")
+    new_ticker_concentration = current_ticker_concentration_dollars + proposed_loss
+    if new_ticker_concentration > nav * per_ticker_pct:
+        return CapEvalResult(ok=False, reason="skipped_ticker_concentration")
+    if current_open_positions + 1 > max_open_positions:
+        return CapEvalResult(ok=False, reason="skipped_max_positions")
+    return CapEvalResult(ok=True, reason=None)
