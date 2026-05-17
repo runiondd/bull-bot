@@ -90,3 +90,21 @@ def _write_vehicle_attribution_csv(result: BacktestResult, *, out_path: Path) ->
                 kind, int(count), int(b["wins"]), int(b["losses"]),
                 win_rate, b["total"], avg_pnl,
             ])
+
+
+def write_report(result: BacktestResult, *, out_dir: Path) -> dict[str, Path]:
+    """Write all three backtest CSVs into out_dir.
+
+    Creates out_dir (with parents) if it does not exist. Returns a mapping
+    of report-slug -> file path for downstream consumers (e.g. C.5 dashboard).
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    paths = {
+        "trades": out_dir / "backtest_trades.csv",
+        "equity_curve": out_dir / "equity_curve.csv",
+        "vehicle_attribution": out_dir / "vehicle_attribution.csv",
+    }
+    _write_trades_csv(result, out_path=paths["trades"])
+    _write_equity_curve_csv(result, out_path=paths["equity_curve"])
+    _write_vehicle_attribution_csv(result, out_path=paths["vehicle_attribution"])
+    return paths

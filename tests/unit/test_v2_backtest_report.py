@@ -161,3 +161,54 @@ def test_write_vehicle_attribution_rows_sorted_by_structure_kind(tmp_path):
     assert [r["structure_kind"] for r in rows] == [
         "csp", "long_call", "vertical_credit_spread",
     ]
+
+
+def test_write_report_creates_out_dir_if_missing(tmp_path):
+    out = tmp_path / "nested" / "subdir"
+    assert not out.exists()
+    report.write_report(_result(), out_dir=out)
+    assert out.is_dir()
+
+
+def test_write_report_writes_three_csvs_with_expected_names(tmp_path):
+    out = tmp_path / "report"
+    paths = report.write_report(_result(), out_dir=out)
+    assert set(paths.keys()) == {"trades", "equity_curve", "vehicle_attribution"}
+    assert paths["trades"].name == "backtest_trades.csv"
+    assert paths["equity_curve"].name == "equity_curve.csv"
+    assert paths["vehicle_attribution"].name == "vehicle_attribution.csv"
+    for p in paths.values():
+        assert p.exists()
+        assert p.read_text().startswith(("ticker,", "asof_ts,", "structure_kind,"))
+
+
+def test_write_report_returns_paths_in_out_dir(tmp_path):
+    out = tmp_path / "report"
+    paths = report.write_report(_result(), out_dir=out)
+    for p in paths.values():
+        assert p.parent == out
+
+
+def test_write_report_full_round_trip_with_data(tmp_path):
+    out = tmp_path / "report"
+    trades = [
+        _trade(structure_kind="long_call", realized_pnl=150.0),
+        _trade(structure_kind="csp", intent="accumulate",
+               close_reason="expired_worthless", realized_pnl=75.0),
+    ]
+    daily_mtm = [
+        (int(datetime(2024, 1, 10, 23).timestamp()), 50_000.0),
+        (int(datetime(2024, 1, 11, 23).timestamp()), 50_225.0),
+    ]
+    paths = report.write_report(
+        _result(trades=trades, daily_mtm=daily_mtm), out_dir=out,
+    )
+    with paths["trades"].open() as f:
+        trade_rows = list(csv.DictReader(f))
+    with paths["equity_curve"].open() as f:
+        equity_rows = list(csv.DictReader(f))
+    with paths["vehicle_attribution"].open() as f:
+        attr_rows = list(csv.DictReader(f))
+    assert len(trade_rows) == 2
+    assert len(equity_rows) == 2
+    assert len(attr_rows) == 2
