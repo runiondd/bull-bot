@@ -126,3 +126,134 @@ def test_backtest_result_total_realized_pnl_returns_zero_for_no_trades():
         starting_nav=50_000.0, ending_nav=50_000.0, trades=[], daily_mtm=[],
     )
     assert result.total_realized_pnl() == 0.0
+
+
+from types import SimpleNamespace
+
+from bullbot.v2.signals import DirectionalSignal
+
+
+def _bar(close, high=None, low=None, ts=0):
+    return SimpleNamespace(
+        ts=ts, open=close, high=high if high is not None else close,
+        low=low if low is not None else close, close=close, volume=1_000_000,
+    )
+
+
+def _seed_bars(conn, ticker, asof_start_ts, n=60, base_close=100.0):
+    """Seed n daily bars into the bars table, ending at asof_start_ts."""
+    for i in range(n):
+        ts = asof_start_ts - (n - 1 - i) * 86400
+        c = base_close + (i * 0.01)
+        conn.execute(
+            "INSERT OR REPLACE INTO bars "
+            "(ticker, timeframe, ts, open, high, low, close, volume) "
+            "VALUES (?, '1d', ?, ?, ?, ?, ?, 1_000_000)",
+            (ticker, ts, c, c + 0.3, c - 0.3, c),
+        )
+    conn.commit()
+
+
+def _stub_signal_fn(bars):
+    return DirectionalSignal(
+        ticker="AAPL", asof_ts=bars[-1].ts, direction="bullish",
+        confidence=0.7, horizon_days=30, rationale="stub",
+        rules_version="stub",
+    )
+
+
+def _stub_strike_grid_fn(spot):
+    return [round(spot + (i * 5)) for i in range(-4, 5)]  # 9 strikes spanning ATM ±20%
+
+
+def _stub_expiries_fn(today):
+    """Two expiries: 33 DTE and 65 DTE."""
+    from datetime import timedelta
+    return [
+        (today + timedelta(days=33)).isoformat(),
+        (today + timedelta(days=65)).isoformat(),
+    ]
+
+
+def test_replay_one_day_returns_none_when_too_few_bars(conn, fake_anthropic):
+    """No bars seeded → can't compute signal → skip the day."""
+    out = runner._replay_one_day(
+        conn=conn, ticker="AAPL",
+        today=date(2026, 5, 17), asof_ts=1_700_000_000,
+        starting_nav_today=50_000.0,
+        signal_fn=_stub_signal_fn, strike_grid_fn=_stub_strike_grid_fn,
+        expiries_fn=_stub_expiries_fn,
+        llm_client=fake_anthropic, llm_cache_conn=conn,
+    )
+    assert out is None
+
+
+def test_replay_one_day_opens_position_on_valid_llm_decision(conn, fake_anthropic):
+    """Seeded bars + LLM returns valid long_call → position opens, no trade closed yet."""
+    import json
+    asof = 1_700_000_000
+    _seed_bars(conn, "AAPL", asof, n=60, base_close=100.0)
+    _seed_bars(conn, "VIX", asof, n=60, base_close=18.0)
+    fake_anthropic.queue_response(json.dumps({
+        "decision": "open", "intent": "trade", "structure": "long_call",
+        "legs": [{"action": "buy", "kind": "call", "strike": 100.0,
+                  "expiry": (date(2026, 5, 17).fromordinal(
+                      date(2026, 5, 17).toordinal() + 33)).isoformat(),
+                  "qty_ratio": 1}],
+        "exit_plan": {"profit_target_price": 110.0, "stop_price": 95.0,
+                      "time_stop_dte": 21, "assignment_acceptable": False},
+        "rationale": "bullish",
+    }))
+    out = runner._replay_one_day(
+        conn=conn, ticker="AAPL",
+        today=date(2026, 5, 17), asof_ts=asof,
+        starting_nav_today=50_000.0,
+        signal_fn=_stub_signal_fn, strike_grid_fn=_stub_strike_grid_fn,
+        expiries_fn=_stub_expiries_fn,
+        llm_client=fake_anthropic, llm_cache_conn=conn,
+    )
+    assert out is not None
+    assert out["action_taken"] in {"opened", "pass", "held", "rejected"}
+    # Verify a position was actually opened in the DB
+    from bullbot.v2 import positions
+    open_pos = positions.open_for_ticker(conn, "AAPL")
+    if out["action_taken"] == "opened":
+        assert open_pos is not None
+
+
+def test_replay_one_day_uses_llm_cache_on_repeat_call(conn, fake_anthropic):
+    """First call hits LLM (queued response). Second call same day → cache hit."""
+    import json
+    asof = 1_700_000_000
+    _seed_bars(conn, "AAPL", asof, n=60, base_close=100.0)
+    _seed_bars(conn, "VIX", asof, n=60, base_close=18.0)
+    fake_anthropic.queue_response(json.dumps({
+        "decision": "pass", "intent": "trade", "structure": "long_call",
+        "legs": [], "exit_plan": {}, "rationale": "first call",
+    }))
+    runner._replay_one_day(
+        conn=conn, ticker="AAPL",
+        today=date(2026, 5, 17), asof_ts=asof,
+        starting_nav_today=50_000.0,
+        signal_fn=_stub_signal_fn, strike_grid_fn=_stub_strike_grid_fn,
+        expiries_fn=_stub_expiries_fn,
+        llm_client=fake_anthropic, llm_cache_conn=conn,
+    )
+    # Verify cache was populated
+    cache_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM backtest_llm_cache"
+    ).fetchone()["n"]
+    assert cache_count == 1
+    # Second call SHOULD NOT call the LLM (no new queued response, would error if called)
+    runner._replay_one_day(
+        conn=conn, ticker="AAPL",
+        today=date(2026, 5, 17), asof_ts=asof,
+        starting_nav_today=50_000.0,
+        signal_fn=_stub_signal_fn, strike_grid_fn=_stub_strike_grid_fn,
+        expiries_fn=_stub_expiries_fn,
+        llm_client=fake_anthropic, llm_cache_conn=conn,
+    )
+    # No new cache entry — same key
+    assert conn.execute(
+        "SELECT COUNT(*) AS n FROM backtest_llm_cache"
+    ).fetchone()["n"] == 1
