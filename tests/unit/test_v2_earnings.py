@@ -137,3 +137,34 @@ def test_fetch_next_earnings_returns_none_when_get_earnings_dates_raises():
         client=lambda symbol: RaisingTicker(),
     )
     assert ev is None
+
+
+def test_days_to_print_returns_int_for_future_earnings():
+    df = _earnings_df("2026-06-01", "2026-02-01")
+    fake = _FakeYFTicker(df)
+    n = earnings.days_to_print(
+        ticker="AAPL", today=date(2026, 5, 17),
+        client=lambda symbol: fake,
+    )
+    assert n == 15
+
+
+def test_days_to_print_returns_sentinel_when_no_upcoming_event():
+    df = _earnings_df("2026-02-01", "2025-11-01")
+    fake = _FakeYFTicker(df)
+    n = earnings.days_to_print(
+        ticker="AAPL", today=date(2026, 5, 17),
+        client=lambda symbol: fake,
+    )
+    assert n == earnings.DAYS_TO_PRINT_NONE_SENTINEL
+    assert n > 14
+
+
+def test_days_to_print_returns_sentinel_when_yfinance_fails():
+    def raising_client(symbol):
+        raise ConnectionError("network down")
+    n = earnings.days_to_print(
+        ticker="AAPL", today=date(2026, 5, 17),
+        client=raising_client,
+    )
+    assert n == earnings.DAYS_TO_PRINT_NONE_SENTINEL

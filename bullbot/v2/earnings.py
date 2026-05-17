@@ -86,3 +86,25 @@ def fetch_next_earnings(
 
     soonest = min(future_dates)
     return EarningsEvent(ticker=ticker, event_date=soonest)
+
+
+DAYS_TO_PRINT_NONE_SENTINEL = 999  # large enough that any `<= N` check returns False
+
+
+def days_to_print(
+    *,
+    ticker: str,
+    today: date,
+    client: Callable[[str], object] | None = None,
+) -> int:
+    """Days from `today` until the next upcoming earnings event.
+
+    Returns DAYS_TO_PRINT_NONE_SENTINEL (999) when no upcoming earnings
+    can be found (no events in yfinance window, all past, or fetch failure).
+    The sentinel lets callers do `if days_to_print(...) <= 14` without
+    branching on None.
+    """
+    ev = fetch_next_earnings(ticker=ticker, today=today, client=client)
+    if ev is None:
+        return DAYS_TO_PRINT_NONE_SENTINEL
+    return ev.days_until(today=today)
