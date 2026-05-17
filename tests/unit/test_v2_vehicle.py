@@ -353,3 +353,98 @@ def test_build_llm_context_includes_current_position_when_held(conn):
     assert ctx["current_position"]["nearest_leg_expiry_dte"] == 30
     assert ctx["current_position"]["profit_target_price"] == 200.0
     assert ctx["current_position"]["stop_price"] == 180.0
+
+
+# ---------------------------------------------------------------------------
+# Task 6 — validate_structure_sanity (single-leg shapes)
+# ---------------------------------------------------------------------------
+
+def _spec(action, kind, strike, expiry, qty_ratio=1):
+    return vehicle.LegSpec(action=action, kind=kind, strike=strike, expiry=expiry, qty_ratio=qty_ratio)
+
+
+def test_sanity_long_call_valid(conn):
+    legs = [_spec("buy", "call", 100.0, "2026-06-19")]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="long_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is True
+
+
+def test_sanity_long_call_rejects_wrong_leg_count():
+    legs = [_spec("buy", "call", 100.0, "2026-06-19"),
+            _spec("buy", "call", 105.0, "2026-06-19")]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="long_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+    assert "leg" in result.reason.lower()
+
+
+def test_sanity_long_call_rejects_sell_action():
+    legs = [_spec("sell", "call", 100.0, "2026-06-19")]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="long_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+
+
+def test_sanity_long_call_rejects_too_short_expiry():
+    """Options expiring in less than 7 days from today are rejected at entry."""
+    legs = [_spec("buy", "call", 100.0, "2026-05-20")]  # 3 days out
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="long_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+    assert "expiry" in result.reason.lower()
+
+
+def test_sanity_long_call_rejects_far_OTM_strike():
+    """Strike more than 25% from spot is rejected (LLM hallucination guard)."""
+    legs = [_spec("buy", "call", 200.0, "2026-06-19")]  # spot=100, +100%
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="long_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+    assert "moneyness" in result.reason.lower() or "strike" in result.reason.lower()
+
+
+def test_sanity_csp_valid():
+    legs = [_spec("sell", "put", 95.0, "2026-06-19")]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="csp",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is True
+
+
+def test_sanity_csp_rejects_buy_action():
+    legs = [_spec("buy", "put", 95.0, "2026-06-19")]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="csp",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+
+
+def test_sanity_long_shares_valid():
+    legs = [_spec("buy", "share", None, None)]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="long_shares",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is True
+
+
+def test_sanity_long_shares_rejects_strike_or_expiry_set():
+    legs = [_spec("buy", "share", 100.0, None)]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="long_shares",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False

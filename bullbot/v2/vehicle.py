@@ -299,6 +299,81 @@ def _structure_levels_for_llm(levels: list, *, spot: float) -> dict:
     }
 
 
+from datetime import date as _date
+
+MIN_DTE = 7
+MAX_STRIKE_DEVIATION_PCT = 0.25
+
+
+def _check_expiry_min_dte(expiry: str, today: _date) -> SanityResult | None:
+    exp = _date.fromisoformat(expiry)
+    if (exp - today).days < MIN_DTE:
+        return SanityResult(ok=False, reason=f"expiry {expiry} too soon (< {MIN_DTE} DTE)")
+    return None
+
+
+def _check_moneyness(strike: float, spot: float) -> SanityResult | None:
+    if abs(strike - spot) / spot > MAX_STRIKE_DEVIATION_PCT:
+        return SanityResult(
+            ok=False,
+            reason=f"strike {strike} moneyness > {MAX_STRIKE_DEVIATION_PCT:.0%} from spot {spot}",
+        )
+    return None
+
+
+def validate_structure_sanity(
+    *,
+    legs: list[LegSpec],
+    spot: float,
+    structure_kind: str,
+    today: _date,
+) -> SanityResult:
+    """Dispatch by structure_kind. Returns SanityResult(ok=False, reason=...)
+    on any structural violation (wrong leg count, wrong action/kind, bad strikes
+    or expiries, broken ratios). Returns SanityResult(ok=True) on pass.
+
+    Grok review Tier 1 Finding 2 — runs BEFORE any chain lookup or risk math.
+    """
+    if structure_kind in ("long_call", "long_put"):
+        if len(legs) != 1:
+            return SanityResult(ok=False, reason=f"{structure_kind} requires exactly 1 leg")
+        leg = legs[0]
+        expected_kind = "call" if structure_kind == "long_call" else "put"
+        if leg.action != "buy" or leg.kind != expected_kind:
+            return SanityResult(ok=False, reason=f"{structure_kind} requires buy {expected_kind}")
+        bad = _check_expiry_min_dte(leg.expiry, today)
+        if bad: return bad
+        bad = _check_moneyness(leg.strike, spot)
+        if bad: return bad
+        return SanityResult(ok=True)
+
+    if structure_kind == "csp":
+        if len(legs) != 1:
+            return SanityResult(ok=False, reason="csp requires exactly 1 leg")
+        leg = legs[0]
+        if leg.action != "sell" or leg.kind != "put":
+            return SanityResult(ok=False, reason="csp requires sell put")
+        bad = _check_expiry_min_dte(leg.expiry, today)
+        if bad: return bad
+        bad = _check_moneyness(leg.strike, spot)
+        if bad: return bad
+        return SanityResult(ok=True)
+
+    if structure_kind in ("long_shares", "short_shares"):
+        if len(legs) != 1:
+            return SanityResult(ok=False, reason=f"{structure_kind} requires exactly 1 leg")
+        leg = legs[0]
+        expected_action = "buy" if structure_kind == "long_shares" else "sell"
+        if leg.action != expected_action or leg.kind != "share":
+            return SanityResult(ok=False, reason=f"{structure_kind} requires {expected_action} share")
+        if leg.strike is not None or leg.expiry is not None:
+            return SanityResult(ok=False, reason=f"{structure_kind} requires strike=None and expiry=None")
+        return SanityResult(ok=True)
+
+    # Multi-leg sanity arrives in Tasks 7, 8, 9.
+    return SanityResult(ok=False, reason=f"sanity for {structure_kind} not yet implemented")
+
+
 def build_llm_context(
     conn: sqlite3.Connection,
     *,
