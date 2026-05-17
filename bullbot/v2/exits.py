@@ -69,3 +69,39 @@ def _position_pnl_pct(*, position: Position, spot: float) -> float:
         return (spot - basis) / basis
     # leg.action == "sell" (short shares)
     return (basis - spot) / basis
+
+
+import sqlite3
+
+from bullbot.v2 import positions
+
+SAFETY_STOP_PCT = 0.15  # 15% adverse from effective basis
+
+
+def _check_safety_stop(
+    conn: sqlite3.Connection, *, position: Position, spot: float, now_ts: int,
+) -> ExitAction | None:
+    """Force-close a share-only position whose loss exceeds SAFETY_STOP_PCT
+    of effective basis. Returns None when not triggered.
+
+    Independent of intent — even an accumulate position will be liquidated
+    on a 15%+ adverse gap. Option-only positions are not subject to this
+    rule (risk.py's per-trade cap already bounded their downside at entry).
+    """
+    pnl_pct = _position_pnl_pct(position=position, spot=spot)
+    if pnl_pct == 0.0:
+        return None
+    if pnl_pct > -SAFETY_STOP_PCT:
+        return None
+    leg = position.legs[0]
+    positions.close_position(
+        conn,
+        position_id=position.id,
+        closed_ts=now_ts,
+        close_reason="safety_stop",
+        leg_exit_prices={leg.id: spot},
+    )
+    return ExitAction(
+        kind="closed_safety_stop",
+        reason=f"pnl {pnl_pct:.1%} exceeds {SAFETY_STOP_PCT:.0%} safety stop",
+    )
