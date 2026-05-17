@@ -27,7 +27,7 @@ def _cache_get(conn: sqlite3.Connection, *, key: str) -> str | None:
     ).fetchone()
     if row is None:
         return None
-    return row["response_text"]
+    return row[0]
 
 
 def _cache_put(conn: sqlite3.Connection, *, key: str, response: str) -> None:
