@@ -71,3 +71,19 @@ def _event_day_iv_multiplier(*, bars: list, lookback: int = EVENT_DAY_DECAY_BARS
         return 1.0
     decay = max((lookback - most_recent_event_age) / lookback, 0.0)
     return 1.0 + (EVENT_DAY_BUMP_MULT - 1.0) * decay
+
+
+from bullbot.v2.chains import _iv_proxy, IV_PROXY_MIN, IV_PROXY_MAX
+
+
+def _synth_iv(*, underlying_bars: list, vix_bars: list) -> float:
+    """Synthetic-chain IV = baseline proxy × event-day multiplier, clamped.
+
+    Composes chains._iv_proxy (realized vol × VIX regime) with
+    _event_day_iv_multiplier (Grok T1 F3). Both must be applied — the proxy
+    captures regime, the bump captures the jump-day theta-crush spike that
+    real chains see but proxies miss.
+    """
+    baseline = _iv_proxy(underlying_bars=underlying_bars, vix_bars=vix_bars)
+    multiplier = _event_day_iv_multiplier(bars=underlying_bars)
+    return max(IV_PROXY_MIN, min(IV_PROXY_MAX, baseline * multiplier))

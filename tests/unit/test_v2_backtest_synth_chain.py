@@ -87,3 +87,45 @@ def test_event_day_multiplier_returns_1_for_too_few_bars():
     bars = [_bar(close=100.0) for _ in range(10)]
     mult = synth_chain._event_day_iv_multiplier(bars=bars, lookback=5)
     assert mult == 1.0
+
+
+def _alternating_bars(n=60, base=100.0, pct=0.01):
+    """n bars alternating ±pct%. Produces non-zero realized vol."""
+    return [_bar(close=base * (1 + pct * ((-1) ** i)),
+                 high=base * (1 + pct * ((-1) ** i)) + 0.5,
+                 low=base * (1 + pct * ((-1) ** i)) - 0.5)
+            for i in range(n)]
+
+
+def test_synth_iv_returns_proxy_when_no_event_in_window():
+    """Steady alternating bars + flat VIX → multiplier = 1.0,
+    so _synth_iv equals chains._iv_proxy."""
+    from bullbot.v2 import chains
+    underlying = _alternating_bars()
+    vix = [_bar(close=18.0) for _ in range(60)]
+    proxy = chains._iv_proxy(underlying_bars=underlying, vix_bars=vix)
+    synth = synth_chain._synth_iv(underlying_bars=underlying, vix_bars=vix)
+    assert synth == pytest.approx(proxy, abs=0.001)
+
+
+def test_synth_iv_inflates_when_recent_event_present():
+    """Event on last bar → synth = proxy × 1.75 (subject to chains' [0.05, 3.0] clamp)."""
+    from bullbot.v2 import chains
+    underlying = _alternating_bars()
+    underlying[-1] = _bar(close=120.0, high=121.0, low=118.0)  # ~20% spike
+    vix = [_bar(close=18.0) for _ in range(60)]
+    proxy = chains._iv_proxy(underlying_bars=underlying, vix_bars=vix)
+    synth = synth_chain._synth_iv(underlying_bars=underlying, vix_bars=vix)
+    expected = min(3.0, proxy * 1.75)
+    assert synth == pytest.approx(expected, abs=0.01)
+
+
+def test_synth_iv_clamps_to_iv_proxy_max():
+    """Pathological inputs: proxy at ceiling (3.0) × 1.75 must still clamp to 3.0."""
+    from bullbot.v2 import chains
+    # Underlying with massive realized vol to push proxy near top of range
+    underlying = [_bar(close=100.0 * (1 + 0.15 * ((-1) ** i))) for i in range(60)]
+    vix_bars = [_bar(close=10.0)] * 59 + [_bar(close=80.0)]  # 8x regime spike
+    underlying[-1] = _bar(close=130.0, high=132.0, low=125.0)  # event today too
+    synth = synth_chain._synth_iv(underlying_bars=underlying, vix_bars=vix_bars)
+    assert synth == chains.IV_PROXY_MAX  # 3.0
