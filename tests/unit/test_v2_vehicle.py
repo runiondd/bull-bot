@@ -149,3 +149,57 @@ def test_iv_rank_filters_to_near_atm_strikes_only(conn):
     # If far-OTM strike included, today's 0.30 would look LOW (max 2.0).
     # Filtered correctly, today's IV equals the historical median.
     assert 0.3 < rank < 0.7
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — _large_move_count_90d
+# ---------------------------------------------------------------------------
+from types import SimpleNamespace
+
+
+def _bar(close, high=None, low=None):
+    return SimpleNamespace(
+        ts=0, open=close, high=high if high is not None else close,
+        low=low if low is not None else close, close=close, volume=1_000_000,
+    )
+
+
+def test_large_move_count_zero_for_steady_bars():
+    bars = [_bar(close=100.0 + i * 0.01) for i in range(100)]  # tiny drift
+    assert vehicle._large_move_count_90d(bars) == 0
+
+
+def test_large_move_count_detects_large_close_to_close_return():
+    bars = [_bar(close=100.0) for _ in range(50)]
+    # day 30 spikes 5% — should count
+    bars[30] = _bar(close=105.0, high=105.5, low=99.5)
+    n = vehicle._large_move_count_90d(bars)
+    assert n >= 1
+
+
+def test_large_move_count_detects_large_true_range():
+    """Big intra-day range but close near prior close — captured by TR rule."""
+    bars = [_bar(close=100.0, high=100.5, low=99.5) for _ in range(50)]
+    # day 30: close still 100 but high/low blown out
+    bars[30] = _bar(close=100.0, high=110.0, low=90.0)
+    n = vehicle._large_move_count_90d(bars)
+    assert n >= 1
+
+
+def test_large_move_count_only_considers_last_90_bars():
+    bars = [_bar(close=100.0, high=100.2, low=99.8) for _ in range(120)]
+    # spike at idx 5 (outside last 90 = idx 30..119)
+    bars[5] = _bar(close=110.0, high=115.0, low=100.0)
+    # spike at idx 100 (inside last 90 window); bars 101..119 stay at 110 so
+    # the close-to-close recovery doesn't trigger a second large-move count.
+    bars[100] = _bar(close=110.0, high=115.0, low=100.0)
+    for i in range(101, 120):
+        bars[i] = _bar(close=110.0, high=110.2, low=109.8)
+    n = vehicle._large_move_count_90d(bars)
+    assert n == 1
+
+
+def test_large_move_count_returns_zero_for_too_few_bars():
+    bars = [_bar(close=100.0) for _ in range(5)]
+    # 5 bars is below the 14-bar ATR floor; helper returns 0 rather than crashing.
+    assert vehicle._large_move_count_90d(bars) == 0

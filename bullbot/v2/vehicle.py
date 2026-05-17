@@ -127,3 +127,40 @@ def _iv_rank(
     today_iv = median(today_ivs)
 
     return max(0.0, min(1.0, (today_iv - iv_min) / (iv_max - iv_min)))
+
+
+LARGE_MOVE_RETURN_PCT = 0.03
+LARGE_MOVE_TR_MULT = 3.0
+LARGE_MOVE_LOOKBACK = 90
+ATR_WINDOW = 14
+
+
+def _large_move_count_90d(bars: list) -> int:
+    """Count of bars in the trailing 90 with |return| >= 3% OR TR >= 3 × ATR_14.
+    Returns 0 when fewer than ATR_WINDOW bars exist."""
+    if len(bars) < ATR_WINDOW + 1:
+        return 0
+    recent = bars[-LARGE_MOVE_LOOKBACK:]
+    # Compute true range per bar (need prev close)
+    trs: list[float] = []
+    for i, b in enumerate(recent):
+        if i == 0:
+            trs.append(b.high - b.low)
+            continue
+        prev_close = recent[i - 1].close
+        trs.append(max(
+            b.high - b.low,
+            abs(b.high - prev_close),
+            abs(b.low - prev_close),
+        ))
+    atr_14 = sum(trs[-ATR_WINDOW:]) / ATR_WINDOW
+
+    count = 0
+    for i, b in enumerate(recent):
+        if i == 0:
+            continue
+        prev_close = recent[i - 1].close
+        ret = abs(b.close - prev_close) / prev_close if prev_close > 0 else 0.0
+        if ret >= LARGE_MOVE_RETURN_PCT or trs[i] >= LARGE_MOVE_TR_MULT * atr_14:
+            count += 1
+    return count
