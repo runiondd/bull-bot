@@ -33,3 +33,44 @@ class EarningsEvent:
         """Integer day count from `today` to `event_date`. Positive = future,
         zero = today, negative = past."""
         return (self.event_date - today).days
+
+
+from typing import Callable
+
+
+def _default_yf_client():
+    """Lazy yfinance import — keeps tests independent of yfinance availability.
+    Mirrors bullbot/v2/chains.py:_default_yf_client."""
+    import yfinance as yf
+    return lambda symbol: yf.Ticker(symbol)
+
+
+def fetch_next_earnings(
+    *,
+    ticker: str,
+    today: date,
+    client: Callable[[str], object] | None = None,
+) -> EarningsEvent | None:
+    """Return the soonest future earnings event (event_date >= today) for
+    `ticker`, or None if no upcoming earnings in yfinance's 12-row window.
+
+    The yfinance DataFrame index is tz-aware (typically America/New_York);
+    we strip tz and convert to a plain date for the EarningsEvent.
+    """
+    if client is None:
+        client = _default_yf_client()
+
+    ticker_obj = client(ticker)
+    df = ticker_obj.get_earnings_dates(limit=12)
+    if df is None or df.empty:
+        return None
+
+    future_dates = [
+        ts.date() for ts in df.index
+        if ts.date() >= today
+    ]
+    if not future_dates:
+        return None
+
+    soonest = min(future_dates)
+    return EarningsEvent(ticker=ticker, event_date=soonest)
