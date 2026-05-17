@@ -12,6 +12,7 @@ this defers").
 from __future__ import annotations
 
 import csv
+from collections import defaultdict
 from datetime import datetime as _datetime
 from pathlib import Path
 
@@ -53,3 +54,39 @@ def _write_equity_curve_csv(result: BacktestResult, *, out_path: Path) -> None:
         w.writerow(_EQUITY_HEADER)
         for asof_ts, nav in result.daily_mtm:
             w.writerow([asof_ts, _ts_to_date_str(asof_ts), nav])
+
+
+_ATTRIBUTION_HEADER = [
+    "structure_kind", "trade_count", "wins", "losses",
+    "win_rate", "total_pnl", "avg_pnl",
+]
+
+
+def _write_vehicle_attribution_csv(result: BacktestResult, *, out_path: Path) -> None:
+    """Per-structure aggregation CSV. Header always written; one row per
+    structure_kind observed. Sorted by structure_kind for determinism.
+    Zero P&L counts as a loss (conservative)."""
+    buckets: dict[str, dict[str, float]] = defaultdict(
+        lambda: {"count": 0, "wins": 0, "losses": 0, "total": 0.0}
+    )
+    for t in result.trades:
+        b = buckets[t.structure_kind]
+        b["count"] += 1
+        b["total"] += t.realized_pnl
+        if t.realized_pnl > 0:
+            b["wins"] += 1
+        else:
+            b["losses"] += 1
+
+    with out_path.open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(_ATTRIBUTION_HEADER)
+        for kind in sorted(buckets):
+            b = buckets[kind]
+            count = b["count"]
+            win_rate = round(b["wins"] / count, 4) if count else 0.0
+            avg_pnl = b["total"] / count if count else 0.0
+            w.writerow([
+                kind, int(count), int(b["wins"]), int(b["losses"]),
+                win_rate, b["total"], avg_pnl,
+            ])

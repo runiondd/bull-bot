@@ -103,3 +103,61 @@ def test_write_equity_curve_csv_preserves_chronological_order(tmp_path):
     with out.open() as f:
         rows = list(csv.DictReader(f))
     assert int(rows[0]["asof_ts"]) < int(rows[1]["asof_ts"])
+
+
+def test_write_vehicle_attribution_writes_header_only_for_empty_trades(tmp_path):
+    out = tmp_path / "attr.csv"
+    report._write_vehicle_attribution_csv(_result(trades=[]), out_path=out)
+    with out.open() as f:
+        rows = list(csv.reader(f))
+    assert rows == [[
+        "structure_kind", "trade_count", "wins", "losses",
+        "win_rate", "total_pnl", "avg_pnl",
+    ]]
+
+
+def test_write_vehicle_attribution_aggregates_per_structure(tmp_path):
+    out = tmp_path / "attr.csv"
+    trades = [
+        _trade(structure_kind="long_call", realized_pnl=100.0),
+        _trade(structure_kind="long_call", realized_pnl=-50.0),
+        _trade(structure_kind="long_call", realized_pnl=200.0),
+        _trade(structure_kind="csp", realized_pnl=75.0),
+    ]
+    report._write_vehicle_attribution_csv(_result(trades=trades), out_path=out)
+    with out.open() as f:
+        rows = list(csv.DictReader(f))
+    by_kind = {r["structure_kind"]: r for r in rows}
+    assert by_kind["long_call"]["trade_count"] == "3"
+    assert by_kind["long_call"]["wins"] == "2"
+    assert by_kind["long_call"]["losses"] == "1"
+    assert by_kind["long_call"]["win_rate"] == "0.6667"
+    assert by_kind["long_call"]["total_pnl"] == "250.0"
+    assert by_kind["long_call"]["avg_pnl"].startswith("83.33")
+    assert by_kind["csp"]["trade_count"] == "1"
+
+
+def test_write_vehicle_attribution_counts_zero_pnl_as_loss(tmp_path):
+    out = tmp_path / "attr.csv"
+    trades = [_trade(realized_pnl=0.0)]
+    report._write_vehicle_attribution_csv(_result(trades=trades), out_path=out)
+    with out.open() as f:
+        rows = list(csv.DictReader(f))
+    assert rows[0]["wins"] == "0"
+    assert rows[0]["losses"] == "1"
+    assert rows[0]["win_rate"] == "0.0"
+
+
+def test_write_vehicle_attribution_rows_sorted_by_structure_kind(tmp_path):
+    out = tmp_path / "attr.csv"
+    trades = [
+        _trade(structure_kind="vertical_credit_spread", realized_pnl=50.0),
+        _trade(structure_kind="csp", realized_pnl=50.0),
+        _trade(structure_kind="long_call", realized_pnl=50.0),
+    ]
+    report._write_vehicle_attribution_csv(_result(trades=trades), out_path=out)
+    with out.open() as f:
+        rows = list(csv.DictReader(f))
+    assert [r["structure_kind"] for r in rows] == [
+        "csp", "long_call", "vertical_credit_spread",
+    ]
