@@ -174,3 +174,99 @@ def test_dtes_in_band_handles_malformed_expiry_gracefully():
     expiries = ["2026-06-19", "not-a-date", "2026-09-19"]
     out = synth_chain._dtes_in_band(expiries=expiries, today=today)
     assert out == ["2026-06-19", "2026-09-19"]
+
+
+def test_synthesize_returns_chain_with_quotes_for_each_strike_x_expiry():
+    """3 strikes × 2 expiries × 2 kinds (call + put) = 12 quotes."""
+    underlying = _alternating_bars()
+    vix = [_bar(close=18.0) for _ in range(60)]
+    chain = synth_chain.synthesize(
+        ticker="AAPL", asof_ts=1_700_000_000,
+        today=date(2026, 5, 17), spot=100.0,
+        underlying_bars=underlying, vix_bars=vix,
+        expiries=["2026-06-19", "2026-09-19"],
+        strikes=[95.0, 100.0, 105.0],
+    )
+    assert chain.ticker == "AAPL"
+    assert chain.asof_ts == 1_700_000_000
+    assert len(chain.quotes) == 12  # 3 × 2 × 2
+
+
+def test_synthesize_filters_strikes_outside_10pct_band():
+    underlying = _alternating_bars()
+    vix = [_bar(close=18.0) for _ in range(60)]
+    chain = synth_chain.synthesize(
+        ticker="AAPL", asof_ts=1_700_000_000,
+        today=date(2026, 5, 17), spot=100.0,
+        underlying_bars=underlying, vix_bars=vix,
+        expiries=["2026-06-19"],
+        strikes=[80.0, 95.0, 100.0, 105.0, 120.0],  # 80 + 120 outside band
+    )
+    in_band_strikes = {q.strike for q in chain.quotes}
+    assert in_band_strikes == {95.0, 100.0, 105.0}
+
+
+def test_synthesize_filters_expiries_outside_21_365_dte():
+    underlying = _alternating_bars()
+    vix = [_bar(close=18.0) for _ in range(60)]
+    chain = synth_chain.synthesize(
+        ticker="AAPL", asof_ts=1_700_000_000,
+        today=date(2026, 5, 17), spot=100.0,
+        underlying_bars=underlying, vix_bars=vix,
+        expiries=["2026-05-25", "2026-06-19", "2027-09-19"],  # 8d, 33d, 489d
+        strikes=[100.0],
+    )
+    in_band_expiries = {q.expiry for q in chain.quotes}
+    assert in_band_expiries == {"2026-06-19"}
+
+
+def test_synthesize_quotes_are_bs_priced_with_source_bs():
+    """Each quote has bid=ask=last=BS_price and source='bs'."""
+    underlying = _alternating_bars()
+    vix = [_bar(close=18.0) for _ in range(60)]
+    chain = synth_chain.synthesize(
+        ticker="AAPL", asof_ts=1_700_000_000,
+        today=date(2026, 5, 17), spot=100.0,
+        underlying_bars=underlying, vix_bars=vix,
+        expiries=["2026-06-19"], strikes=[100.0],
+    )
+    for q in chain.quotes:
+        assert q.source == "bs"
+        assert q.bid == q.ask == q.last
+        assert q.bid > 0  # ATM near-term option should have non-zero premium
+        assert q.iv is not None
+
+
+def test_synthesize_returns_empty_chain_when_all_strikes_filtered_out():
+    underlying = _alternating_bars()
+    vix = [_bar(close=18.0) for _ in range(60)]
+    chain = synth_chain.synthesize(
+        ticker="AAPL", asof_ts=1_700_000_000,
+        today=date(2026, 5, 17), spot=100.0,
+        underlying_bars=underlying, vix_bars=vix,
+        expiries=["2026-06-19"], strikes=[50.0, 200.0],  # both way outside band
+    )
+    assert chain.quotes == []
+
+
+def test_synthesize_event_day_inflates_quote_iv_vs_steady_day():
+    """Same setup with vs without event in the last 5 bars: IV should differ."""
+    steady = _alternating_bars()
+    spike = _alternating_bars()
+    spike[-1] = _bar(close=120.0, high=121.0, low=119.0)
+    vix = [_bar(close=18.0) for _ in range(60)]
+    chain_steady = synth_chain.synthesize(
+        ticker="AAPL", asof_ts=1_700_000_000,
+        today=date(2026, 5, 17), spot=100.0,
+        underlying_bars=steady, vix_bars=vix,
+        expiries=["2026-06-19"], strikes=[100.0],
+    )
+    chain_spike = synth_chain.synthesize(
+        ticker="AAPL", asof_ts=1_700_000_000,
+        today=date(2026, 5, 17), spot=100.0,
+        underlying_bars=spike, vix_bars=vix,
+        expiries=["2026-06-19"], strikes=[100.0],
+    )
+    iv_steady = chain_steady.quotes[0].iv
+    iv_spike = chain_spike.quotes[0].iv
+    assert iv_spike > iv_steady * 1.5  # bump fired

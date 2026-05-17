@@ -119,3 +119,54 @@ def _dtes_in_band(*, expiries: list[str], today: _date) -> list[str]:
         if BACKTEST_MIN_DTE <= dte <= BACKTEST_MAX_DTE:
             out.append(expiry)
     return out
+
+
+from bullbot.data.synthetic_chain import bs_price
+from bullbot.v2.chains import Chain, ChainQuote, _RISK_FREE_RATE
+
+
+def synthesize(
+    *,
+    ticker: str,
+    asof_ts: int,
+    today: _date,
+    spot: float,
+    underlying_bars: list,
+    vix_bars: list,
+    expiries: list[str],
+    strikes: list[float],
+) -> Chain:
+    """Produce a synthetic Chain for a backtest replay step.
+
+    Filters input expiries/strikes to BS-pricable bands (21-365 DTE,
+    ATM ±10%), computes one synthesized IV per (ticker, asof), then BS-prices
+    every (expiry, strike, kind=call/put) combination. Each ChainQuote's
+    bid=ask=last=BS_price and source='bs'.
+
+    Empty chain (quotes=[]) is a valid return when filters strip everything.
+    """
+    in_band_strikes = _strikes_in_band(strikes=strikes, spot=spot)
+    in_band_expiries = _dtes_in_band(expiries=expiries, today=today)
+    if not in_band_strikes or not in_band_expiries:
+        return Chain(ticker=ticker, asof_ts=asof_ts, quotes=[])
+
+    iv = _synth_iv(underlying_bars=underlying_bars, vix_bars=vix_bars)
+
+    quotes: list[ChainQuote] = []
+    for expiry in in_band_expiries:
+        exp_date = _date.fromisoformat(expiry)
+        t_years = (exp_date - today).days / 365.0
+        for strike in in_band_strikes:
+            for kind in ("call", "put"):
+                bs_kind = "C" if kind == "call" else "P"
+                price = bs_price(
+                    spot=spot, strike=strike, t_years=t_years,
+                    vol=iv, r=_RISK_FREE_RATE, kind=bs_kind,
+                )
+                quotes.append(ChainQuote(
+                    expiry=expiry, strike=strike, kind=kind,
+                    bid=price, ask=price, last=price,
+                    iv=iv, oi=None, source="bs",
+                ))
+
+    return Chain(ticker=ticker, asof_ts=asof_ts, quotes=quotes)
