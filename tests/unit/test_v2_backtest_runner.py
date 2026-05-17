@@ -257,3 +257,48 @@ def test_replay_one_day_uses_llm_cache_on_repeat_call(conn, fake_anthropic):
     assert conn.execute(
         "SELECT COUNT(*) AS n FROM backtest_llm_cache"
     ).fetchone()["n"] == 1
+
+
+def test_backtest_iterates_days_and_skips_when_no_bars(conn, fake_anthropic):
+    """No bars at all → empty result, no exceptions."""
+    result = runner.backtest(
+        conn=conn, ticker="AAPL",
+        start=date(2024, 1, 1), end=date(2024, 1, 7),
+        starting_nav=50_000.0,
+        signal_fn=_stub_signal_fn, strike_grid_fn=_stub_strike_grid_fn,
+        expiries_fn=_stub_expiries_fn,
+        llm_client=fake_anthropic,
+    )
+    assert result.ticker == "AAPL"
+    assert result.starting_nav == 50_000.0
+    assert result.ending_nav == 50_000.0  # no trades, NAV unchanged
+    assert result.trades == []
+    assert result.daily_mtm == []
+
+
+def test_backtest_returns_filled_result_with_seeded_bars(conn, fake_anthropic):
+    """Seed 60 bars + queue 'pass' responses → backtest completes, daily_mtm populated."""
+    import json
+    # Seed 60 days ending at 2024-03-15
+    end_ts = int(date(2024, 3, 15).strftime("%s"))
+    _seed_bars(conn, "AAPL", end_ts, n=60, base_close=100.0)
+    _seed_bars(conn, "VIX", end_ts, n=60, base_close=18.0)
+    # Queue many "pass" responses — the cache means we only need one
+    fake_anthropic.queue_response(json.dumps({
+        "decision": "pass", "intent": "trade", "structure": "long_call",
+        "legs": [], "exit_plan": {}, "rationale": "no edge",
+    }))
+    result = runner.backtest(
+        conn=conn, ticker="AAPL",
+        start=date(2024, 3, 13), end=date(2024, 3, 15),
+        starting_nav=50_000.0,
+        signal_fn=_stub_signal_fn, strike_grid_fn=_stub_strike_grid_fn,
+        expiries_fn=_stub_expiries_fn,
+        llm_client=fake_anthropic,
+    )
+    # 3 days iterated, all "pass" → no trades opened
+    assert len(result.trades) == 0
+    # daily_mtm should have at least 1 entry (the days with bars)
+    assert len(result.daily_mtm) >= 1
+    # Ending NAV equals starting NAV since no trades closed
+    assert result.ending_nav == 50_000.0

@@ -17,6 +17,8 @@ import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import date as _date
+from datetime import datetime as _datetime
+from datetime import timedelta as _timedelta
 from types import SimpleNamespace
 from typing import Callable
 
@@ -304,3 +306,55 @@ def _replay_one_day(
         "trade_closed": trade_closed,
         "mtm_nav": starting_nav_today + mtm_total + (trade_closed.realized_pnl if trade_closed else 0.0),
     }
+
+
+def backtest(
+    *,
+    conn: sqlite3.Connection,
+    ticker: str,
+    start: _date,
+    end: _date,
+    starting_nav: float,
+    signal_fn: Callable,
+    strike_grid_fn: Callable,
+    expiries_fn: Callable,
+    llm_client: object,
+    llm_cache_conn: sqlite3.Connection | None = None,
+) -> BacktestResult:
+    """Replay one ticker through [start, end] calendar days.
+
+    Iterates calendar days; days without bars (weekends, holidays) silently
+    skip. LLM calls cached on disk via backtest_llm_cache table — reruns
+    over the same input cost $0 in Anthropic credits.
+    """
+    if llm_cache_conn is None:
+        llm_cache_conn = conn
+
+    trades: list[BacktestTrade] = []
+    daily_mtm: list[tuple[int, float]] = []
+    running_nav = starting_nav
+
+    current = start
+    while current <= end:
+        asof_ts = int(
+            _datetime(current.year, current.month, current.day, 23, 0).timestamp()
+        )
+        outcome = _replay_one_day(
+            conn=conn, ticker=ticker, today=current, asof_ts=asof_ts,
+            starting_nav_today=running_nav,
+            signal_fn=signal_fn, strike_grid_fn=strike_grid_fn,
+            expiries_fn=expiries_fn,
+            llm_client=llm_client, llm_cache_conn=llm_cache_conn,
+        )
+        if outcome is not None:
+            if outcome.get("trade_closed") is not None:
+                trades.append(outcome["trade_closed"])
+                running_nav += outcome["trade_closed"].realized_pnl
+            daily_mtm.append((asof_ts, outcome["mtm_nav"]))
+        current += _timedelta(days=1)
+
+    return BacktestResult(
+        ticker=ticker, start_date=start, end_date=end,
+        starting_nav=starting_nav, ending_nav=running_nav,
+        trades=trades, daily_mtm=daily_mtm,
+    )
