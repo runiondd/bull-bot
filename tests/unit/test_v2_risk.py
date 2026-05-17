@@ -135,6 +135,20 @@ def test_max_loss_long_call_butterfly_is_net_debit():
     assert risk.compute_max_loss(legs, spot=100.0) == pytest.approx(100.0)
 
 
+def test_max_loss_scaled_butterfly_returns_proportional_loss():
+    """Butterfly with qty 5:10:5 (5x scale of 1:2:1) should return 5x the
+    max loss of a single butterfly. Bug fix: detector previously hardcoded
+    qty == 2 for middle leg."""
+    legs = [
+        _call("buy", strike=95.0, premium=6.00, qty=5),
+        _call("sell", strike=100.0, premium=3.00, qty=10),
+        _call("buy", strike=105.0, premium=1.00, qty=5),
+    ]
+    # Single-unit max loss = ($6 - 2*$3 + $1) * 100 = $100
+    # 5-unit max loss = $500
+    assert risk.compute_max_loss(legs, spot=100.0) == pytest.approx(500.0)
+
+
 def test_max_loss_covered_call_is_share_safety_stop_minus_call_credit():
     """Long 100 shares @ $100 + short 105 call @ $1.50.
     Share safety stop = 100 × 100 × 15% = $1500. Call credit = $150.

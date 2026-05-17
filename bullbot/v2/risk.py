@@ -172,10 +172,12 @@ def _is_long_butterfly(legs: list[OptionLeg]) -> bool:
     if len({l.expiry for l in legs}) != 1:
         return False
     sorted_legs = sorted(legs, key=lambda l: l.strike)
+    base = sorted_legs[0].qty
     return (
-        sorted_legs[0].action == "buy" and sorted_legs[0].qty == 1
-        and sorted_legs[1].action == "sell" and sorted_legs[1].qty == 2
-        and sorted_legs[2].action == "buy" and sorted_legs[2].qty == 1
+        base > 0
+        and sorted_legs[0].action == "buy"
+        and sorted_legs[1].action == "sell" and sorted_legs[1].qty == 2 * base
+        and sorted_legs[2].action == "buy" and sorted_legs[2].qty == base
     )
 
 
