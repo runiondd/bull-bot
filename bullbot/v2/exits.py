@@ -209,3 +209,36 @@ def _check_signal_flip(
         kind="closed_signal_flip",
         reason=f"signal flipped to {signal.direction} @ confidence {signal.confidence:.2f}",
     )
+
+
+from datetime import date as _date
+
+
+def _check_time_stop(
+    conn: sqlite3.Connection, *, position: Position, today: _date, now_ts: int,
+) -> ExitAction | None:
+    """Close when the nearest option leg's days-to-expiry <= time_stop_dte.
+    No-op for share-only positions or when time_stop_dte is unset."""
+    if position.time_stop_dte is None:
+        return None
+    option_legs = [leg for leg in position.legs if leg.kind in ("call", "put")]
+    if not option_legs:
+        return None
+    nearest_dte = min(
+        (_date.fromisoformat(leg.expiry) - today).days
+        for leg in option_legs
+    )
+    if nearest_dte > position.time_stop_dte:
+        return None
+    leg_exit_prices = {leg.id: 0.0 for leg in position.legs}
+    positions.close_position(
+        conn,
+        position_id=position.id,
+        closed_ts=now_ts,
+        close_reason="time_stop",
+        leg_exit_prices=leg_exit_prices,
+    )
+    return ExitAction(
+        kind="closed_time_stop",
+        reason=f"nearest leg DTE {nearest_dte} <= time_stop_dte {position.time_stop_dte}",
+    )

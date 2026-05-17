@@ -362,3 +362,93 @@ def test_check_signal_flip_fires_for_bearish_position_on_bullish_signal(conn):
     )
     assert action is not None
     assert action.kind == "closed_signal_flip"
+
+
+def test_check_time_stop_fires_when_nearest_leg_dte_reaches_stored_threshold(conn):
+    leg = positions.OptionLeg(
+        action="buy", kind="call", strike=190.0, expiry="2026-06-08",
+        qty=1, entry_price=2.50,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="long_call",
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=200.0, stop_price=180.0,
+        time_stop_dte=21, assignment_acceptable=False,
+        nearest_leg_expiry_dte=22, rationale="",
+    )
+    # today = 2026-05-18 -> DTE = 21 -> triggers (<=21)
+    action = exits._check_time_stop(
+        conn, position=pos, today=date(2026, 5, 18), now_ts=1_700_001_000,
+    )
+    assert action is not None
+    assert action.kind == "closed_time_stop"
+
+
+def test_check_time_stop_does_not_fire_when_dte_above_threshold(conn):
+    leg = positions.OptionLeg(
+        action="buy", kind="call", strike=190.0, expiry="2026-06-30",
+        qty=1, entry_price=2.50,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="long_call",
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=200.0, stop_price=180.0,
+        time_stop_dte=21, assignment_acceptable=False,
+        nearest_leg_expiry_dte=44, rationale="",
+    )
+    action = exits._check_time_stop(
+        conn, position=pos, today=date(2026, 5, 17), now_ts=1_700_001_000,
+    )
+    assert action is None
+
+
+def test_check_time_stop_uses_nearest_leg_for_multi_leg_structures(conn):
+    leg_near = positions.OptionLeg(
+        action="buy", kind="call", strike=190.0, expiry="2026-06-08",
+        qty=1, entry_price=2.50,
+    )
+    leg_far = positions.OptionLeg(
+        action="sell", kind="call", strike=200.0, expiry="2026-09-19",
+        qty=1, entry_price=1.00,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="diagonal",
+        legs=[leg_near, leg_far], opened_ts=1_700_000_000,
+        profit_target_price=195.0, stop_price=180.0,
+        time_stop_dte=21, assignment_acceptable=False,
+        nearest_leg_expiry_dte=22, rationale="",
+    )
+    action = exits._check_time_stop(
+        conn, position=pos, today=date(2026, 5, 18), now_ts=1_700_001_000,
+    )
+    assert action is not None
+
+
+def test_check_time_stop_returns_none_when_time_stop_dte_unset(conn):
+    leg = positions.OptionLeg(
+        action="buy", kind="call", strike=190.0, expiry="2026-06-08",
+        qty=1, entry_price=2.50,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="long_call",
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=200.0, stop_price=180.0,
+        time_stop_dte=None, assignment_acceptable=False,
+        nearest_leg_expiry_dte=22, rationale="",
+    )
+    action = exits._check_time_stop(
+        conn, position=pos, today=date(2026, 5, 18), now_ts=1_700_001_000,
+    )
+    assert action is None
+
+
+def test_check_time_stop_returns_none_for_shares_only_position(conn):
+    pos = _share_position(conn, time_stop_dte=21)
+    action = exits._check_time_stop(
+        conn, position=pos, today=date(2026, 5, 18), now_ts=1_700_001_000,
+    )
+    assert action is None
