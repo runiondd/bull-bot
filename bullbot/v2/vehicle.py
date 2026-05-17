@@ -713,3 +713,147 @@ def build_llm_context(
             "ticker_concentration_pct": per_ticker_concentration_pct,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Task 11 — pick() + _parse_llm_response + LLM client
+# ---------------------------------------------------------------------------
+import json
+import logging
+import re
+
+_log = logging.getLogger(__name__)
+
+HAIKU_MODEL = "claude-haiku-4-5-20251001"
+MAX_OUTPUT_TOKENS = 2000
+
+_JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
+
+
+def _default_anthropic_client():
+    """Lazy anthropic import — keeps tests independent of SDK availability."""
+    import anthropic
+    return anthropic.Anthropic()
+
+
+def _parse_llm_response(text: str) -> "VehicleDecision | None":
+    """Extract first {...} block, parse JSON, materialize VehicleDecision.
+    Returns None on parse error or schema-rejection."""
+    if not text:
+        return None
+    match = _JSON_BLOCK_RE.search(text)
+    if not match:
+        return None
+    try:
+        payload = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    try:
+        legs = [
+            LegSpec(
+                action=leg["action"], kind=leg["kind"],
+                strike=leg.get("strike"), expiry=leg.get("expiry"),
+                qty_ratio=int(leg.get("qty_ratio", 1)),
+            )
+            for leg in payload.get("legs", [])
+        ]
+        return VehicleDecision(
+            decision=payload["decision"], intent=payload["intent"],
+            structure=payload["structure"], legs=legs,
+            exit_plan=payload.get("exit_plan", {}),
+            rationale=payload.get("rationale", ""),
+        )
+    except (KeyError, ValueError) as exc:
+        _log.warning("LLM payload schema rejection: %s", exc)
+        return None
+
+
+_PROMPT_TEMPLATE = """You are a swing-trading vehicle-selection agent for a paper-trading research bot.
+
+Given the following context as a single JSON object, return EXACTLY ONE JSON object describing the trade you would open today (or "pass" if no good trade exists). Use this schema:
+
+{{
+  "decision": "open" | "pass",
+  "intent": "trade" | "accumulate",
+  "structure": one of {structure_kinds},
+  "legs": [
+    {{"action": "buy"|"sell", "kind": "call"|"put"|"share",
+      "strike": float | null, "expiry": "YYYY-MM-DD" | null,
+      "qty_ratio": int}}
+  ],
+  "exit_plan": {{
+    "profit_target_price": float | null,
+    "stop_price": float | null,
+    "time_stop_dte": int | null,
+    "assignment_acceptable": bool
+  }},
+  "rationale": "<= 200 chars why this structure now"
+}}
+
+CONTEXT:
+{context_json}
+
+Return only the JSON object — no prose, no markdown fences."""
+
+
+def pick(
+    conn: sqlite3.Connection,
+    *,
+    ticker: str,
+    spot: float,
+    signal: DirectionalSignal,
+    bars: list,
+    levels: list,
+    days_to_earnings: int,
+    earnings_window_active: bool,
+    iv_rank: float,
+    budget_per_trade_usd: float,
+    asof_ts: int,
+    per_ticker_concentration_pct: float,
+    open_positions_count: int,
+    current_position: "Position | None" = None,
+    client: object = None,
+) -> VehicleDecision:
+    """Main entry: assemble context, call Haiku, parse response, return decision.
+
+    Returns a `pass` VehicleDecision (with diagnostic rationale) on any
+    LLM failure (network, invalid JSON, schema rejection). Validation against
+    risk caps + structure sanity is the caller's job via validate()."""
+    if client is None:
+        client = _default_anthropic_client()
+
+    ctx = build_llm_context(
+        conn,
+        ticker=ticker, spot=spot, signal=signal, bars=bars, levels=levels,
+        days_to_earnings=days_to_earnings,
+        earnings_window_active=earnings_window_active, iv_rank=iv_rank,
+        budget_per_trade_usd=budget_per_trade_usd, asof_ts=asof_ts,
+        per_ticker_concentration_pct=per_ticker_concentration_pct,
+        open_positions_count=open_positions_count,
+        current_position=current_position,
+    )
+    prompt = _PROMPT_TEMPLATE.format(
+        structure_kinds=list(STRUCTURE_KINDS),
+        context_json=json.dumps(ctx, indent=2),
+    )
+    try:
+        response = client.messages.create(
+            model=HAIKU_MODEL,
+            max_tokens=MAX_OUTPUT_TOKENS,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.content[0].text if response.content else ""
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("vehicle.pick: anthropic call failed for %s: %s", ticker, exc)
+        return VehicleDecision(
+            decision="pass", intent="trade", structure="long_call",
+            legs=[], exit_plan={}, rationale=f"anthropic error: {exc}",
+        )
+
+    decision = _parse_llm_response(text)
+    if decision is None:
+        return VehicleDecision(
+            decision="pass", intent="trade", structure="long_call",
+            legs=[], exit_plan={}, rationale="LLM response failed to parse as JSON",
+        )
+    return decision

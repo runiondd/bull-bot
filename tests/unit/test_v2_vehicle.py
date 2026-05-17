@@ -883,3 +883,120 @@ def test_validate_rejects_when_per_trade_cap_exceeded(conn):
     )
     assert result.ok is False
     assert "loss" in result.reason.lower() or "cap" in result.reason.lower()
+
+
+# ---------------------------------------------------------------------------
+# Task 11 — pick() + _parse_llm_response
+# ---------------------------------------------------------------------------
+import json as _json
+
+
+def test_pick_returns_open_decision_when_llm_returns_valid_json(conn, fake_anthropic):
+    payload = {
+        "decision": "open",
+        "intent": "trade",
+        "structure": "long_call",
+        "legs": [{
+            "action": "buy", "kind": "call", "strike": 100.0,
+            "expiry": "2026-06-19", "qty_ratio": 1,
+        }],
+        "exit_plan": {
+            "profit_target_price": 110.0, "stop_price": 95.0,
+            "time_stop_dte": 21, "assignment_acceptable": False,
+        },
+        "rationale": "bullish breakout",
+    }
+    fake_anthropic.queue_response(_json.dumps(payload))
+    bars = [_bar(close=100.0) for _ in range(60)]
+    decision = vehicle.pick(
+        conn,
+        ticker="AAPL", spot=100.0, signal=_sample_signal(),
+        bars=bars, levels=[], days_to_earnings=23,
+        earnings_window_active=False, iv_rank=0.34,
+        budget_per_trade_usd=1500.0, asof_ts=1_700_000_000,
+        per_ticker_concentration_pct=0.0,
+        open_positions_count=7,
+        client=fake_anthropic,
+    )
+    assert decision.decision == "open"
+    assert decision.structure == "long_call"
+    assert len(decision.legs) == 1
+
+
+def test_pick_returns_pass_decision_when_llm_returns_pass(conn, fake_anthropic):
+    fake_anthropic.queue_response('{"decision": "pass", "intent": "trade", '
+                                  '"structure": "long_call", "legs": [], '
+                                  '"exit_plan": {}, "rationale": "no edge"}')
+    bars = [_bar(close=100.0) for _ in range(60)]
+    decision = vehicle.pick(
+        conn,
+        ticker="AAPL", spot=100.0, signal=_sample_signal(),
+        bars=bars, levels=[], days_to_earnings=23,
+        earnings_window_active=False, iv_rank=0.34,
+        budget_per_trade_usd=1500.0, asof_ts=1_700_000_000,
+        per_ticker_concentration_pct=0.0,
+        open_positions_count=7,
+        client=fake_anthropic,
+    )
+    assert decision.decision == "pass"
+
+
+def test_pick_extracts_json_from_prose_wrapper(conn, fake_anthropic):
+    """LLM sometimes wraps the JSON in prose. The parser must extract first {...} block."""
+    payload = {
+        "decision": "open", "intent": "trade", "structure": "csp",
+        "legs": [{"action": "sell", "kind": "put", "strike": 95.0,
+                  "expiry": "2026-06-19", "qty_ratio": 1}],
+        "exit_plan": {}, "rationale": "lower basis",
+    }
+    fake_anthropic.queue_response(
+        f"I think the right call here is to: {_json.dumps(payload)} Let me know if you want me to elaborate."
+    )
+    bars = [_bar(close=100.0) for _ in range(60)]
+    decision = vehicle.pick(
+        conn,
+        ticker="AAPL", spot=100.0, signal=_sample_signal(),
+        bars=bars, levels=[], days_to_earnings=23,
+        earnings_window_active=False, iv_rank=0.34,
+        budget_per_trade_usd=1500.0, asof_ts=1_700_000_000,
+        per_ticker_concentration_pct=0.0,
+        open_positions_count=7,
+        client=fake_anthropic,
+    )
+    assert decision.structure == "csp"
+
+
+def test_pick_returns_pass_decision_when_llm_returns_invalid_json(conn, fake_anthropic):
+    fake_anthropic.queue_response("I cannot make a decision today, sorry.")
+    bars = [_bar(close=100.0) for _ in range(60)]
+    decision = vehicle.pick(
+        conn,
+        ticker="AAPL", spot=100.0, signal=_sample_signal(),
+        bars=bars, levels=[], days_to_earnings=23,
+        earnings_window_active=False, iv_rank=0.34,
+        budget_per_trade_usd=1500.0, asof_ts=1_700_000_000,
+        per_ticker_concentration_pct=0.0,
+        open_positions_count=7,
+        client=fake_anthropic,
+    )
+    assert decision.decision == "pass"
+    assert "parse" in decision.rationale.lower() or "json" in decision.rationale.lower()
+
+
+def test_pick_returns_pass_when_anthropic_raises(conn):
+    class RaisingClient:
+        messages = property(lambda self: self)
+        def create(self, **kwargs):
+            raise ConnectionError("simulated outage")
+    bars = [_bar(close=100.0) for _ in range(60)]
+    decision = vehicle.pick(
+        conn,
+        ticker="AAPL", spot=100.0, signal=_sample_signal(),
+        bars=bars, levels=[], days_to_earnings=23,
+        earnings_window_active=False, iv_rank=0.34,
+        budget_per_trade_usd=1500.0, asof_ts=1_700_000_000,
+        per_ticker_concentration_pct=0.0,
+        open_positions_count=7,
+        client=RaisingClient(),
+    )
+    assert decision.decision == "pass"
