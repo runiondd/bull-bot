@@ -186,7 +186,7 @@ def _near_atm_liquidity(
         return {
             "total_oi_within_5pct": 0,
             "spread_avg_pct": None,
-            "nearest_monthly_expiry": None,
+            "nearest_expiry": None,
         }
     total_oi = sum(int(r["oi"] or 0) for r in rows)
     spreads = []
@@ -202,5 +202,5 @@ def _near_atm_liquidity(
     return {
         "total_oi_within_5pct": total_oi,
         "spread_avg_pct": spread_avg,
-        "nearest_monthly_expiry": nearest_expiry,
+        "nearest_expiry": nearest_expiry,
     }

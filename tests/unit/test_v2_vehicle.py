@@ -223,7 +223,7 @@ def test_near_atm_liquidity_returns_zeros_when_no_data(conn):
     out = vehicle._near_atm_liquidity(conn, ticker="XYZ", asof_ts=1_700_000_000, spot=100.0)
     assert out["total_oi_within_5pct"] == 0
     assert out["spread_avg_pct"] is None
-    assert out["nearest_monthly_expiry"] is None
+    assert out["nearest_expiry"] is None
 
 
 def test_near_atm_liquidity_sums_oi_in_band_only(conn):
@@ -259,4 +259,4 @@ def test_near_atm_liquidity_returns_nearest_expiry(conn):
     _seed_chain_with_oi(conn, ticker="AAPL", asof_ts=asof, expiry="2026-06-19",
                         strike=100.0, kind="call", bid=2.0, ask=2.2, oi=100)
     out = vehicle._near_atm_liquidity(conn, ticker="AAPL", asof_ts=asof, spot=100.0)
-    assert out["nearest_monthly_expiry"] == "2026-06-19"
+    assert out["nearest_expiry"] == "2026-06-19"
