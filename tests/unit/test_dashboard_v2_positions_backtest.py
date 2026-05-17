@@ -171,3 +171,30 @@ def test_v2_positions_tab_handles_missing_mtm():
     assert "MSFT" in html
     assert "csp" in html
     assert "—" in html  # em-dash for missing MtM
+
+
+def test_v2_backtest_tab_renders_empty_state_when_no_report():
+    html = tabs.v2_backtest_tab({"v2_backtest": None})
+    assert "no backtest" in html.lower()
+
+
+def test_v2_backtest_tab_shows_report_dir_name_and_attribution():
+    data = {"v2_backtest": {
+        "dir_name": "backtest_AAPL_2024_2025",
+        "modified_ts": 1_700_000_000,
+        "equity_curve": [
+            {"asof_ts": "1700000000", "asof_date": "2023-11-14", "nav": "50000.0"},
+            {"asof_ts": "1700086400", "asof_date": "2023-11-15", "nav": "50125.5"},
+        ],
+        "attribution": [
+            {"structure_kind": "long_call", "trade_count": "3", "wins": "2",
+             "losses": "1", "win_rate": "0.6667", "total_pnl": "250.0",
+             "avg_pnl": "83.33"},
+        ],
+    }}
+    html = tabs.v2_backtest_tab(data)
+    assert "backtest_AAPL_2024_2025" in html
+    assert "long_call" in html
+    assert "250" in html
+    assert "0.6667" in html or "66.67" in html
+    assert "50125" in html

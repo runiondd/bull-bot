@@ -924,3 +924,68 @@ def v2_positions_tab(data: dict) -> str:
     </tbody>
   </table>
 </div>"""
+
+
+# ---- v2 Backtest tab --------------------------------------------------------
+
+def v2_backtest_tab(data: dict) -> str:
+    """V2 Backtest tab: latest backtest report from disk (equity curve + attribution)."""
+    report = data.get("v2_backtest")
+    if not report:
+        return ('<div class="card"><div class="card-body" '
+                'style="color: var(--fg-2); font-size: 12px; padding: 14px">'
+                'No backtest report yet — run bullbot.v2.backtest.runner.backtest '
+                'and write_report to populate.'
+                '</div></div>')
+
+    dir_name = html.escape(str(report.get("dir_name", "")))
+    modified_ts = report.get("modified_ts", 0) or 0
+    from datetime import datetime as _dt
+    modified_date = (_dt.fromtimestamp(modified_ts).strftime("%Y-%m-%d %H:%M")
+                     if modified_ts else "—")
+    equity = report.get("equity_curve", [])
+    attr = report.get("attribution", [])
+
+    attr_rows = "".join(
+        f"""<tr>
+  <td><strong>{html.escape(str(a.get('structure_kind', '')))}</strong></td>
+  <td class="num t-right">{html.escape(str(a.get('trade_count', '')))}</td>
+  <td class="num t-right">{html.escape(str(a.get('wins', '')))}</td>
+  <td class="num t-right">{html.escape(str(a.get('losses', '')))}</td>
+  <td class="num t-right">{html.escape(str(a.get('win_rate', '')))}</td>
+  <td class="num t-right">${html.escape(str(a.get('total_pnl', '')))}</td>
+  <td class="num t-right">${html.escape(str(a.get('avg_pnl', '')))}</td>
+</tr>"""
+        for a in attr
+    )
+    last_30_equity = equity[-30:]
+    eq_rows = "".join(
+        f"""<tr>
+  <td>{html.escape(str(e.get('asof_date', '')))}</td>
+  <td class="num t-right">${html.escape(str(e.get('nav', '')))}</td>
+</tr>"""
+        for e in last_30_equity
+    )
+
+    return f"""<div class="card">
+  <div class="card-body" style="padding:12px 16px; font-size:12px; color:var(--fg-2)">
+    <strong>{dir_name}</strong> &mdash; last updated {modified_date}
+  </div>
+  <h3 style="margin:10px 16px 4px; font-size:13px">Per-vehicle attribution</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Structure</th><th class="t-right">Trades</th>
+        <th class="t-right">Wins</th><th class="t-right">Losses</th>
+        <th class="t-right">Win rate</th>
+        <th class="t-right">Total $</th><th class="t-right">Avg $</th>
+      </tr>
+    </thead>
+    <tbody>{attr_rows}</tbody>
+  </table>
+  <h3 style="margin:14px 16px 4px; font-size:13px">Equity curve (last 30 days)</h3>
+  <table>
+    <thead><tr><th>Date</th><th class="t-right">NAV</th></tr></thead>
+    <tbody>{eq_rows}</tbody>
+  </table>
+</div>"""
