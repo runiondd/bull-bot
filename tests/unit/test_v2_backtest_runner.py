@@ -78,7 +78,7 @@ def test_cache_put_is_idempotent_on_collision(conn):
     assert runner._cache_get(conn, key=key) == "second"
 
 
-from datetime import date
+from datetime import date, datetime
 
 
 def test_backtest_trade_rejects_unknown_intent():
@@ -280,7 +280,7 @@ def test_backtest_returns_filled_result_with_seeded_bars(conn, fake_anthropic):
     """Seed 60 bars + queue 'pass' responses → backtest completes, daily_mtm populated."""
     import json
     # Seed 60 days ending at 2024-03-15
-    end_ts = int(date(2024, 3, 15).strftime("%s"))
+    end_ts = int(datetime(2024, 3, 15).timestamp())
     _seed_bars(conn, "AAPL", end_ts, n=60, base_close=100.0)
     _seed_bars(conn, "VIX", end_ts, n=60, base_close=18.0)
     # Queue many "pass" responses — the cache means we only need one
@@ -298,7 +298,7 @@ def test_backtest_returns_filled_result_with_seeded_bars(conn, fake_anthropic):
     )
     # 3 days iterated, all "pass" → no trades opened
     assert len(result.trades) == 0
-    # daily_mtm should have at least 1 entry (the days with bars)
-    assert len(result.daily_mtm) >= 1
+    # daily_mtm should have all 3 entries (3 calendar days iterated, all have bars)
+    assert len(result.daily_mtm) == 3
     # Ending NAV equals starting NAV since no trades closed
     assert result.ending_nav == 50_000.0

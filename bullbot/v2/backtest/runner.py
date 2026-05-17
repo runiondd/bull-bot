@@ -336,6 +336,8 @@ def backtest(
 
     current = start
     while current <= end:
+        # 23:00 local time per Phase A bar storage convention; backtest must run
+        # in the same TZ where bars were ingested (currently pasture / Mac mini).
         asof_ts = int(
             _datetime(current.year, current.month, current.day, 23, 0).timestamp()
         )
