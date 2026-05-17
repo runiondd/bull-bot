@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import date as _date
@@ -21,8 +22,9 @@ from typing import Callable
 
 from bullbot.v2 import exits, positions, vehicle
 from bullbot.v2.backtest import synth_chain
-from bullbot.v2.chains import _iv_proxy
 from bullbot.v2.signals import DirectionalSignal
+
+_log = logging.getLogger(__name__)
 
 
 def _cache_key(*, prompt: str) -> str:
@@ -106,11 +108,12 @@ def _atr_14_simple(bars: list) -> float:
     """ATR-14 from bars (simple average TR). Returns 0.0 when <15 bars."""
     if len(bars) < 15:
         return 0.0
+    window = bars[-15:]
     trs = []
-    for i, b in enumerate(bars[-15:]):
+    for i, b in enumerate(window):
         if i == 0:
             continue
-        prev_close = bars[-15:][i - 1].close
+        prev_close = window[i - 1].close
         trs.append(max(
             b.high - b.low,
             abs(b.high - prev_close),
@@ -163,7 +166,6 @@ def _replay_one_day(
     spot = underlying_bars[-1].close
 
     signal = signal_fn(underlying_bars)
-    iv = _iv_proxy(underlying_bars=underlying_bars, vix_bars=vix_bars)  # noqa: F841
     chain = synth_chain.synthesize(
         ticker=ticker, asof_ts=asof_ts, today=today, spot=spot,
         underlying_bars=underlying_bars, vix_bars=vix_bars,
@@ -207,7 +209,6 @@ def _replay_one_day(
             )
 
     # 2. Vehicle pick on flat tickers
-    action_taken = "skipped"
     if positions.open_for_ticker(conn, ticker) is None:
         # Build prompt once, check cache, only call LLM on miss
         ctx = vehicle.build_llm_context(
@@ -260,6 +261,10 @@ def _replay_one_day(
                 if q is not None and q.mid_price() is not None:
                     entry_prices[idx] = q.mid_price()
                 else:
+                    _log.warning(
+                        "_replay_one_day: no quote for %s %s strike=%s expiry=%s; entry_price=0.0",
+                        ticker, spec.kind, spec.strike, spec.expiry,
+                    )
                     entry_prices[idx] = 0.0
             validation = vehicle.validate(
                 decision=decision, spot=spot, today=today,
