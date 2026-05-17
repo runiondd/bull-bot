@@ -101,3 +101,39 @@ def test_find_swing_extrema_strength_scales_with_touch_count():
     assert len(swing_highs) >= 1
     # Strength must be > 0 (many touches near 100)
     assert swing_highs[0].strength > 0.2
+
+
+def test_sma_levels_emits_one_level_per_window_with_enough_bars():
+    bars = [_bar(close=100 + i * 0.1) for i in range(250)]  # 250 bars, all SMAs computable
+    sma_lvls = levels._sma_levels(bars)
+    kinds = {lvl.kind for lvl in sma_lvls}
+    assert kinds == {"sma_20", "sma_50", "sma_200"}
+
+
+def test_sma_levels_skips_windows_with_insufficient_bars():
+    bars = [_bar(close=100.0) for _ in range(30)]  # only 30 bars
+    sma_lvls = levels._sma_levels(bars)
+    kinds = {lvl.kind for lvl in sma_lvls}
+    assert kinds == {"sma_20"}  # 50 and 200 don't have enough bars
+
+
+def test_sma_levels_computes_arithmetic_mean_of_last_n_closes():
+    """100 bars at close=100.0 -> SMA_20 = 100.0, SMA_50 = 100.0."""
+    bars = [_bar(close=100.0) for _ in range(100)]
+    sma_lvls = levels._sma_levels(bars)
+    sma_20 = next(lvl for lvl in sma_lvls if lvl.kind == "sma_20")
+    sma_50 = next(lvl for lvl in sma_lvls if lvl.kind == "sma_50")
+    assert sma_20.price == pytest.approx(100.0)
+    assert sma_50.price == pytest.approx(100.0)
+
+
+def test_sma_levels_window_200_has_higher_strength_than_window_20():
+    bars = [_bar(close=100.0) for _ in range(250)]
+    sma_lvls = levels._sma_levels(bars)
+    sma_20 = next(lvl for lvl in sma_lvls if lvl.kind == "sma_20")
+    sma_200 = next(lvl for lvl in sma_lvls if lvl.kind == "sma_200")
+    assert sma_200.strength > sma_20.strength
+
+
+def test_sma_levels_returns_empty_for_no_bars():
+    assert levels._sma_levels([]) == []

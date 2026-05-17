@@ -86,3 +86,26 @@ def _find_swing_extrema(bars: list, n_confirm: int = 3) -> list[Level]:
             strength = min(1.0, max(touches, 0) / 5.0)
             out.append(Level(price=cand_low, kind="swing_low", strength=strength))
     return out
+
+
+from statistics import mean
+
+SMA_WINDOWS = (20, 50, 200)
+
+
+def _sma_levels(bars: list) -> list[Level]:
+    """For each window in (20, 50, 200), if enough bars exist, emit a Level
+    at the current SMA value with kind sma_<window> and strength scaled by
+    window length.
+
+    Longer windows = stronger dynamic S/R (institutional algos watch 200-day
+    closer than 20-day).
+    """
+    out: list[Level] = []
+    for w in SMA_WINDOWS:
+        if len(bars) < w:
+            continue
+        sma_value = mean(b.close for b in bars[-w:])
+        strength = min(1.0, w / 200.0)
+        out.append(Level(price=sma_value, kind=f"sma_{w}", strength=strength))
+    return out
