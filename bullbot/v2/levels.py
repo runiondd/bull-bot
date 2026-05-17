@@ -145,3 +145,44 @@ def _round_number_levels(*, spot: float) -> list[Level]:
             out.append(Level(price=candidate, kind="round_number",
                              strength=ROUND_NUMBER_STRENGTH))
     return out
+
+
+DEDUP_BAND_PCT = 0.005  # 0.5% — levels within this are considered duplicates
+
+_KIND_PRIORITY = {
+    "swing_high": 0,
+    "swing_low": 1,
+    "sma_200": 2,
+    "sma_50": 3,
+    "sma_20": 4,
+    "round_number": 5,
+}
+
+
+def _dedup_levels(input_levels: list[Level]) -> list[Level]:
+    """Collapse levels within DEDUP_BAND_PCT (0.5%) of each other.
+
+    Strategy: sort by price, sweep forward, group adjacent close-priced
+    levels into clusters. For each cluster, keep the level with the highest
+    strength (ties broken by _KIND_PRIORITY).
+    """
+    if not input_levels:
+        return []
+
+    sorted_levels = sorted(input_levels, key=lambda lvl: lvl.price)
+    clusters: list[list[Level]] = [[sorted_levels[0]]]
+    for lvl in sorted_levels[1:]:
+        prev = clusters[-1][-1]
+        if abs(lvl.price - prev.price) / prev.price <= DEDUP_BAND_PCT:
+            clusters[-1].append(lvl)
+        else:
+            clusters.append([lvl])
+
+    out: list[Level] = []
+    for cluster in clusters:
+        best = max(
+            cluster,
+            key=lambda lvl: (lvl.strength, -_KIND_PRIORITY[lvl.kind]),
+        )
+        out.append(best)
+    return out

@@ -186,3 +186,55 @@ def test_round_number_levels_all_have_kind_round_number_and_fixed_strength():
 def test_round_number_levels_for_zero_or_negative_spot_returns_empty():
     assert levels._round_number_levels(spot=0.0) == []
     assert levels._round_number_levels(spot=-5.0) == []
+
+
+DEDUP_PCT = 0.005  # 0.5% — same threshold as the impl
+
+
+def test_dedup_levels_collapses_two_close_levels_keeping_stronger():
+    a = levels.Level(price=100.0, kind="swing_high", strength=0.8)
+    b = levels.Level(price=100.30, kind="sma_50", strength=0.25)
+    out = levels._dedup_levels([a, b])
+    assert len(out) == 1
+    assert out[0] is a  # stronger one kept
+
+
+def test_dedup_levels_preserves_levels_more_than_05pct_apart():
+    a = levels.Level(price=100.0, kind="swing_high", strength=0.5)
+    b = levels.Level(price=101.0, kind="sma_50", strength=0.25)  # 1% away
+    out = levels._dedup_levels([a, b])
+    assert len(out) == 2
+
+
+def test_dedup_levels_tiebreaks_by_kind_priority_when_strength_equal():
+    """If strengths tie, swing_high beats sma_50 beats round_number."""
+    a = levels.Level(price=100.0, kind="round_number", strength=0.3)
+    b = levels.Level(price=100.30, kind="sma_50", strength=0.3)
+    c = levels.Level(price=100.10, kind="swing_high", strength=0.3)
+    out = levels._dedup_levels([a, b, c])
+    assert len(out) == 1
+    assert out[0] is c  # swing_high wins the tie
+
+
+def test_dedup_levels_handles_empty_input():
+    assert levels._dedup_levels([]) == []
+
+
+def test_dedup_levels_does_not_mutate_input():
+    a = levels.Level(price=100.0, kind="swing_high", strength=0.8)
+    b = levels.Level(price=100.30, kind="sma_50", strength=0.25)
+    inp = [a, b]
+    levels._dedup_levels(inp)
+    assert inp == [a, b]  # input still intact
+
+
+def test_dedup_levels_handles_chain_of_close_levels():
+    """Three levels each within 0.5% of the next — should collapse to one."""
+    a = levels.Level(price=100.0, kind="swing_high", strength=0.4)
+    b = levels.Level(price=100.30, kind="sma_50", strength=0.5)
+    c = levels.Level(price=100.60, kind="sma_20", strength=0.6)
+    # a and b are within 0.5%; b and c are within 0.5%; a and c are 0.6% apart.
+    # Sweep should still collapse all three.
+    out = levels._dedup_levels([a, b, c])
+    assert len(out) == 1
+    assert out[0] is c  # highest strength of the cluster
