@@ -51,3 +51,59 @@ def test_write_position_mtm_is_idempotent_on_pk(conn):
     assert len(rows) == 1
     assert rows[0]["mtm_value"] == 200.0
     assert rows[0]["source"] == "bs"
+
+
+from datetime import date
+from types import SimpleNamespace
+
+
+def _seed_bars(conn, ticker, asof_ts, n=60, base_close=100.0):
+    for i in range(n):
+        ts = asof_ts - (n - 1 - i) * 86400
+        c = base_close + (i * 0.01)
+        conn.execute(
+            "INSERT OR REPLACE INTO bars "
+            "(ticker, timeframe, ts, open, high, low, close, volume) "
+            "VALUES (?, '1d', ?, ?, ?, ?, ?, 1_000_000)",
+            (ticker, ts, c, c + 0.3, c - 0.3, c),
+        )
+    conn.commit()
+
+
+def _stub_signal_fn(bars, ticker, asof_ts):
+    from bullbot.v2.signals import DirectionalSignal
+    return DirectionalSignal(
+        ticker=ticker, asof_ts=asof_ts, direction="bullish",
+        confidence=0.7, horizon_days=30, rationale="stub",
+        rules_version="stub",
+    )
+
+
+def _stub_chain_fn(ticker, asof_ts, spot):
+    from bullbot.v2.chains import Chain
+    return Chain(ticker=ticker, asof_ts=asof_ts, quotes=[])
+
+
+def test_dispatch_ticker_returns_skipped_when_no_bars(conn, fake_anthropic):
+    out = runner_c._dispatch_ticker(
+        conn=conn, ticker="AAPL", asof_ts=1_700_000_000,
+        nav=50_000.0, signal_fn=_stub_signal_fn, chain_fn=_stub_chain_fn,
+        llm_client=fake_anthropic,
+    )
+    assert out == "skipped"
+
+
+def test_dispatch_ticker_returns_pass_on_llm_pass(conn, fake_anthropic):
+    import json
+    asof = 1_700_000_000
+    _seed_bars(conn, "AAPL", asof, n=60)
+    fake_anthropic.queue_response(json.dumps({
+        "decision": "pass", "intent": "trade", "structure": "long_call",
+        "legs": [], "exit_plan": {}, "rationale": "no edge",
+    }))
+    out = runner_c._dispatch_ticker(
+        conn=conn, ticker="AAPL", asof_ts=asof,
+        nav=50_000.0, signal_fn=_stub_signal_fn, chain_fn=_stub_chain_fn,
+        llm_client=fake_anthropic,
+    )
+    assert out == "pass"
