@@ -203,3 +203,60 @@ def test_large_move_count_returns_zero_for_too_few_bars():
     bars = [_bar(close=100.0) for _ in range(5)]
     # 5 bars is below the 14-bar ATR floor; helper returns 0 rather than crashing.
     assert vehicle._large_move_count_90d(bars) == 0
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — _near_atm_liquidity
+# ---------------------------------------------------------------------------
+
+def _seed_chain_with_oi(conn, *, ticker, asof_ts, expiry, strike, kind, bid, ask, oi):
+    conn.execute(
+        "INSERT OR REPLACE INTO v2_chain_snapshots "
+        "(ticker, asof_ts, expiry, strike, kind, bid, ask, last, iv, oi, source) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'yahoo')",
+        (ticker, asof_ts, expiry, strike, kind, bid, ask, (bid + ask) / 2, oi),
+    )
+    conn.commit()
+
+
+def test_near_atm_liquidity_returns_zeros_when_no_data(conn):
+    out = vehicle._near_atm_liquidity(conn, ticker="XYZ", asof_ts=1_700_000_000, spot=100.0)
+    assert out["total_oi_within_5pct"] == 0
+    assert out["spread_avg_pct"] is None
+    assert out["nearest_monthly_expiry"] is None
+
+
+def test_near_atm_liquidity_sums_oi_in_band_only(conn):
+    asof = 1_700_000_000
+    # In-band strikes (95, 100, 105 with spot=100)
+    _seed_chain_with_oi(conn, ticker="AAPL", asof_ts=asof, expiry="2026-06-19",
+                        strike=100.0, kind="call", bid=2.0, ask=2.2, oi=1000)
+    _seed_chain_with_oi(conn, ticker="AAPL", asof_ts=asof, expiry="2026-06-19",
+                        strike=104.0, kind="put", bid=1.5, ask=1.7, oi=500)
+    # Out-of-band strike (110, > 5% above spot=100)
+    _seed_chain_with_oi(conn, ticker="AAPL", asof_ts=asof, expiry="2026-06-19",
+                        strike=110.0, kind="call", bid=0.5, ask=0.7, oi=99999)
+    out = vehicle._near_atm_liquidity(conn, ticker="AAPL", asof_ts=asof, spot=100.0)
+    assert out["total_oi_within_5pct"] == 1500  # 1000 + 500, NOT 99999
+
+
+def test_near_atm_liquidity_computes_average_bid_ask_spread_pct(conn):
+    asof = 1_700_000_000
+    # Two in-band strikes: spread ~9.52% and ~4.88%, avg ~7.2%
+    _seed_chain_with_oi(conn, ticker="AAPL", asof_ts=asof, expiry="2026-06-19",
+                        strike=100.0, kind="call", bid=1.0, ask=1.1, oi=100)
+    _seed_chain_with_oi(conn, ticker="AAPL", asof_ts=asof, expiry="2026-06-19",
+                        strike=100.0, kind="put", bid=2.0, ask=2.1, oi=100)
+    out = vehicle._near_atm_liquidity(conn, ticker="AAPL", asof_ts=asof, spot=100.0)
+    assert out["spread_avg_pct"] is not None
+    assert 0.06 < out["spread_avg_pct"] < 0.08  # average ≈ 7.2%
+
+
+def test_near_atm_liquidity_returns_nearest_expiry(conn):
+    asof = 1_700_000_000
+    _seed_chain_with_oi(conn, ticker="AAPL", asof_ts=asof, expiry="2026-07-17",
+                        strike=100.0, kind="call", bid=2.0, ask=2.2, oi=100)
+    _seed_chain_with_oi(conn, ticker="AAPL", asof_ts=asof, expiry="2026-06-19",
+                        strike=100.0, kind="call", bid=2.0, ask=2.2, oi=100)
+    out = vehicle._near_atm_liquidity(conn, ticker="AAPL", asof_ts=asof, spot=100.0)
+    assert out["nearest_monthly_expiry"] == "2026-06-19"

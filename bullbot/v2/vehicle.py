@@ -166,3 +166,41 @@ def _large_move_count_90d(bars: list) -> int:
         if ret >= LARGE_MOVE_RETURN_PCT or trs[i] >= LARGE_MOVE_TR_MULT * atr_14:
             count += 1
     return count
+
+
+def _near_atm_liquidity(
+    conn: sqlite3.Connection, *, ticker: str, asof_ts: int, spot: float,
+) -> dict:
+    """For all v2_chain_snapshots rows at (ticker, asof_ts) with strike within
+    ATM ±5%: sum oi, compute mean bid-ask spread as % of mid, return nearest expiry.
+
+    Empty dict-style result with zeros / None when no data."""
+    lo = spot * (1 - ATM_BAND_PCT)
+    hi = spot * (1 + ATM_BAND_PCT)
+    rows = conn.execute(
+        "SELECT expiry, bid, ask, oi FROM v2_chain_snapshots "
+        "WHERE ticker=? AND asof_ts=? AND strike BETWEEN ? AND ?",
+        (ticker, asof_ts, lo, hi),
+    ).fetchall()
+    if not rows:
+        return {
+            "total_oi_within_5pct": 0,
+            "spread_avg_pct": None,
+            "nearest_monthly_expiry": None,
+        }
+    total_oi = sum(int(r["oi"] or 0) for r in rows)
+    spreads = []
+    for r in rows:
+        if r["bid"] is None or r["ask"] is None:
+            continue
+        mid = (r["bid"] + r["ask"]) / 2
+        if mid <= 0:
+            continue
+        spreads.append((r["ask"] - r["bid"]) / mid)
+    spread_avg = sum(spreads) / len(spreads) if spreads else None
+    nearest_expiry = min(r["expiry"] for r in rows)
+    return {
+        "total_oi_within_5pct": total_oi,
+        "spread_avg_pct": spread_avg,
+        "nearest_monthly_expiry": nearest_expiry,
+    }
