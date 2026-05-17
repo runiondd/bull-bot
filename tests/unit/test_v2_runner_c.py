@@ -107,3 +107,47 @@ def test_dispatch_ticker_returns_pass_on_llm_pass(conn, fake_anthropic):
         llm_client=fake_anthropic,
     )
     assert out == "pass"
+
+
+def test_run_once_phase_c_skips_when_universe_has_no_bars(conn, fake_anthropic, monkeypatch):
+    """No bars for any UNIVERSE ticker → all skipped."""
+    monkeypatch.setattr("bullbot.config.UNIVERSE", ["AAPL", "MSFT"])
+    counts = runner_c.run_once_phase_c(
+        conn=conn, asof_ts=1_700_000_000,
+        signal_fn=_stub_signal_fn, chain_fn=_stub_chain_fn,
+        llm_client=fake_anthropic,
+    )
+    assert counts == {"skipped": 2}
+
+
+def test_run_once_phase_c_counts_actions_per_ticker(conn, fake_anthropic, monkeypatch):
+    import json
+    asof = 1_700_000_000
+    monkeypatch.setattr("bullbot.config.UNIVERSE", ["AAPL"])
+    _seed_bars(conn, "AAPL", asof, n=60)
+    fake_anthropic.queue_response(json.dumps({
+        "decision": "pass", "intent": "trade", "structure": "long_call",
+        "legs": [], "exit_plan": {}, "rationale": "no edge",
+    }))
+    counts = runner_c.run_once_phase_c(
+        conn=conn, asof_ts=asof,
+        signal_fn=_stub_signal_fn, chain_fn=_stub_chain_fn,
+        llm_client=fake_anthropic,
+    )
+    assert counts == {"pass": 1}
+
+
+def test_run_once_phase_c_counts_error_when_dispatch_raises(conn, fake_anthropic, monkeypatch):
+    """If _dispatch_ticker raises, count as 'error' and continue to next ticker."""
+    monkeypatch.setattr("bullbot.config.UNIVERSE", ["AAPL"])
+    _seed_bars(conn, "AAPL", 1_700_000_000, n=60)
+
+    def boom_signal_fn(bars, ticker, asof_ts):
+        raise RuntimeError("boom")
+
+    counts = runner_c.run_once_phase_c(
+        conn=conn, asof_ts=1_700_000_000,
+        signal_fn=boom_signal_fn, chain_fn=_stub_chain_fn,
+        llm_client=fake_anthropic,
+    )
+    assert counts == {"error": 1}

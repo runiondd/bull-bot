@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from collections import Counter
 from datetime import datetime as _datetime
 from types import SimpleNamespace
 from typing import Callable
 
+from bullbot import config
 from bullbot.v2 import exits, positions, vehicle
 
 _log = logging.getLogger(__name__)
@@ -140,3 +142,87 @@ def _dispatch_ticker(
         nearest_leg_expiry_dte=None, rationale=decision.rationale,
     )
     return "opened"
+
+
+def _default_signal_fn(bars, ticker, asof_ts):
+    from bullbot.v2 import underlying
+    return underlying.classify(ticker=ticker, bars=bars, asof_ts=asof_ts)
+
+
+def _default_chain_fn(ticker, asof_ts, spot):
+    from bullbot.v2 import chains
+    return chains.fetch_chain(ticker=ticker)
+
+
+def _compute_mtm(*, position, chain, spot: float) -> float:
+    """Sum per-leg current value at spot/chain mid. Mirror of
+    bullbot.v2.backtest.runner._compute_position_mtm."""
+    total = 0.0
+    for leg in position.legs:
+        if leg.kind == "share":
+            sign = 1.0 if leg.action == "buy" else -1.0
+            total += sign * spot * leg.qty
+            continue
+        q = chain.find_quote(expiry=leg.expiry, strike=leg.strike, kind=leg.kind)
+        if q is None or q.mid_price() is None:
+            continue
+        sign = 1.0 if leg.action == "buy" else -1.0
+        total += sign * q.mid_price() * leg.qty * 100
+    return total
+
+
+def run_once_phase_c(
+    *,
+    conn: sqlite3.Connection,
+    asof_ts: int,
+    signal_fn: Callable | None = None,
+    chain_fn: Callable | None = None,
+    llm_client: object = None,
+) -> dict[str, int]:
+    """Daily Phase C dispatcher.
+
+    Iterates config.UNIVERSE, runs _dispatch_ticker per ticker, writes a
+    MtM row per remaining open position. Returns dict of action label counts.
+
+    Continues past per-ticker exceptions (logged + counted as 'error').
+    """
+    if signal_fn is None:
+        signal_fn = _default_signal_fn
+    if chain_fn is None:
+        chain_fn = _default_chain_fn
+
+    nav = float(getattr(config, "STARTING_NAV", 50_000.0))
+
+    counts: Counter[str] = Counter()
+    for ticker in config.UNIVERSE:
+        try:
+            action = _dispatch_ticker(
+                conn=conn, ticker=ticker, asof_ts=asof_ts, nav=nav,
+                signal_fn=signal_fn, chain_fn=chain_fn,
+                llm_client=llm_client,
+            )
+            counts[action] += 1
+        except Exception:
+            _log.exception("runner_c: %s dispatch failed", ticker)
+            counts["error"] += 1
+
+    # Daily MtM: one row per currently-open position.
+    for ticker in config.UNIVERSE:
+        pos = positions.open_for_ticker(conn, ticker)
+        if pos is None:
+            continue
+        try:
+            bars = _load_bars_up_to(conn, ticker=ticker, asof_ts=asof_ts, limit=1)
+            if not bars:
+                continue
+            spot = bars[-1].close
+            chain = chain_fn(ticker, asof_ts, spot)
+            mtm_value = _compute_mtm(position=pos, chain=chain, spot=spot)
+            _write_position_mtm(
+                conn, position_id=pos.id, asof_ts=asof_ts,
+                mtm_value=mtm_value, source="bs",
+            )
+        except Exception:
+            _log.exception("runner_c: %s MtM failed", ticker)
+
+    return dict(counts)
