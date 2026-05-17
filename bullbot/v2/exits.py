@@ -105,3 +105,63 @@ def _check_safety_stop(
         kind="closed_safety_stop",
         reason=f"pnl {pnl_pct:.1%} exceeds {SAFETY_STOP_PCT:.0%} safety stop",
     )
+
+
+def _is_bullish_target(*, profit_target_price: float, stop_price: float | None) -> bool:
+    """A target ABOVE the stop is a bullish position (we want underlying up)."""
+    if stop_price is None:
+        return profit_target_price > 0
+    return profit_target_price > stop_price
+
+
+def _check_trade_price_triggers(
+    conn: sqlite3.Connection, *, position: Position, spot: float, now_ts: int,
+) -> ExitAction | None:
+    """Close when underlying tags the stored profit_target_price or stop_price.
+
+    Direction (bullish vs bearish) is inferred from profit_target_price vs
+    stop_price (bullish: target > stop; bearish: target < stop). Returns
+    None when neither trigger fires or when both prices are unset.
+    """
+    pt = position.profit_target_price
+    sp = position.stop_price
+    if pt is None and sp is None:
+        return None
+
+    bullish = _is_bullish_target(
+        profit_target_price=pt if pt is not None else float("inf"),
+        stop_price=sp,
+    ) if pt is not None else (sp is not None and spot > sp)
+
+    triggered_kind: str | None = None
+    triggered_reason: str = ""
+
+    if pt is not None and bullish and spot >= pt:
+        triggered_kind = "closed_profit_target"
+        triggered_reason = f"spot {spot:.2f} >= profit_target {pt:.2f}"
+    elif pt is not None and (not bullish) and spot <= pt:
+        triggered_kind = "closed_profit_target"
+        triggered_reason = f"spot {spot:.2f} <= profit_target {pt:.2f}"
+    elif sp is not None and bullish and spot <= sp:
+        triggered_kind = "closed_stop"
+        triggered_reason = f"spot {spot:.2f} <= stop {sp:.2f}"
+    elif sp is not None and (not bullish) and spot >= sp:
+        triggered_kind = "closed_stop"
+        triggered_reason = f"spot {spot:.2f} >= stop {sp:.2f}"
+
+    if triggered_kind is None:
+        return None
+
+    close_reason = triggered_kind.removeprefix("closed_")
+    leg_exit_prices = {leg.id: spot for leg in position.legs if leg.kind == "share"}
+    for leg in position.legs:
+        if leg.kind != "share":
+            leg_exit_prices[leg.id] = 0.0
+    positions.close_position(
+        conn,
+        position_id=position.id,
+        closed_ts=now_ts,
+        close_reason=close_reason,
+        leg_exit_prices=leg_exit_prices,
+    )
+    return ExitAction(kind=triggered_kind, reason=triggered_reason)

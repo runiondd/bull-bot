@@ -179,3 +179,104 @@ def test_check_safety_stop_does_not_trigger_on_option_only_position(conn):
         conn, position=pos, spot=50.0, now_ts=1_700_001_000,
     )
     assert action is None
+
+
+def _trade_long_position(conn, profit_target_price=200.0, stop_price=180.0,
+                          structure_kind="long_call"):
+    leg = positions.OptionLeg(
+        action="buy", kind="call", strike=190.0, expiry="2026-06-19",
+        qty=1, entry_price=2.50,
+    )
+    return positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind=structure_kind,
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=profit_target_price, stop_price=stop_price,
+        time_stop_dte=21, assignment_acceptable=False,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+
+
+def test_check_trade_price_triggers_fires_on_profit_target_for_bullish(conn):
+    pos = _trade_long_position(conn, profit_target_price=200.0, stop_price=180.0)
+    action = exits._check_trade_price_triggers(
+        conn, position=pos, spot=200.5, now_ts=1_700_001_000,
+    )
+    assert action is not None
+    assert action.kind == "closed_profit_target"
+
+
+def test_check_trade_price_triggers_fires_on_stop_for_bullish(conn):
+    pos = _trade_long_position(conn, profit_target_price=200.0, stop_price=180.0)
+    action = exits._check_trade_price_triggers(
+        conn, position=pos, spot=179.0, now_ts=1_700_001_000,
+    )
+    assert action is not None
+    assert action.kind == "closed_stop"
+
+
+def test_check_trade_price_triggers_returns_none_between_target_and_stop(conn):
+    pos = _trade_long_position(conn, profit_target_price=200.0, stop_price=180.0)
+    action = exits._check_trade_price_triggers(
+        conn, position=pos, spot=190.0, now_ts=1_700_001_000,
+    )
+    assert action is None
+
+
+def test_check_trade_price_triggers_handles_bearish_structure(conn):
+    leg = positions.OptionLeg(
+        action="buy", kind="put", strike=180.0, expiry="2026-06-19",
+        qty=1, entry_price=2.50,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="long_put",
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=170.0, stop_price=185.0,
+        time_stop_dte=21, assignment_acceptable=False,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+    action_profit = exits._check_trade_price_triggers(
+        conn, position=pos, spot=168.0, now_ts=1_700_001_000,
+    )
+    assert action_profit is not None
+    assert action_profit.kind == "closed_profit_target"
+
+
+def test_check_trade_price_triggers_handles_bearish_stop(conn):
+    leg = positions.OptionLeg(
+        action="buy", kind="put", strike=180.0, expiry="2026-06-19",
+        qty=1, entry_price=2.50,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="long_put",
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=170.0, stop_price=185.0,
+        time_stop_dte=21, assignment_acceptable=False,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+    action_stop = exits._check_trade_price_triggers(
+        conn, position=pos, spot=186.0, now_ts=1_700_001_000,
+    )
+    assert action_stop is not None
+    assert action_stop.kind == "closed_stop"
+
+
+def test_check_trade_price_triggers_returns_none_when_no_target_or_stop_set(conn):
+    leg = positions.OptionLeg(
+        action="buy", kind="call", strike=190.0, expiry="2026-06-19",
+        qty=1, entry_price=2.50,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="long_call",
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=21, assignment_acceptable=False,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+    action = exits._check_trade_price_triggers(
+        conn, position=pos, spot=200.0, now_ts=1_700_001_000,
+    )
+    assert action is None
