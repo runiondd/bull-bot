@@ -6,8 +6,10 @@ Zero external dependencies — stdlib only.
 
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 
@@ -768,3 +770,109 @@ def universe_with_edge(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             },
         })
     return result
+
+
+# ---------------------------------------------------------------------------
+# v2_positions
+# ---------------------------------------------------------------------------
+
+
+def v2_positions(conn: sqlite3.Connection) -> list[dict]:
+    """Open v2 positions with leg summary + latest MtM for dashboard.
+
+    Returns list of dicts (one per open position). Excludes closed
+    positions (closed_ts IS NOT NULL). Latest MtM is the max asof_ts
+    row from v2_position_mtm for each position; None when no MtM written yet.
+    """
+    pos_rows = conn.execute(
+        "SELECT p.id, p.ticker, p.intent, p.structure_kind, p.opened_ts, "
+        "       p.profit_target_price, p.stop_price, p.time_stop_dte, "
+        "       p.rationale "
+        "FROM v2_positions p "
+        "WHERE p.closed_ts IS NULL "
+        "ORDER BY p.opened_ts DESC"
+    ).fetchall()
+
+    out: list[dict] = []
+    from datetime import datetime as _dt
+    for p in pos_rows:
+        legs = conn.execute(
+            "SELECT action, kind, strike, expiry, qty FROM v2_position_legs "
+            "WHERE position_id=? ORDER BY id",
+            (p["id"],),
+        ).fetchall()
+        legs_summary = ", ".join(
+            f"{lg['action']} {lg['kind']} "
+            f"{lg['strike'] if lg['strike'] is not None else ''}"
+            f"{(' ' + lg['expiry']) if lg['expiry'] else ''} x{lg['qty']}"
+            for lg in legs
+        )
+        mtm_row = conn.execute(
+            "SELECT mtm_value, source, asof_ts FROM v2_position_mtm "
+            "WHERE position_id=? ORDER BY asof_ts DESC LIMIT 1",
+            (p["id"],),
+        ).fetchone()
+        opened_date = _dt.fromtimestamp(p["opened_ts"]).date().isoformat()
+        from datetime import timezone as _tz
+        days_held = (_dt.now(tz=_tz.utc).timestamp() - p["opened_ts"]) // 86400
+        out.append({
+            "id": p["id"],
+            "ticker": p["ticker"],
+            "intent": p["intent"],
+            "structure_kind": p["structure_kind"],
+            "opened_ts": p["opened_ts"],
+            "opened_date": opened_date,
+            "days_held": int(days_held),
+            "legs_summary": legs_summary,
+            "profit_target_price": p["profit_target_price"],
+            "stop_price": p["stop_price"],
+            "time_stop_dte": p["time_stop_dte"],
+            "rationale": p["rationale"] or "",
+            "latest_mtm_value": mtm_row["mtm_value"] if mtm_row else None,
+            "latest_mtm_source": mtm_row["source"] if mtm_row else None,
+            "latest_mtm_asof_date": (
+                _dt.fromtimestamp(mtm_row["asof_ts"]).date().isoformat()
+                if mtm_row else None
+            ),
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# v2_backtest_latest
+# ---------------------------------------------------------------------------
+
+
+def v2_backtest_latest(reports_dir: Path) -> dict | None:
+    """Read the most-recently-modified backtest report from reports_dir.
+
+    Finds subdirs whose name starts with 'backtest_', picks the one with
+    the largest mtime, reads equity_curve.csv + vehicle_attribution.csv.
+    Returns None when no matching subdir exists. Missing CSV files within
+    a valid subdir yield empty lists for those keys.
+    """
+    if not reports_dir.exists() or not reports_dir.is_dir():
+        return None
+    candidates = [
+        d for d in reports_dir.iterdir()
+        if d.is_dir() and d.name.startswith("backtest_")
+    ]
+    if not candidates:
+        return None
+    latest = max(candidates, key=lambda d: d.stat().st_mtime)
+    equity: list[dict] = []
+    attr: list[dict] = []
+    eq_path = latest / "equity_curve.csv"
+    attr_path = latest / "vehicle_attribution.csv"
+    if eq_path.exists():
+        with eq_path.open() as f:
+            equity = list(csv.DictReader(f))
+    if attr_path.exists():
+        with attr_path.open() as f:
+            attr = list(csv.DictReader(f))
+    return {
+        "dir_name": latest.name,
+        "modified_ts": int(latest.stat().st_mtime),
+        "equity_curve": equity,
+        "attribution": attr,
+    }

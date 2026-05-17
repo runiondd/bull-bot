@@ -851,3 +851,141 @@ def inventory_tab(data: dict) -> str:
     </tbody>
   </table>
 </div>"""
+
+
+# ---- v2 Positions tab -------------------------------------------------------
+
+def v2_positions_tab(data: dict) -> str:
+    """V2 Positions tab: currently-open Phase C positions with MtM + exit plan.
+
+    Reads ``data['v2_positions']`` from queries.v2_positions. Renders an
+    empty-state card when no positions are open."""
+    entries = data.get("v2_positions", [])
+    if not entries:
+        return ('<div class="card"><div class="card-body" '
+                'style="color: var(--fg-2); font-size: 12px; padding: 14px">'
+                'No open positions (v2).'
+                '</div></div>')
+
+    def _row(p: dict) -> str:
+        ticker = html.escape(str(p.get("ticker", "")))
+        intent = html.escape(str(p.get("intent", "")))
+        structure = html.escape(str(p.get("structure_kind", "")))
+        legs = html.escape(str(p.get("legs_summary", "")))
+        opened = html.escape(str(p.get("opened_date", "")))
+        days = p.get("days_held", 0)
+        target = p.get("profit_target_price")
+        stop = p.get("stop_price")
+        tsd = p.get("time_stop_dte")
+        mtm = p.get("latest_mtm_value")
+        mtm_src = p.get("latest_mtm_source")
+        mtm_asof = p.get("latest_mtm_asof_date")
+        rationale = html.escape(str(p.get("rationale", "")))
+
+        target_cell = f"${target:.2f}" if target is not None else "—"
+        stop_cell = f"${stop:.2f}" if stop is not None else "—"
+        tsd_cell = f"{tsd}d" if tsd is not None else "—"
+        if mtm is not None:
+            mtm_cls = "pos" if mtm > 0 else ("neg" if mtm < 0 else "muted")
+            mtm_cell = (f'<span class="{mtm_cls}">${mtm:+,.2f}</span>'
+                        f' <span class="muted" style="font-size:10.5px">'
+                        f'({html.escape(str(mtm_src))} @ {html.escape(str(mtm_asof))})</span>')
+        else:
+            mtm_cell = '<span class="muted">—</span>'
+
+        return f"""<tr>
+  <td><strong>{ticker}</strong></td>
+  <td>{intent}</td>
+  <td>{structure}</td>
+  <td style="font-size:11.5px">{legs}</td>
+  <td>{opened}</td>
+  <td class="num t-right">{days}d</td>
+  <td class="num t-right">{target_cell}</td>
+  <td class="num t-right">{stop_cell}</td>
+  <td class="num t-right">{tsd_cell}</td>
+  <td class="num t-right">{mtm_cell}</td>
+  <td style="font-size:11.5px">{rationale}</td>
+</tr>"""
+
+    rows = "".join(_row(p) for p in entries)
+    return f"""<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Ticker</th><th>Intent</th><th>Structure</th><th>Legs</th>
+        <th>Opened</th><th class="t-right">Days</th>
+        <th class="t-right">Target</th><th class="t-right">Stop</th>
+        <th class="t-right">Time Stop</th><th class="t-right">MtM</th>
+        <th>Rationale</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows}
+    </tbody>
+  </table>
+</div>"""
+
+
+# ---- v2 Backtest tab --------------------------------------------------------
+
+def v2_backtest_tab(data: dict) -> str:
+    """V2 Backtest tab: latest backtest report from disk (equity curve + attribution)."""
+    report = data.get("v2_backtest")
+    if not report:
+        return ('<div class="card"><div class="card-body" '
+                'style="color: var(--fg-2); font-size: 12px; padding: 14px">'
+                'No backtest report yet — run bullbot.v2.backtest.runner.backtest '
+                'and write_report to populate.'
+                '</div></div>')
+
+    dir_name = html.escape(str(report.get("dir_name", "")))
+    modified_ts = report.get("modified_ts", 0) or 0
+    from datetime import datetime as _dt
+    modified_date = (_dt.fromtimestamp(modified_ts).strftime("%Y-%m-%d %H:%M")
+                     if modified_ts else "—")
+    equity = report.get("equity_curve", [])
+    attr = report.get("attribution", [])
+
+    attr_rows = "".join(
+        f"""<tr>
+  <td><strong>{html.escape(str(a.get('structure_kind', '')))}</strong></td>
+  <td class="num t-right">{html.escape(str(a.get('trade_count', '')))}</td>
+  <td class="num t-right">{html.escape(str(a.get('wins', '')))}</td>
+  <td class="num t-right">{html.escape(str(a.get('losses', '')))}</td>
+  <td class="num t-right">{html.escape(str(a.get('win_rate', '')))}</td>
+  <td class="num t-right">${html.escape(str(a.get('total_pnl', '')))}</td>
+  <td class="num t-right">${html.escape(str(a.get('avg_pnl', '')))}</td>
+</tr>"""
+        for a in attr
+    )
+    last_30_equity = equity[-30:]
+    eq_rows = "".join(
+        f"""<tr>
+  <td>{html.escape(str(e.get('asof_date', '')))}</td>
+  <td class="num t-right">${html.escape(str(e.get('nav', '')))}</td>
+</tr>"""
+        for e in last_30_equity
+    )
+
+    return f"""<div class="card">
+  <div class="card-body" style="padding:12px 16px; font-size:12px; color:var(--fg-2)">
+    <strong>{dir_name}</strong> &mdash; last updated {modified_date}
+  </div>
+  <h3 style="margin:10px 16px 4px; font-size:13px">Per-vehicle attribution</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Structure</th><th class="t-right">Trades</th>
+        <th class="t-right">Wins</th><th class="t-right">Losses</th>
+        <th class="t-right">Win rate</th>
+        <th class="t-right">Total $</th><th class="t-right">Avg $</th>
+      </tr>
+    </thead>
+    <tbody>{attr_rows}</tbody>
+  </table>
+  <h3 style="margin:14px 16px 4px; font-size:13px">Equity curve (last 30 days)</h3>
+  <table>
+    <thead><tr><th>Date</th><th class="t-right">NAV</th></tr></thead>
+    <tbody>{eq_rows}</tbody>
+  </table>
+</div>"""

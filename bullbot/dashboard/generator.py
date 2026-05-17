@@ -29,6 +29,8 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
     inventory = queries.long_inventory_summary(conn)
     leaderboard = queries.leaderboard_entries(conn)
     v2_signals = queries.v2_signals(conn)
+    v2_positions = queries.v2_positions(conn)
+    v2_backtest = queries.v2_backtest_latest(config.REPORTS_DIR)
 
     metrics = {**summary, **extended}
     total_pnl = metrics.get("realized_pnl", 0) + metrics.get("unrealized_pnl", 0)
@@ -63,6 +65,8 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
         "inventory": adapted_inventory,
         "leaderboard": leaderboard,
         "v2_signals": v2_signals,
+        "v2_positions": v2_positions,
+        "v2_backtest": v2_backtest,
     }
 
     # Health data — pulled separately because health module owns the brief
@@ -106,6 +110,8 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
         ("evolver", tabs.evolver_tab),
         ("universe", tabs.universe_tab),
         ("v2_signals", tabs.v2_signals_tab),
+        ("v2_positions", tabs.v2_positions_tab),
+        ("v2_backtest", tabs.v2_backtest_tab),
         ("leaderboard", tabs.leaderboard_tab),
         ("transactions", tabs.transactions_tab),
         ("health", tabs.health_tab),
