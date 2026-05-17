@@ -121,6 +121,80 @@ def _apply_column_migrations(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_v2pt_open ON v2_paper_trades (ticker, exit_ts)"
     )
 
+    # Phase C.0 — Vehicle agent data model.
+    # Five additive tables; v2_paper_trades remains untouched (Phase B back-compat).
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS v2_positions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            intent TEXT NOT NULL CHECK(intent IN ('trade', 'accumulate')),
+            structure_kind TEXT NOT NULL,
+            exit_plan_version INTEGER NOT NULL DEFAULT 1,
+            profit_target_price REAL,
+            stop_price REAL,
+            time_stop_dte INTEGER,
+            assignment_acceptable INTEGER,
+            nearest_leg_expiry_dte INTEGER,
+            exit_plan_extra_json TEXT,
+            opened_ts INTEGER NOT NULL,
+            closed_ts INTEGER,
+            close_reason TEXT,
+            linked_position_id INTEGER,
+            rationale TEXT,
+            FOREIGN KEY (linked_position_id) REFERENCES v2_positions(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS v2_position_legs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            position_id INTEGER NOT NULL,
+            action TEXT NOT NULL CHECK(action IN ('buy', 'sell')),
+            kind TEXT NOT NULL CHECK(kind IN ('call', 'put', 'share')),
+            strike REAL,
+            expiry TEXT,
+            qty INTEGER NOT NULL,
+            entry_price REAL NOT NULL,
+            net_basis REAL,
+            exit_price REAL,
+            FOREIGN KEY (position_id) REFERENCES v2_positions(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS v2_position_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            position_id INTEGER NOT NULL,
+            linked_position_id INTEGER,
+            event_kind TEXT NOT NULL CHECK(event_kind IN (
+                'assigned', 'called_away', 'exercised', 'expired_worthless'
+            )),
+            occurred_ts INTEGER NOT NULL,
+            source_leg_id INTEGER,
+            original_credit_per_contract REAL,
+            notes TEXT,
+            FOREIGN KEY (position_id) REFERENCES v2_positions(id),
+            FOREIGN KEY (linked_position_id) REFERENCES v2_positions(id),
+            FOREIGN KEY (source_leg_id) REFERENCES v2_position_legs(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS v2_position_mtm (
+            position_id INTEGER NOT NULL,
+            asof_ts INTEGER NOT NULL,
+            mtm_value REAL NOT NULL,
+            source TEXT NOT NULL CHECK(source IN ('yahoo', 'bs', 'mixed')),
+            PRIMARY KEY (position_id, asof_ts),
+            FOREIGN KEY (position_id) REFERENCES v2_positions(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS v2_chain_snapshots (
+            ticker TEXT NOT NULL,
+            asof_ts INTEGER NOT NULL,
+            expiry TEXT NOT NULL,
+            strike REAL NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('call', 'put')),
+            bid REAL, ask REAL, last REAL, iv REAL, oi INTEGER,
+            source TEXT NOT NULL CHECK(source IN ('yahoo', 'bs')),
+            PRIMARY KEY (ticker, asof_ts, expiry, strike, kind)
+        );
+    """)
+
     # leaderboard view — added 2026-05-14 for strategy-search-engine
     # Phase C. Ranks proposals by score_a (annualized return on BP held),
     # gated by passed_gate=1 and trade_count >= 5 (statistical noise floor).
