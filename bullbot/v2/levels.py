@@ -186,3 +186,30 @@ def _dedup_levels(input_levels: list[Level]) -> list[Level]:
         )
         out.append(best)
     return out
+
+
+def compute_sr(bars: list, lookback: int = 60) -> list[Level]:
+    """Compute the full S/R level set for a list of bars.
+
+    Pipeline:
+        1. Swing highs/lows over the last `lookback` bars (3-bar confirmation).
+        2. 20 / 50 / 200 SMA values (from full bar history — these don't use lookback).
+        3. Round-number snaps within 2% of the most recent close.
+        4. Deduplicate within-0.5% clusters (keep highest strength).
+        5. Sort by absolute distance to the most recent close.
+
+    Returns an empty list if `bars` is empty.
+    """
+    if not bars:
+        return []
+
+    spot = bars[-1].close
+    recent_bars = bars[-lookback:]
+
+    candidates: list[Level] = []
+    candidates.extend(_find_swing_extrema(recent_bars, n_confirm=3))
+    candidates.extend(_sma_levels(bars))
+    candidates.extend(_round_number_levels(spot=spot))
+
+    deduped = _dedup_levels(candidates)
+    return sorted(deduped, key=lambda lvl: lvl.distance_to(spot=spot))

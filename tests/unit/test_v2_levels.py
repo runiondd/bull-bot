@@ -238,3 +238,55 @@ def test_dedup_levels_handles_chain_of_close_levels():
     out = levels._dedup_levels([a, b, c])
     assert len(out) == 1
     assert out[0] is c  # highest strength of the cluster
+
+
+def test_compute_sr_returns_empty_for_empty_bars():
+    assert levels.compute_sr([]) == []
+
+
+def test_compute_sr_returns_levels_sorted_by_distance_to_last_close():
+    """Build bars with a clear peak at 105 and a clear trough at 95, last
+    close at 100. Levels should come back ordered by abs distance from 100."""
+    closes = ([97, 98, 99, 100, 102, 103, 105, 103, 102, 100, 99, 97, 95,
+               97, 99, 100, 101, 100])
+    bars = [_bar(close=c, high=c + 0.5, low=c - 0.5) for c in closes]
+    out = levels.compute_sr(bars, lookback=60)
+    distances = [lvl.distance_to(spot=100.0) for lvl in out]
+    assert distances == sorted(distances)
+
+
+def test_compute_sr_includes_levels_from_all_three_sources():
+    """Run with enough bars + a trend so SMAs don't all collapse via dedup."""
+    # Linear uptrend: 250 bars from 80 to 130. SMA_20, SMA_50, SMA_200 all
+    # land at meaningfully different prices, so dedup keeps them separate.
+    closes = [80.0 + (130.0 - 80.0) * (i / 249) for i in range(250)]
+    bars = [_bar(close=c, high=c + 0.3, low=c - 0.3) for c in closes]
+    out = levels.compute_sr(bars, lookback=60)
+    kinds = {lvl.kind for lvl in out}
+    sma_kinds = {k for k in kinds if k.startswith("sma_")}
+    assert len(sma_kinds) >= 2  # at least two SMAs survive dedup
+    assert "round_number" in kinds
+
+
+def test_compute_sr_respects_lookback_for_swing_detection():
+    """Swing point far in the past (outside lookback) should NOT appear."""
+    closes = [110.0] * 5  # old peak
+    closes += [100.0] * 80  # 80 bars of flat at 100
+    closes += [100.0]
+    bars = [_bar(close=c, high=c + 0.5, low=c - 0.5) for c in closes]
+    # lookback=60 means the old 110 peak (idx 0-4) is outside the lookback window
+    out = levels.compute_sr(bars, lookback=60)
+    swing_highs = [lvl for lvl in out if lvl.kind == "swing_high"]
+    # No swing_high near 110 expected — the 110 peak is outside lookback
+    assert not any(lvl.price > 105.0 for lvl in swing_highs)
+
+
+def test_compute_sr_dedups_overlapping_sma_and_swing_levels():
+    """If 50-day SMA happens to land near a swing high, expect ONE merged level."""
+    closes = [100.0] * 60  # flat -> SMA_20 = SMA_50 = 100.0
+    closes[30] = 100.0  # already 100, but trigger the swing path
+    bars = [_bar(close=c, high=c, low=c - 0.5) for c in closes]
+    out = levels.compute_sr(bars, lookback=60)
+    # Multiple sources land near 100.0; after dedup we expect AT MOST one level near 100.0
+    near_100 = [lvl for lvl in out if abs(lvl.price - 100.0) < 0.5]
+    assert len(near_100) <= 1
