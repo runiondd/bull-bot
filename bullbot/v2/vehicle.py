@@ -503,7 +503,31 @@ def validate_structure_sanity(
             if bad: return bad
         return SanityResult(ok=True)
 
-    # Multi-leg sanity for covered_call arrives in Task 9.
+    if structure_kind == "covered_call":
+        if len(legs) != 2:
+            return SanityResult(ok=False, reason="covered_call requires 2 legs")
+        shares = [l for l in legs if l.kind == "share"]
+        calls = [l for l in legs if l.kind == "call"]
+        if len(shares) != 1 or len(calls) != 1:
+            return SanityResult(ok=False, reason="covered_call requires 1 share leg + 1 call leg")
+        share = shares[0]
+        call = calls[0]
+        if share.action != "buy":
+            return SanityResult(ok=False, reason="covered_call share leg must be buy")
+        if call.action != "sell":
+            return SanityResult(ok=False, reason="covered_call call leg must be sell")
+        if share.qty_ratio != call.qty_ratio * 100:
+            return SanityResult(
+                ok=False,
+                reason=f"covered_call requires share qty_ratio = 100 × call qty_ratio (got {share.qty_ratio} vs {call.qty_ratio * 100})",
+            )
+        bad = _check_expiry_min_dte(call.expiry, today)
+        if bad: return bad
+        bad = _check_moneyness(call.strike, spot)
+        if bad: return bad
+        return SanityResult(ok=True)
+
+    # All known structure_kinds have explicit branches above; this fall-through is for any new shape added without an updated validator.
     return SanityResult(ok=False, reason=f"sanity for {structure_kind} not yet implemented")
 
 

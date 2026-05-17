@@ -716,3 +716,54 @@ def test_sanity_iron_condor_rejects_inverted_call_wing():
         today=date(2026, 5, 17),
     )
     assert result.ok is False
+
+
+# ---------------------------------------------------------------------------
+# Task 9 — validate_structure_sanity (covered_call)
+# ---------------------------------------------------------------------------
+
+def test_sanity_covered_call_valid():
+    # 100 shares per 1 call contract — qty_ratio reflects the LLM's relative weights
+    legs = [
+        _spec("buy", "share", None, None, qty_ratio=100),
+        _spec("sell", "call", 105.0, "2026-06-19", qty_ratio=1),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="covered_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is True
+
+
+def test_sanity_covered_call_rejects_wrong_leg_count():
+    legs = [_spec("buy", "share", None, None, qty_ratio=100)]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="covered_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+
+
+def test_sanity_covered_call_rejects_long_call():
+    legs = [
+        _spec("buy", "share", None, None, qty_ratio=100),
+        _spec("buy", "call", 105.0, "2026-06-19", qty_ratio=1),  # should be sell
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="covered_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+
+
+def test_sanity_covered_call_rejects_wrong_share_qty_ratio():
+    """100 shares per 1 call contract."""
+    legs = [
+        _spec("buy", "share", None, None, qty_ratio=50),  # not 100
+        _spec("sell", "call", 105.0, "2026-06-19", qty_ratio=1),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="covered_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
