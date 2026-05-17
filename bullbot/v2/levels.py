@@ -44,3 +44,45 @@ class Level:
     def is_above(self, *, spot: float) -> bool:
         """True if this level sits above `spot` (resistance side)."""
         return self.price > spot
+
+
+TOUCH_PCT = 0.005  # within 0.5% counts as a "touch" for strength scoring
+
+
+def _find_swing_extrema(bars: list, n_confirm: int = 3) -> list[Level]:
+    """Find local high / low peaks with `n_confirm` bars on each side strictly
+    less / greater than the candidate. Returns a list of Level objects with
+    kind='swing_high' or 'swing_low' and strength scaled by touch count.
+
+    The last `n_confirm` bars cannot be classified (no right-side confirmation).
+    """
+    out: list[Level] = []
+    if len(bars) < 2 * n_confirm + 1:
+        return out
+
+    for i in range(n_confirm, len(bars) - n_confirm):
+        cand_high = bars[i].high
+        cand_low = bars[i].low
+        is_swing_high = all(
+            bars[j].high < cand_high
+            for j in range(i - n_confirm, i + n_confirm + 1) if j != i
+        )
+        is_swing_low = all(
+            bars[j].low > cand_low
+            for j in range(i - n_confirm, i + n_confirm + 1) if j != i
+        )
+        if is_swing_high:
+            touches = sum(
+                1 for b in bars
+                if abs(b.high - cand_high) / cand_high <= TOUCH_PCT
+            ) - 1
+            strength = min(1.0, max(touches, 0) / 5.0)
+            out.append(Level(price=cand_high, kind="swing_high", strength=strength))
+        if is_swing_low:
+            touches = sum(
+                1 for b in bars
+                if abs(b.low - cand_low) / cand_low <= TOUCH_PCT
+            ) - 1
+            strength = min(1.0, max(touches, 0) / 5.0)
+            out.append(Level(price=cand_low, kind="swing_low", strength=strength))
+    return out
