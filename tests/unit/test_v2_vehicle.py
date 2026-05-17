@@ -448,3 +448,83 @@ def test_sanity_long_shares_rejects_strike_or_expiry_set():
         today=date(2026, 5, 17),
     )
     assert result.ok is False
+
+
+# ---------------------------------------------------------------------------
+# Task 7 — validate_structure_sanity (vertical spreads)
+# ---------------------------------------------------------------------------
+
+def test_sanity_bull_call_spread_valid():
+    legs = [
+        _spec("buy", "call", 100.0, "2026-06-19"),
+        _spec("sell", "call", 105.0, "2026-06-19"),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="bull_call_spread",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is True
+
+
+def test_sanity_bull_call_spread_rejects_inverted_strikes():
+    """Bull call: long strike MUST be lower than short strike."""
+    legs = [
+        _spec("buy", "call", 105.0, "2026-06-19"),
+        _spec("sell", "call", 100.0, "2026-06-19"),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="bull_call_spread",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+    assert "strike" in result.reason.lower()
+
+
+def test_sanity_bull_call_spread_rejects_mismatched_expiries():
+    legs = [
+        _spec("buy", "call", 100.0, "2026-06-19"),
+        _spec("sell", "call", 105.0, "2026-07-17"),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="bull_call_spread",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+    assert "expir" in result.reason.lower()
+
+
+def test_sanity_bull_call_spread_rejects_wrong_kind():
+    legs = [
+        _spec("buy", "put", 100.0, "2026-06-19"),
+        _spec("sell", "call", 105.0, "2026-06-19"),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="bull_call_spread",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+
+
+def test_sanity_bear_put_spread_valid():
+    legs = [
+        _spec("buy", "put", 100.0, "2026-06-19"),
+        _spec("sell", "put", 95.0, "2026-06-19"),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="bear_put_spread",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is True
+
+
+def test_sanity_bear_put_spread_rejects_inverted_strikes():
+    """Bear put: long strike MUST be higher than short strike."""
+    legs = [
+        _spec("buy", "put", 95.0, "2026-06-19"),
+        _spec("sell", "put", 100.0, "2026-06-19"),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="bear_put_spread",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False

@@ -370,7 +370,53 @@ def validate_structure_sanity(
             return SanityResult(ok=False, reason=f"{structure_kind} requires strike=None and expiry=None")
         return SanityResult(ok=True)
 
-    # Multi-leg sanity arrives in Tasks 7, 8, 9.
+    if structure_kind == "bull_call_spread":
+        if len(legs) != 2:
+            return SanityResult(ok=False, reason="bull_call_spread requires 2 legs")
+        if any(leg.kind != "call" for leg in legs):
+            return SanityResult(ok=False, reason="bull_call_spread requires both legs to be calls")
+        if {leg.action for leg in legs} != {"buy", "sell"}:
+            return SanityResult(ok=False, reason="bull_call_spread requires one buy + one sell")
+        if legs[0].expiry != legs[1].expiry:
+            return SanityResult(ok=False, reason="bull_call_spread requires matching expiries")
+        buy = next(l for l in legs if l.action == "buy")
+        sell = next(l for l in legs if l.action == "sell")
+        if buy.strike >= sell.strike:
+            return SanityResult(
+                ok=False,
+                reason=f"bull_call_spread requires long strike < short strike (got {buy.strike} >= {sell.strike})",
+            )
+        bad = _check_expiry_min_dte(buy.expiry, today)
+        if bad: return bad
+        for leg in legs:
+            bad = _check_moneyness(leg.strike, spot)
+            if bad: return bad
+        return SanityResult(ok=True)
+
+    if structure_kind == "bear_put_spread":
+        if len(legs) != 2:
+            return SanityResult(ok=False, reason="bear_put_spread requires 2 legs")
+        if any(leg.kind != "put" for leg in legs):
+            return SanityResult(ok=False, reason="bear_put_spread requires both legs to be puts")
+        if {leg.action for leg in legs} != {"buy", "sell"}:
+            return SanityResult(ok=False, reason="bear_put_spread requires one buy + one sell")
+        if legs[0].expiry != legs[1].expiry:
+            return SanityResult(ok=False, reason="bear_put_spread requires matching expiries")
+        buy = next(l for l in legs if l.action == "buy")
+        sell = next(l for l in legs if l.action == "sell")
+        if buy.strike <= sell.strike:
+            return SanityResult(
+                ok=False,
+                reason=f"bear_put_spread requires long strike > short strike (got {buy.strike} <= {sell.strike})",
+            )
+        bad = _check_expiry_min_dte(buy.expiry, today)
+        if bad: return bad
+        for leg in legs:
+            bad = _check_moneyness(leg.strike, spot)
+            if bad: return bad
+        return SanityResult(ok=True)
+
+    # Multi-leg sanity arrives in Tasks 8, 9.
     return SanityResult(ok=False, reason=f"sanity for {structure_kind} not yet implemented")
 
 
