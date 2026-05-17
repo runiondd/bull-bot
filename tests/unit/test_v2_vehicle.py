@@ -260,3 +260,74 @@ def test_near_atm_liquidity_returns_nearest_expiry(conn):
                         strike=100.0, kind="call", bid=2.0, ask=2.2, oi=100)
     out = vehicle._near_atm_liquidity(conn, ticker="AAPL", asof_ts=asof, spot=100.0)
     assert out["nearest_expiry"] == "2026-06-19"
+
+
+# ---------------------------------------------------------------------------
+# Task 5 — build_llm_context
+# ---------------------------------------------------------------------------
+
+def _sample_signal():
+    return DirectionalSignal(
+        ticker="AAPL", asof_ts=1_700_000_000, direction="bullish",
+        confidence=0.72, horizon_days=30, rationale="50/200 SMA cross",
+        rules_version="v1.0",
+    )
+
+
+def test_build_llm_context_assembles_full_input_json(conn):
+    bars = [_bar(close=185.0 + (i * 0.05)) for i in range(60)]
+    signal = _sample_signal()
+    ctx = vehicle.build_llm_context(
+        conn,
+        ticker="AAPL", spot=185.42, signal=signal,
+        bars=bars, levels=[], days_to_earnings=23,
+        earnings_window_active=False, iv_rank=0.34,
+        budget_per_trade_usd=1500.0, asof_ts=1_700_000_000,
+        nav=50_000.0,
+        per_ticker_concentration_pct=0.0,
+        open_positions_count=7,
+    )
+    assert ctx["ticker"] == "AAPL"
+    assert ctx["spot"] == 185.42
+    assert ctx["signal"]["direction"] == "bullish"
+    assert ctx["signal"]["confidence"] == 0.72
+    assert ctx["iv_rank"] == 0.34
+    assert ctx["days_to_earnings"] == 23
+    assert ctx["earnings_window_active"] is False
+    assert ctx["budget_per_trade_usd"] == 1500.0
+    assert ctx["current_position"] is None
+    assert ctx["portfolio_state"]["open_positions"] == 7
+    assert ctx["portfolio_state"]["ticker_concentration_pct"] == 0.0
+    # large_move + liquidity stats included (computed inline)
+    assert "large_move_count_90d" in ctx
+    assert "near_atm_liquidity" in ctx
+
+
+def test_build_llm_context_includes_current_position_when_held(conn):
+    leg = positions.OptionLeg(
+        action="buy", kind="call", strike=190.0, expiry="2026-06-19",
+        qty=1, entry_price=2.50,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="long_call",
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=200.0, stop_price=180.0,
+        time_stop_dte=21, assignment_acceptable=False,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+    bars = [_bar(close=185.0) for _ in range(60)]
+    ctx = vehicle.build_llm_context(
+        conn,
+        ticker="AAPL", spot=185.42, signal=_sample_signal(),
+        bars=bars, levels=[], days_to_earnings=23,
+        earnings_window_active=False, iv_rank=0.34,
+        budget_per_trade_usd=1500.0, asof_ts=1_700_000_000,
+        nav=50_000.0,
+        per_ticker_concentration_pct=0.02,
+        open_positions_count=8,
+        current_position=pos,
+    )
+    assert ctx["current_position"] is not None
+    assert ctx["current_position"]["structure_kind"] == "long_call"
+    assert ctx["current_position"]["intent"] == "trade"

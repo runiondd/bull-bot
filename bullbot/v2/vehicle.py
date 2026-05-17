@@ -204,3 +204,66 @@ def _near_atm_liquidity(
         "spread_avg_pct": spread_avg,
         "nearest_expiry": nearest_expiry,
     }
+
+
+from bullbot.v2.positions import Position
+from bullbot.v2.signals import DirectionalSignal
+
+
+def build_llm_context(
+    conn: sqlite3.Connection,
+    *,
+    ticker: str,
+    spot: float,
+    signal: DirectionalSignal,
+    bars: list,
+    levels: list,
+    days_to_earnings: int,
+    earnings_window_active: bool,
+    iv_rank: float,
+    budget_per_trade_usd: float,
+    asof_ts: int,
+    nav: float,
+    per_ticker_concentration_pct: float,
+    open_positions_count: int,
+    current_position: Position | None = None,
+) -> dict:
+    """Assemble the rich JSON input the LLM sees on a flat-ticker pick call.
+    Pure composition — no I/O beyond reading v2_chain_snapshots via
+    _near_atm_liquidity (caller already pre-fetched bars, levels, iv_rank,
+    days_to_earnings, earnings_window_active)."""
+    current_pos_repr = None
+    if current_position is not None:
+        current_pos_repr = {
+            "structure_kind": current_position.structure_kind,
+            "intent": current_position.intent,
+            "days_held": (asof_ts - current_position.opened_ts) // 86400,
+        }
+    return {
+        "ticker": ticker,
+        "spot": spot,
+        "signal": {
+            "direction": signal.direction,
+            "confidence": signal.confidence,
+            "horizon_days": signal.horizon_days,
+        },
+        "iv_rank": iv_rank,
+        "iv_percentile": iv_rank,  # placeholder: separate calc may diverge later
+        "levels": [
+            {"price": lvl.price, "kind": lvl.kind, "strength": lvl.strength}
+            for lvl in levels
+        ],
+        "days_to_earnings": days_to_earnings,
+        "earnings_window_active": earnings_window_active,
+        "large_move_count_90d": _large_move_count_90d(bars),
+        "near_atm_liquidity": _near_atm_liquidity(
+            conn, ticker=ticker, asof_ts=asof_ts, spot=spot,
+        ),
+        "budget_per_trade_usd": budget_per_trade_usd,
+        "current_position": current_pos_repr,
+        "recent_picks_this_ticker": [],  # populated by C.5 runner from v2_positions history
+        "portfolio_state": {
+            "open_positions": open_positions_count,
+            "ticker_concentration_pct": per_ticker_concentration_pct,
+        },
+    }
