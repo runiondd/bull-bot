@@ -154,6 +154,8 @@ def _large_move_count_90d(bars: list) -> int:
             abs(b.low - prev_close),
         ))
     atr_14 = sum(trs[-ATR_WINDOW:]) / ATR_WINDOW
+    if atr_14 <= 0:
+        atr_14 = float("inf")  # disable the TR rule when baseline volatility is zero
 
     count = 0
     for i, b in enumerate(recent):

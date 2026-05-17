@@ -171,10 +171,10 @@ def test_large_move_count_zero_for_steady_bars():
 
 def test_large_move_count_detects_large_close_to_close_return():
     bars = [_bar(close=100.0) for _ in range(50)]
-    # day 30 spikes 5% — should count
+    # day 30 spikes 5% — counts; day 31 recovers ~4.76% back — also counts
     bars[30] = _bar(close=105.0, high=105.5, low=99.5)
     n = vehicle._large_move_count_90d(bars)
-    assert n >= 1
+    assert n == 2
 
 
 def test_large_move_count_detects_large_true_range():
@@ -183,7 +183,7 @@ def test_large_move_count_detects_large_true_range():
     # day 30: close still 100 but high/low blown out
     bars[30] = _bar(close=100.0, high=110.0, low=90.0)
     n = vehicle._large_move_count_90d(bars)
-    assert n >= 1
+    assert n == 1
 
 
 def test_large_move_count_only_considers_last_90_bars():
