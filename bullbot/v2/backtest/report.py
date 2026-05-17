@@ -41,3 +41,15 @@ def _write_trades_csv(result: BacktestResult, *, out_path: Path) -> None:
                 t.closed_ts, _ts_to_date_str(t.closed_ts),
                 t.close_reason, t.realized_pnl, t.rationale,
             ])
+
+
+_EQUITY_HEADER = ["asof_ts", "asof_date", "nav"]
+
+
+def _write_equity_curve_csv(result: BacktestResult, *, out_path: Path) -> None:
+    """Daily NAV snapshots CSV. Header always written; one row per daily_mtm entry."""
+    with out_path.open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(_EQUITY_HEADER)
+        for asof_ts, nav in result.daily_mtm:
+            w.writerow([asof_ts, _ts_to_date_str(asof_ts), nav])

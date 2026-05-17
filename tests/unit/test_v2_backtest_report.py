@@ -67,3 +67,39 @@ def test_write_trades_csv_includes_human_readable_dates(tmp_path):
         rows = list(csv.DictReader(f))
     assert rows[0]["opened_date"] == "2024-01-05"
     assert rows[0]["closed_date"] == "2024-01-12"
+
+
+def test_write_equity_curve_csv_writes_header_only_for_empty_mtm(tmp_path):
+    out = tmp_path / "equity.csv"
+    report._write_equity_curve_csv(_result(daily_mtm=[]), out_path=out)
+    with out.open() as f:
+        rows = list(csv.reader(f))
+    assert rows == [["asof_ts", "asof_date", "nav"]]
+
+
+def test_write_equity_curve_csv_writes_one_row_per_day(tmp_path):
+    out = tmp_path / "equity.csv"
+    daily_mtm = [
+        (int(datetime(2024, 3, 13, 23).timestamp()), 50_000.0),
+        (int(datetime(2024, 3, 14, 23).timestamp()), 50_125.50),
+        (int(datetime(2024, 3, 15, 23).timestamp()), 49_800.0),
+    ]
+    report._write_equity_curve_csv(_result(daily_mtm=daily_mtm), out_path=out)
+    with out.open() as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 3
+    assert rows[0]["asof_date"] == "2024-03-13"
+    assert rows[1]["nav"] == "50125.5"
+    assert rows[2]["asof_date"] == "2024-03-15"
+
+
+def test_write_equity_curve_csv_preserves_chronological_order(tmp_path):
+    out = tmp_path / "equity.csv"
+    daily_mtm = [
+        (int(datetime(2024, 3, 13, 23).timestamp()), 50_000.0),
+        (int(datetime(2024, 3, 14, 23).timestamp()), 50_500.0),
+    ]
+    report._write_equity_curve_csv(_result(daily_mtm=daily_mtm), out_path=out)
+    with out.open() as f:
+        rows = list(csv.DictReader(f))
+    assert int(rows[0]["asof_ts"]) < int(rows[1]["asof_ts"])
