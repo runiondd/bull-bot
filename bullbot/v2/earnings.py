@@ -35,7 +35,10 @@ class EarningsEvent:
         return (self.event_date - today).days
 
 
+import logging
 from typing import Callable
+
+_log = logging.getLogger(__name__)
 
 
 def _default_yf_client():
@@ -52,16 +55,25 @@ def fetch_next_earnings(
     client: Callable[[str], object] | None = None,
 ) -> EarningsEvent | None:
     """Return the soonest future earnings event (event_date >= today) for
-    `ticker`, or None if no upcoming earnings in yfinance's 12-row window.
+    `ticker`, or None if no upcoming earnings or any failure.
 
-    The yfinance DataFrame index is tz-aware (typically America/New_York);
-    we strip tz and convert to a plain date for the EarningsEvent.
+    Failure modes that yield None:
+      - Yahoo client construct raises (network error, bad ticker)
+      - get_earnings_dates raises (yfinance parse error, schema change)
+      - yfinance returns None (ETFs, funds, new IPOs)
+      - DataFrame empty
+      - DataFrame contains only past events
     """
     if client is None:
         client = _default_yf_client()
 
-    ticker_obj = client(ticker)
-    df = ticker_obj.get_earnings_dates(limit=12)
+    try:
+        ticker_obj = client(ticker)
+        df = ticker_obj.get_earnings_dates(limit=12)
+    except Exception as exc:  # noqa: BLE001 — Yahoo can raise anything
+        _log.warning("fetch_next_earnings: yfinance failed for %s: %s", ticker, exc)
+        return None
+
     if df is None or df.empty:
         return None
 

@@ -97,3 +97,43 @@ def test_fetch_next_earnings_normalizes_ticker_to_uppercase():
         client=lambda symbol: fake,
     )
     assert ev.ticker == "AAPL"
+
+
+def test_fetch_next_earnings_returns_none_when_yfinance_returns_none():
+    """ETFs / funds / new IPOs often have get_earnings_dates() return None."""
+    fake = _FakeYFTicker(None)
+    ev = earnings.fetch_next_earnings(
+        ticker="SPY", today=date(2026, 5, 17),
+        client=lambda symbol: fake,
+    )
+    assert ev is None
+
+
+def test_fetch_next_earnings_returns_none_when_dataframe_is_empty():
+    fake = _FakeYFTicker(pd.DataFrame())
+    ev = earnings.fetch_next_earnings(
+        ticker="XYZ", today=date(2026, 5, 17),
+        client=lambda symbol: fake,
+    )
+    assert ev is None
+
+
+def test_fetch_next_earnings_returns_none_when_yfinance_raises_on_construct():
+    def raising_client(symbol):
+        raise ConnectionError("simulated yahoo timeout")
+    ev = earnings.fetch_next_earnings(
+        ticker="AAPL", today=date(2026, 5, 17),
+        client=raising_client,
+    )
+    assert ev is None
+
+
+def test_fetch_next_earnings_returns_none_when_get_earnings_dates_raises():
+    class RaisingTicker:
+        def get_earnings_dates(self, limit=12):
+            raise ValueError("simulated yfinance parse error")
+    ev = earnings.fetch_next_earnings(
+        ticker="AAPL", today=date(2026, 5, 17),
+        client=lambda symbol: RaisingTicker(),
+    )
+    assert ev is None
