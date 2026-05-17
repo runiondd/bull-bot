@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from dataclasses import dataclass
+from datetime import date as _date
 
 
 def _cache_key(*, prompt: str) -> str:
@@ -40,9 +42,6 @@ def _cache_put(conn: sqlite3.Connection, *, key: str, response: str) -> None:
     )
     conn.commit()
 
-
-from dataclasses import dataclass
-from datetime import date as _date
 
 INTENTS = ("trade", "accumulate")
 
