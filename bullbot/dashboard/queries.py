@@ -813,7 +813,8 @@ def v2_positions(conn: sqlite3.Connection) -> list[dict]:
             (p["id"],),
         ).fetchone()
         opened_date = _dt.fromtimestamp(p["opened_ts"]).date().isoformat()
-        days_held = (_dt.now().timestamp() - p["opened_ts"]) // 86400
+        from datetime import timezone as _tz
+        days_held = (_dt.now(tz=_tz.utc).timestamp() - p["opened_ts"]) // 86400
         out.append({
             "id": p["id"],
             "ticker": p["ticker"],

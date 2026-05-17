@@ -92,7 +92,7 @@ def _dispatch_ticker(
         today = _datetime.fromtimestamp(asof_ts).date()
         action = exits.evaluate(
             conn, position=open_pos, signal=signal, spot=spot,
-            atr_14=0.0, today=today, asof_ts=asof_ts,
+            atr_14=_atr_14_simple(bars), today=today, asof_ts=asof_ts,
             current_leg_prices=leg_prices,
         )
         return "held" if action.kind == "hold" else "closed"
@@ -154,6 +154,25 @@ def _default_chain_fn(ticker, asof_ts, spot):
     return chains.fetch_chain(ticker=ticker)
 
 
+def _atr_14_simple(bars: list) -> float:
+    """ATR-14 from bars (simple average TR). Returns 0.0 when <15 bars.
+    Mirror of bullbot.v2.backtest.runner._atr_14_simple."""
+    if len(bars) < 15:
+        return 0.0
+    window = bars[-15:]
+    trs = []
+    for i, b in enumerate(window):
+        if i == 0:
+            continue
+        prev_close = window[i - 1].close
+        trs.append(max(
+            b.high - b.low,
+            abs(b.high - prev_close),
+            abs(b.low - prev_close),
+        ))
+    return sum(trs) / 14
+
+
 def _compute_mtm(*, position, chain, spot: float) -> float:
     """Sum per-leg current value at spot/chain mid. Mirror of
     bullbot.v2.backtest.runner._compute_position_mtm."""
@@ -191,6 +210,8 @@ def run_once_phase_c(
     if chain_fn is None:
         chain_fn = _default_chain_fn
 
+    if not hasattr(config, "STARTING_NAV"):
+        _log.warning("config.STARTING_NAV not set; defaulting NAV to 50000.0")
     nav = float(getattr(config, "STARTING_NAV", 50_000.0))
 
     counts: Counter[str] = Counter()

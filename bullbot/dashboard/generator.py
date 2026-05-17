@@ -30,8 +30,7 @@ def generate(conn: sqlite3.Connection, output_path: Path | None = None) -> Path:
     leaderboard = queries.leaderboard_entries(conn)
     v2_signals = queries.v2_signals(conn)
     v2_positions = queries.v2_positions(conn)
-    from pathlib import Path as _Path
-    v2_backtest = queries.v2_backtest_latest(_Path("reports"))
+    v2_backtest = queries.v2_backtest_latest(config.REPORTS_DIR)
 
     metrics = {**summary, **extended}
     total_pnl = metrics.get("realized_pnl", 0) + metrics.get("unrealized_pnl", 0)
