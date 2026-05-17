@@ -598,3 +598,90 @@ def test_sanity_bear_put_spread_rejects_non_1_to_1_qty_ratio():
         today=date(2026, 5, 17),
     )
     assert result.ok is False
+
+
+# ---------------------------------------------------------------------------
+# Task 8 — validate_structure_sanity (iron_condor + butterfly)
+# ---------------------------------------------------------------------------
+
+def test_sanity_iron_condor_valid():
+    legs = [
+        _spec("sell", "put", 95.0, "2026-06-19"),
+        _spec("buy", "put", 90.0, "2026-06-19"),
+        _spec("sell", "call", 105.0, "2026-06-19"),
+        _spec("buy", "call", 110.0, "2026-06-19"),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="iron_condor",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is True
+
+
+def test_sanity_iron_condor_rejects_wrong_leg_count():
+    legs = [
+        _spec("sell", "put", 95.0, "2026-06-19"),
+        _spec("buy", "put", 90.0, "2026-06-19"),
+        _spec("sell", "call", 105.0, "2026-06-19"),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="iron_condor",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+
+
+def test_sanity_iron_condor_rejects_overlapping_wings():
+    """Short put strike must be < short call strike (no overlap)."""
+    legs = [
+        _spec("sell", "put", 108.0, "2026-06-19"),  # too high — overlaps call side
+        _spec("buy", "put", 103.0, "2026-06-19"),
+        _spec("sell", "call", 105.0, "2026-06-19"),
+        _spec("buy", "call", 110.0, "2026-06-19"),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="iron_condor",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+
+
+def test_sanity_long_butterfly_valid():
+    legs = [
+        _spec("buy", "call", 95.0, "2026-06-19", qty_ratio=1),
+        _spec("sell", "call", 100.0, "2026-06-19", qty_ratio=2),
+        _spec("buy", "call", 105.0, "2026-06-19", qty_ratio=1),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="butterfly",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is True
+
+
+def test_sanity_long_butterfly_rejects_wrong_qty_ratio():
+    legs = [
+        _spec("buy", "call", 95.0, "2026-06-19", qty_ratio=1),
+        _spec("sell", "call", 100.0, "2026-06-19", qty_ratio=3),  # should be 2
+        _spec("buy", "call", 105.0, "2026-06-19", qty_ratio=1),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="butterfly",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+    assert "ratio" in result.reason.lower() or "qty" in result.reason.lower()
+
+
+def test_sanity_long_butterfly_rejects_asymmetric_wings():
+    """Wings must be equidistant (within 5% tolerance) for a clean butterfly."""
+    legs = [
+        _spec("buy", "call", 95.0, "2026-06-19", qty_ratio=1),
+        _spec("sell", "call", 100.0, "2026-06-19", qty_ratio=2),
+        _spec("buy", "call", 115.0, "2026-06-19", qty_ratio=1),  # 15 vs 5 — asymmetric
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="butterfly",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False

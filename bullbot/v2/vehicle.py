@@ -429,7 +429,81 @@ def validate_structure_sanity(
             if bad: return bad
         return SanityResult(ok=True)
 
-    # Multi-leg sanity arrives in Tasks 8, 9.
+    if structure_kind == "iron_condor":
+        if len(legs) != 4:
+            return SanityResult(ok=False, reason="iron_condor requires 4 legs")
+        if any(leg.qty_ratio != 1 for leg in legs):
+            return SanityResult(ok=False, reason="iron_condor requires qty_ratio 1:1:1:1")
+        if len({leg.expiry for leg in legs}) != 1:
+            return SanityResult(ok=False, reason="iron_condor requires all legs same expiry")
+        calls = [l for l in legs if l.kind == "call"]
+        puts = [l for l in legs if l.kind == "put"]
+        if len(calls) != 2 or len(puts) != 2:
+            return SanityResult(ok=False, reason="iron_condor requires 2 calls + 2 puts")
+        if {l.action for l in calls} != {"buy", "sell"}:
+            return SanityResult(ok=False, reason="iron_condor call wing requires 1 buy + 1 sell")
+        if {l.action for l in puts} != {"buy", "sell"}:
+            return SanityResult(ok=False, reason="iron_condor put wing requires 1 buy + 1 sell")
+        short_put = next(l for l in puts if l.action == "sell")
+        short_call = next(l for l in calls if l.action == "sell")
+        long_put = next(l for l in puts if l.action == "buy")
+        long_call = next(l for l in calls if l.action == "buy")
+        if long_put.strike >= short_put.strike:
+            return SanityResult(
+                ok=False,
+                reason="iron_condor put wing requires long strike < short strike",
+            )
+        if short_call.strike >= long_call.strike:
+            return SanityResult(
+                ok=False,
+                reason="iron_condor call wing requires short strike < long strike",
+            )
+        if short_put.strike >= short_call.strike:
+            return SanityResult(
+                ok=False,
+                reason=f"iron_condor wings overlap: short_put {short_put.strike} >= short_call {short_call.strike}",
+            )
+        bad = _check_expiry_min_dte(legs[0].expiry, today)
+        if bad: return bad
+        for leg in legs:
+            bad = _check_moneyness(leg.strike, spot)
+            if bad: return bad
+        return SanityResult(ok=True)
+
+    if structure_kind == "butterfly":
+        if len(legs) != 3:
+            return SanityResult(ok=False, reason="butterfly requires 3 legs")
+        if len({leg.kind for leg in legs}) != 1:
+            return SanityResult(ok=False, reason="butterfly requires all legs same kind")
+        if len({leg.expiry for leg in legs}) != 1:
+            return SanityResult(ok=False, reason="butterfly requires all legs same expiry")
+        sorted_legs = sorted(legs, key=lambda l: l.strike)
+        low, mid, high = sorted_legs
+        if low.action != "buy" or mid.action != "sell" or high.action != "buy":
+            return SanityResult(ok=False, reason="butterfly requires buy/sell/buy across low/mid/high strikes")
+        if low.qty_ratio != 1 or mid.qty_ratio != 2 or high.qty_ratio != 1:
+            return SanityResult(
+                ok=False,
+                reason=f"butterfly requires qty_ratio 1:2:1 (got {low.qty_ratio}:{mid.qty_ratio}:{high.qty_ratio})",
+            )
+        low_wing = mid.strike - low.strike
+        high_wing = high.strike - mid.strike
+        if low_wing <= 0 or high_wing <= 0:
+            return SanityResult(ok=False, reason="butterfly wings must be positive")
+        wing_diff_pct = abs(low_wing - high_wing) / max(low_wing, high_wing)
+        if wing_diff_pct > 0.05:
+            return SanityResult(
+                ok=False,
+                reason=f"butterfly wings too asymmetric ({low_wing} vs {high_wing}, {wing_diff_pct:.1%} diff)",
+            )
+        bad = _check_expiry_min_dte(legs[0].expiry, today)
+        if bad: return bad
+        for leg in legs:
+            bad = _check_moneyness(leg.strike, spot)
+            if bad: return bad
+        return SanityResult(ok=True)
+
+    # Multi-leg sanity for covered_call arrives in Task 9.
     return SanityResult(ok=False, reason=f"sanity for {structure_kind} not yet implemented")
 
 
