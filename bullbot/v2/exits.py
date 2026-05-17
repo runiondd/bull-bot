@@ -502,3 +502,60 @@ def _check_accumulate_at_expiry(
         leg_exit_prices={leg.id: 0.0 for leg in position.legs},
     )
     return ExitAction(kind="expired_worthless", reason="OTM at expiry")
+
+
+def evaluate(
+    conn: sqlite3.Connection, *,
+    position: Position,
+    signal: DirectionalSignal,
+    spot: float,
+    atr_14: float,
+    today: _date,
+    asof_ts: int,
+    current_leg_prices: dict[int, float],
+) -> ExitAction:
+    """Run the full exit-rule pipeline for one open Position.
+
+    Order:
+      1. Safety-stop (intent-independent, 15%+ adverse).
+      2. intent='trade': price triggers -> signal flip -> time stop -> credit profit-take.
+      3. intent='accumulate': route at expiry, else hold.
+
+    Returns ExitAction(kind='hold') when nothing fires.
+    """
+    safety = _check_safety_stop(conn, position=position, spot=spot, now_ts=asof_ts)
+    if safety is not None:
+        return safety
+
+    if position.intent == "trade":
+        for check in (
+            lambda: _check_trade_price_triggers(
+                conn, position=position, spot=spot, now_ts=asof_ts,
+            ),
+            lambda: _check_signal_flip(
+                conn, position=position, signal=signal, now_ts=asof_ts,
+            ),
+            lambda: _check_time_stop(
+                conn, position=position, today=today, now_ts=asof_ts,
+            ),
+            lambda: _check_credit_profit_take(
+                conn, position=position,
+                current_leg_prices=current_leg_prices, now_ts=asof_ts,
+            ),
+        ):
+            result = check()
+            if result is not None:
+                return result
+        return ExitAction(kind="hold")
+
+    # intent == "accumulate"
+    option_legs = [leg for leg in position.legs if leg.kind in ("call", "put")]
+    if not option_legs:
+        return ExitAction(kind="hold")
+    nearest_expiry = min(_date.fromisoformat(leg.expiry) for leg in option_legs)
+    if nearest_expiry > today:
+        return ExitAction(kind="hold")
+    return _check_accumulate_at_expiry(
+        conn, position=position, signal=signal, spot=spot, atr_14=atr_14,
+        today=today, now_ts=asof_ts,
+    )

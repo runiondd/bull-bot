@@ -752,3 +752,82 @@ def test_accumulate_at_expiry_long_call_otm_expires_worthless(conn):
         today=date(2026, 5, 17), now_ts=1_700_500_000,
     )
     assert action.kind == "expired_worthless"
+
+
+def test_evaluate_returns_hold_when_no_trigger_fires(conn):
+    pos = _trade_long_position(conn)
+    signal = _signal("bullish", confidence=0.8)
+    action = exits.evaluate(
+        conn, position=pos, signal=signal, spot=190.0, atr_14=3.0,
+        today=date(2026, 5, 17), asof_ts=1_700_001_000,
+        current_leg_prices={},
+    )
+    assert action.kind == "hold"
+
+
+def test_evaluate_safety_stop_takes_precedence_over_intent_triggers(conn):
+    pos = _share_position(
+        conn, qty=100, entry_price=100.0, intent="accumulate",
+    )
+    signal = _signal("bullish", confidence=0.9)
+    action = exits.evaluate(
+        conn, position=pos, signal=signal, spot=80.0, atr_14=3.0,
+        today=date(2026, 5, 17), asof_ts=1_700_001_000,
+        current_leg_prices={},
+    )
+    assert action.kind == "closed_safety_stop"
+
+
+def test_evaluate_trade_intent_routes_through_price_triggers(conn):
+    pos = _trade_long_position(conn, profit_target_price=200.0, stop_price=180.0)
+    signal = _signal("bullish", confidence=0.8)
+    action = exits.evaluate(
+        conn, position=pos, signal=signal, spot=201.0, atr_14=3.0,
+        today=date(2026, 5, 17), asof_ts=1_700_001_000,
+        current_leg_prices={},
+    )
+    assert action.kind == "closed_profit_target"
+
+
+def test_evaluate_accumulate_intent_holds_when_not_at_expiry(conn):
+    csp_leg = positions.OptionLeg(
+        action="sell", kind="put", strike=100.0, expiry="2026-06-19",
+        qty=1, entry_price=2.00,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="accumulate", structure_kind="csp",
+        legs=[csp_leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, assignment_acceptable=True,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+    signal = _signal("bullish", confidence=0.8)
+    action = exits.evaluate(
+        conn, position=pos, signal=signal, spot=98.0, atr_14=3.0,
+        today=date(2026, 5, 17), asof_ts=1_700_001_000,
+        current_leg_prices={pos.legs[0].id: 1.80},
+    )
+    assert action.kind == "hold"
+
+
+def test_evaluate_accumulate_intent_routes_at_expiry(conn):
+    csp_leg = positions.OptionLeg(
+        action="sell", kind="put", strike=100.0, expiry="2026-05-17",
+        qty=1, entry_price=2.00,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="accumulate", structure_kind="csp",
+        legs=[csp_leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, assignment_acceptable=True,
+        nearest_leg_expiry_dte=0, rationale="",
+    )
+    signal = _signal("bullish", confidence=0.7)
+    action = exits.evaluate(
+        conn, position=pos, signal=signal, spot=96.0, atr_14=3.0,
+        today=date(2026, 5, 17), asof_ts=1_700_001_000,
+        current_leg_prices={},
+    )
+    assert action.kind == "assigned_to_shares"
