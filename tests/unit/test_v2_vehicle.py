@@ -685,3 +685,34 @@ def test_sanity_long_butterfly_rejects_asymmetric_wings():
         today=date(2026, 5, 17),
     )
     assert result.ok is False
+
+
+def test_sanity_iron_condor_rejects_non_1_qty_ratio():
+    """IC requires qty_ratio 1 on all 4 legs — mirror of vertical-spread coverage."""
+    legs = [
+        _spec("sell", "put", 95.0, "2026-06-19", qty_ratio=2),  # not 1
+        _spec("buy", "put", 90.0, "2026-06-19"),
+        _spec("sell", "call", 105.0, "2026-06-19"),
+        _spec("buy", "call", 110.0, "2026-06-19"),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="iron_condor",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+    assert "1:1:1:1" in result.reason or "qty_ratio" in result.reason
+
+
+def test_sanity_iron_condor_rejects_inverted_call_wing():
+    """Short call must be below long call; if short is above long, reject."""
+    legs = [
+        _spec("sell", "put", 95.0, "2026-06-19"),
+        _spec("buy", "put", 90.0, "2026-06-19"),
+        _spec("sell", "call", 110.0, "2026-06-19"),  # short above long — inverted
+        _spec("buy", "call", 105.0, "2026-06-19"),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="iron_condor",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
