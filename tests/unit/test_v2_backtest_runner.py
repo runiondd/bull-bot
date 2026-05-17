@@ -196,7 +196,7 @@ def test_replay_one_day_opens_position_on_valid_llm_decision(conn, fake_anthropi
     _seed_bars(conn, "VIX", asof, n=60, base_close=18.0)
     fake_anthropic.queue_response(json.dumps({
         "decision": "open", "intent": "trade", "structure": "long_call",
-        "legs": [{"action": "buy", "kind": "call", "strike": 100.0,
+        "legs": [{"action": "buy", "kind": "call", "strike": 101.0,
                   "expiry": (date(2026, 5, 17).fromordinal(
                       date(2026, 5, 17).toordinal() + 33)).isoformat(),
                   "qty_ratio": 1}],
@@ -213,7 +213,7 @@ def test_replay_one_day_opens_position_on_valid_llm_decision(conn, fake_anthropi
         llm_client=fake_anthropic, llm_cache_conn=conn,
     )
     assert out is not None
-    assert out["action_taken"] in {"opened", "pass", "held", "rejected"}
+    assert out["action_taken"] in {"opened", "pass", "held"}
     # Verify a position was actually opened in the DB
     from bullbot.v2 import positions
     open_pos = positions.open_for_ticker(conn, "AAPL")
