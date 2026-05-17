@@ -280,3 +280,85 @@ def test_check_trade_price_triggers_returns_none_when_no_target_or_stop_set(conn
         conn, position=pos, spot=200.0, now_ts=1_700_001_000,
     )
     assert action is None
+
+
+SIGNAL_FLIP_CONFIDENCE = 0.5
+
+
+def _signal(direction: str, confidence: float = 0.7, asof_ts: int = 1_700_000_000):
+    return DirectionalSignal(
+        ticker="AAPL", asof_ts=asof_ts, direction=direction,
+        confidence=confidence, horizon_days=30, rationale="t",
+        rules_version="v1.0",
+    )
+
+
+def test_check_signal_flip_fires_when_bullish_position_meets_bearish_signal(conn):
+    pos = _trade_long_position(conn)
+    signal = _signal("bearish", confidence=0.7)
+    action = exits._check_signal_flip(
+        conn, position=pos, signal=signal, now_ts=1_700_001_000,
+    )
+    assert action is not None
+    assert action.kind == "closed_signal_flip"
+
+
+def test_check_signal_flip_ignores_low_confidence_opposite_signal(conn):
+    pos = _trade_long_position(conn)
+    signal = _signal("bearish", confidence=0.4)
+    action = exits._check_signal_flip(
+        conn, position=pos, signal=signal, now_ts=1_700_001_000,
+    )
+    assert action is None
+
+
+def test_check_signal_flip_ignores_same_direction_signal(conn):
+    pos = _trade_long_position(conn)
+    signal = _signal("bullish", confidence=0.9)
+    action = exits._check_signal_flip(
+        conn, position=pos, signal=signal, now_ts=1_700_001_000,
+    )
+    assert action is None
+
+
+def test_check_signal_flip_ignores_chop_signal(conn):
+    pos = _trade_long_position(conn)
+    chop_signal = _signal("chop", confidence=0.9)
+    assert exits._check_signal_flip(
+        conn, position=pos, signal=chop_signal, now_ts=1_700_001_000,
+    ) is None
+    no_edge_signal = _signal("no_edge", confidence=0.9)
+    assert exits._check_signal_flip(
+        conn, position=pos, signal=no_edge_signal, now_ts=1_700_001_000,
+    ) is None
+
+
+def test_check_signal_flip_fires_at_confidence_exactly_05(conn):
+    pos = _trade_long_position(conn)
+    signal = _signal("bearish", confidence=0.5)
+    action = exits._check_signal_flip(
+        conn, position=pos, signal=signal, now_ts=1_700_001_000,
+    )
+    assert action is not None
+    assert action.kind == "closed_signal_flip"
+
+
+def test_check_signal_flip_fires_for_bearish_position_on_bullish_signal(conn):
+    leg = positions.OptionLeg(
+        action="buy", kind="put", strike=180.0, expiry="2026-06-19",
+        qty=1, entry_price=2.50,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="long_put",
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=170.0, stop_price=185.0,
+        time_stop_dte=21, assignment_acceptable=False,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+    signal = _signal("bullish", confidence=0.8)
+    action = exits._check_signal_flip(
+        conn, position=pos, signal=signal, now_ts=1_700_001_000,
+    )
+    assert action is not None
+    assert action.kind == "closed_signal_flip"

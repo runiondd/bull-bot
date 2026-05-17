@@ -165,3 +165,47 @@ def _check_trade_price_triggers(
         leg_exit_prices=leg_exit_prices,
     )
     return ExitAction(kind=triggered_kind, reason=triggered_reason)
+
+
+from bullbot.v2.signals import DirectionalSignal
+
+SIGNAL_FLIP_CONFIDENCE = 0.5
+_OPPOSITE_DIRECTION = {"bullish": "bearish", "bearish": "bullish"}
+
+
+def _check_signal_flip(
+    conn: sqlite3.Connection, *, position: Position, signal: DirectionalSignal,
+    now_ts: int,
+) -> ExitAction | None:
+    """Close when the current signal flips to the opposite direction with
+    confidence >= SIGNAL_FLIP_CONFIDENCE. chop / no_edge are NOT flips —
+    those are weakening signals; we don't churn on them."""
+    pt = position.profit_target_price
+    sp = position.stop_price
+    if pt is None and sp is None:
+        return None
+
+    position_direction = "bullish" if _is_bullish_target(
+        profit_target_price=pt if pt is not None else float("inf"),
+        stop_price=sp,
+    ) else "bearish"
+    expected_flip = _OPPOSITE_DIRECTION.get(position_direction)
+    if expected_flip is None:
+        return None
+    if signal.direction != expected_flip:
+        return None
+    if signal.confidence < SIGNAL_FLIP_CONFIDENCE:
+        return None
+
+    leg_exit_prices = {leg.id: 0.0 for leg in position.legs}
+    positions.close_position(
+        conn,
+        position_id=position.id,
+        closed_ts=now_ts,
+        close_reason="signal_flip",
+        leg_exit_prices=leg_exit_prices,
+    )
+    return ExitAction(
+        kind="closed_signal_flip",
+        reason=f"signal flipped to {signal.direction} @ confidence {signal.confidence:.2f}",
+    )
