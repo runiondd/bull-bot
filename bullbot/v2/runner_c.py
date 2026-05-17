@@ -77,7 +77,10 @@ def _dispatch_ticker(
         return "skipped"
     spot = bars[-1].close
     signal = signal_fn(bars, ticker, asof_ts)
-    chain = chain_fn(ticker, asof_ts, spot)
+    chain = chain_fn(conn, ticker, asof_ts, spot)
+    if chain is None:
+        from bullbot.v2.chains import Chain
+        chain = Chain(ticker=ticker, asof_ts=asof_ts, quotes=[])
 
     open_pos = positions.open_for_ticker(conn, ticker)
     if open_pos is not None:
@@ -149,9 +152,9 @@ def _default_signal_fn(bars, ticker, asof_ts):
     return underlying.classify(ticker=ticker, bars=bars, asof_ts=asof_ts)
 
 
-def _default_chain_fn(ticker, asof_ts, spot):
+def _default_chain_fn(conn, ticker, asof_ts, spot):
     from bullbot.v2 import chains
-    return chains.fetch_chain(ticker=ticker)
+    return chains.fetch_chain(conn=conn, ticker=ticker, asof_ts=asof_ts)
 
 
 def _atr_14_simple(bars: list) -> float:
@@ -237,7 +240,10 @@ def run_once_phase_c(
             if not bars:
                 continue
             spot = bars[-1].close
-            chain = chain_fn(ticker, asof_ts, spot)
+            chain = chain_fn(conn, ticker, asof_ts, spot)
+            if chain is None:
+                from bullbot.v2.chains import Chain
+                chain = Chain(ticker=ticker, asof_ts=asof_ts, quotes=[])
             mtm_value = _compute_mtm(position=pos, chain=chain, spot=spot)
             _write_position_mtm(
                 conn, position_id=pos.id, asof_ts=asof_ts,

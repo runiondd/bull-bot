@@ -79,7 +79,7 @@ def _stub_signal_fn(bars, ticker, asof_ts):
     )
 
 
-def _stub_chain_fn(ticker, asof_ts, spot):
+def _stub_chain_fn(conn, ticker, asof_ts, spot):
     from bullbot.v2.chains import Chain
     return Chain(ticker=ticker, asof_ts=asof_ts, quotes=[])
 
