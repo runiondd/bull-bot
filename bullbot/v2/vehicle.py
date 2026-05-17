@@ -13,7 +13,9 @@ risk.py — prevents the LLM from rounding up against the risk cap.
 """
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass, field
+from statistics import median
 
 DECISIONS = ("open", "pass")
 INTENTS = ("trade", "accumulate")
@@ -74,3 +76,54 @@ class ValidationResult:
     ok: bool
     reason: str | None = None
     sized_legs: list = field(default_factory=list)
+
+
+ATM_BAND_PCT = 0.05
+IV_RANK_LOOKBACK_DAYS = 252
+IV_RANK_MIN_HISTORY_DAYS = 30
+IV_RANK_DEFAULT = 0.5
+
+
+def _iv_rank(
+    conn: sqlite3.Connection, *, ticker: str, asof_ts: int, spot: float,
+) -> float:
+    """IV rank in [0.0, 1.0] for `ticker` as of `asof_ts`.
+
+    Method: per-day median IV across ATM ±5% strikes from v2_chain_snapshots,
+    over a 252-day trailing window. Today's IV vs (min, max) of the daily
+    medians -> rank.
+
+    Returns IV_RANK_DEFAULT (0.5) when fewer than IV_RANK_MIN_HISTORY_DAYS
+    of data exist.
+    """
+    lookback_start_ts = asof_ts - IV_RANK_LOOKBACK_DAYS * 86400
+    lo_strike = spot * (1 - ATM_BAND_PCT)
+    hi_strike = spot * (1 + ATM_BAND_PCT)
+
+    rows = conn.execute(
+        "SELECT asof_ts, iv FROM v2_chain_snapshots "
+        "WHERE ticker=? AND asof_ts BETWEEN ? AND ? "
+        "AND strike BETWEEN ? AND ? AND iv IS NOT NULL",
+        (ticker, lookback_start_ts, asof_ts, lo_strike, hi_strike),
+    ).fetchall()
+
+    # Group IVs by asof_ts and take median per day
+    by_day: dict[int, list[float]] = {}
+    for r in rows:
+        by_day.setdefault(r["asof_ts"], []).append(r["iv"])
+    daily_medians = sorted(median(ivs) for ivs in by_day.values())
+
+    if len(daily_medians) < IV_RANK_MIN_HISTORY_DAYS:
+        return IV_RANK_DEFAULT
+
+    iv_min = daily_medians[0]
+    iv_max = daily_medians[-1]
+    if iv_max <= iv_min:
+        return IV_RANK_DEFAULT
+
+    today_ivs = by_day.get(asof_ts)
+    if not today_ivs:
+        return IV_RANK_DEFAULT
+    today_iv = median(today_ivs)
+
+    return max(0.0, min(1.0, (today_iv - iv_min) / (iv_max - iv_min)))
