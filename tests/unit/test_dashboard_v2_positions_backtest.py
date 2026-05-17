@@ -198,3 +198,20 @@ def test_v2_backtest_tab_shows_report_dir_name_and_attribution():
     assert "250" in html
     assert "0.6667" in html or "66.67" in html
     assert "50125" in html
+
+
+def test_dashboard_generator_includes_new_tabs(conn, tmp_path, monkeypatch):
+    """generator source contains v2_positions + v2_backtest wiring."""
+    from bullbot.dashboard import generator
+    import inspect
+    src = inspect.getsource(generator)
+    assert "v2_positions" in src
+    assert "v2_backtest" in src
+
+
+def test_dashboard_templates_includes_new_tab_labels():
+    from bullbot.dashboard import templates
+    import inspect
+    src = inspect.getsource(templates)
+    assert '"v2_positions"' in src or "'v2_positions'" in src
+    assert '"v2_backtest"' in src or "'v2_backtest'" in src

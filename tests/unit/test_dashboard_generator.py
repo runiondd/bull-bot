@@ -65,6 +65,22 @@ def conn():
             id INTEGER PRIMARY KEY, ticker TEXT, strategy_id INTEGER,
             iteration INTEGER, reason TEXT, created_at INTEGER
         );
+        CREATE TABLE v2_positions (
+            id INTEGER PRIMARY KEY, ticker TEXT, intent TEXT, structure_kind TEXT,
+            exit_plan_version INTEGER, profit_target_price REAL, stop_price REAL,
+            time_stop_dte INTEGER, assignment_acceptable INTEGER,
+            nearest_leg_expiry_dte INTEGER, exit_plan_extra_json TEXT,
+            opened_ts INTEGER, closed_ts INTEGER, close_reason TEXT,
+            linked_position_id INTEGER, rationale TEXT
+        );
+        CREATE TABLE v2_position_legs (
+            id INTEGER PRIMARY KEY, position_id INTEGER, action TEXT,
+            kind TEXT, strike REAL, expiry TEXT, qty INTEGER, entry_price REAL
+        );
+        CREATE TABLE v2_position_mtm (
+            id INTEGER PRIMARY KEY, position_id INTEGER, asof_ts INTEGER,
+            mtm_value REAL, source TEXT
+        );
     """)
     c.execute("INSERT INTO ticker_state (ticker,phase,iteration_count,paper_trade_count,cumulative_llm_usd,best_strategy_id) VALUES ('SPY','paper_trial',3,1,2.50,1)")
     c.execute("INSERT INTO strategies (id,class_name,class_version,params,params_hash) VALUES (1,'PutCreditSpread',1,'{}','abc')")
