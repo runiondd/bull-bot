@@ -40,7 +40,7 @@ def _write_trades_csv(result: BacktestResult, *, out_path: Path) -> None:
                 t.ticker, t.structure_kind, t.intent,
                 t.opened_ts, _ts_to_date_str(t.opened_ts),
                 t.closed_ts, _ts_to_date_str(t.closed_ts),
-                t.close_reason, t.realized_pnl, t.rationale,
+                t.close_reason, round(t.realized_pnl, 2), t.rationale,
             ])
 
 
@@ -88,7 +88,7 @@ def _write_vehicle_attribution_csv(result: BacktestResult, *, out_path: Path) ->
             avg_pnl = b["total"] / count if count else 0.0
             w.writerow([
                 kind, int(count), int(b["wins"]), int(b["losses"]),
-                win_rate, b["total"], avg_pnl,
+                win_rate, round(b["total"], 2), round(avg_pnl, 2),
             ])
 
 

@@ -3,9 +3,6 @@ from __future__ import annotations
 
 import csv
 from datetime import date, datetime
-from pathlib import Path
-
-import pytest
 
 from bullbot.v2.backtest import report
 from bullbot.v2.backtest.runner import BacktestResult, BacktestTrade
@@ -133,7 +130,7 @@ def test_write_vehicle_attribution_aggregates_per_structure(tmp_path):
     assert by_kind["long_call"]["losses"] == "1"
     assert by_kind["long_call"]["win_rate"] == "0.6667"
     assert by_kind["long_call"]["total_pnl"] == "250.0"
-    assert by_kind["long_call"]["avg_pnl"].startswith("83.33")
+    assert by_kind["long_call"]["avg_pnl"] == "83.33"
     assert by_kind["csp"]["trade_count"] == "1"
 
 
