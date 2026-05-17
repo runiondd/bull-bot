@@ -242,3 +242,77 @@ def _check_time_stop(
         kind="closed_time_stop",
         reason=f"nearest leg DTE {nearest_dte} <= time_stop_dte {position.time_stop_dte}",
     )
+
+
+from bullbot.v2.positions import OptionLeg
+
+CREDIT_PROFIT_TAKE_PCT = 0.50  # close when remaining premium <= 50% of max credit
+
+
+def _max_credit_received(legs: list[OptionLeg]) -> float:
+    """Per-position net credit in dollars (positive when net seller).
+    Returns 0.0 when the structure is net-debit (e.g., long premium)."""
+    total = 0.0
+    for leg in legs:
+        if leg.kind == "share":
+            continue
+        sign = 1.0 if leg.action == "sell" else -1.0
+        total += sign * leg.entry_price * leg.qty * 100
+    return max(0.0, total)
+
+
+def _is_credit_structure(legs: list[OptionLeg]) -> bool:
+    """True when the position was opened for net credit (CSP, IC,
+    bull-put credit spread, bear-call credit spread)."""
+    return _max_credit_received(legs) > 0
+
+
+def _current_credit_outstanding(
+    legs: list[OptionLeg], current_leg_prices: dict[int, float],
+) -> float:
+    """Dollar value of premium still outstanding (what we'd pay to close).
+    Mirrors _max_credit_received but uses current prices instead of entry."""
+    total = 0.0
+    for leg in legs:
+        if leg.kind == "share" or leg.id is None:
+            continue
+        cur = current_leg_prices.get(leg.id)
+        if cur is None:
+            continue
+        sign = 1.0 if leg.action == "sell" else -1.0
+        total += sign * cur * leg.qty * 100
+    return max(0.0, total)
+
+
+def _check_credit_profit_take(
+    conn: sqlite3.Connection, *, position: Position,
+    current_leg_prices: dict[int, float], now_ts: int,
+) -> ExitAction | None:
+    """Close credit trade-intent positions when remaining premium <= 50% of
+    max credit received. Grok review Tier 2 Finding 6: theta is front-loaded,
+    holding credit to zero is greedy + gamma-risky."""
+    if position.intent != "trade":
+        return None
+    if not _is_credit_structure(position.legs):
+        return None
+    max_credit = _max_credit_received(position.legs)
+    remaining = _current_credit_outstanding(position.legs, current_leg_prices)
+    if remaining > max_credit * CREDIT_PROFIT_TAKE_PCT:
+        return None
+    leg_exit_prices = {
+        leg.id: current_leg_prices.get(leg.id, 0.0) for leg in position.legs
+    }
+    positions.close_position(
+        conn,
+        position_id=position.id,
+        closed_ts=now_ts,
+        close_reason="credit_profit_take",
+        leg_exit_prices=leg_exit_prices,
+    )
+    return ExitAction(
+        kind="closed_credit_profit_take",
+        reason=(
+            f"remaining premium ${remaining:.2f} <= "
+            f"{CREDIT_PROFIT_TAKE_PCT:.0%} of max credit ${max_credit:.2f}"
+        ),
+    )

@@ -452,3 +452,134 @@ def test_check_time_stop_returns_none_for_shares_only_position(conn):
         conn, position=pos, today=date(2026, 5, 18), now_ts=1_700_001_000,
     )
     assert action is None
+
+
+def test_max_credit_received_for_csp_is_short_put_premium():
+    leg = positions.OptionLeg(
+        action="sell", kind="put", strike=100.0, expiry="2026-06-19",
+        qty=1, entry_price=2.00,
+    )
+    assert exits._max_credit_received([leg]) == pytest.approx(200.0)
+
+
+def test_max_credit_received_for_bull_put_credit_spread():
+    legs = [
+        positions.OptionLeg(
+            action="sell", kind="put", strike=100.0, expiry="2026-06-19",
+            qty=1, entry_price=2.00,
+        ),
+        positions.OptionLeg(
+            action="buy", kind="put", strike=95.0, expiry="2026-06-19",
+            qty=1, entry_price=0.50,
+        ),
+    ]
+    assert exits._max_credit_received(legs) == pytest.approx(150.0)
+
+
+def test_max_credit_received_for_long_call_is_zero():
+    leg = positions.OptionLeg(
+        action="buy", kind="call", strike=100.0, expiry="2026-06-19",
+        qty=1, entry_price=2.50,
+    )
+    assert exits._max_credit_received([leg]) == 0.0
+
+
+def test_is_credit_structure_true_for_csp_and_credit_spread():
+    csp_leg = positions.OptionLeg(
+        action="sell", kind="put", strike=100.0, expiry="2026-06-19",
+        qty=1, entry_price=2.00,
+    )
+    assert exits._is_credit_structure([csp_leg]) is True
+
+
+def test_is_credit_structure_false_for_long_premium():
+    leg = positions.OptionLeg(
+        action="buy", kind="call", strike=100.0, expiry="2026-06-19",
+        qty=1, entry_price=2.50,
+    )
+    assert exits._is_credit_structure([leg]) is False
+
+
+def test_check_credit_profit_take_fires_when_remaining_premium_under_half(conn):
+    csp_leg = positions.OptionLeg(
+        action="sell", kind="put", strike=100.0, expiry="2026-06-19",
+        qty=1, entry_price=2.00,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="csp",
+        legs=[csp_leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=21, assignment_acceptable=False,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+    current_leg_prices = {pos.legs[0].id: 0.80}
+    action = exits._check_credit_profit_take(
+        conn, position=pos, current_leg_prices=current_leg_prices,
+        now_ts=1_700_001_000,
+    )
+    assert action is not None
+    assert action.kind == "closed_credit_profit_take"
+
+
+def test_check_credit_profit_take_does_not_fire_when_above_threshold(conn):
+    csp_leg = positions.OptionLeg(
+        action="sell", kind="put", strike=100.0, expiry="2026-06-19",
+        qty=1, entry_price=2.00,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="csp",
+        legs=[csp_leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=21, assignment_acceptable=False,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+    current_leg_prices = {pos.legs[0].id: 1.50}
+    action = exits._check_credit_profit_take(
+        conn, position=pos, current_leg_prices=current_leg_prices,
+        now_ts=1_700_001_000,
+    )
+    assert action is None
+
+
+def test_check_credit_profit_take_does_not_fire_for_long_premium(conn):
+    leg = positions.OptionLeg(
+        action="buy", kind="call", strike=100.0, expiry="2026-06-19",
+        qty=1, entry_price=2.50,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="long_call",
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=21, assignment_acceptable=False,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+    current_leg_prices = {pos.legs[0].id: 0.50}
+    action = exits._check_credit_profit_take(
+        conn, position=pos, current_leg_prices=current_leg_prices,
+        now_ts=1_700_001_000,
+    )
+    assert action is None
+
+
+def test_check_credit_profit_take_only_applies_to_trade_intent(conn):
+    csp_leg = positions.OptionLeg(
+        action="sell", kind="put", strike=100.0, expiry="2026-06-19",
+        qty=1, entry_price=2.00,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="accumulate", structure_kind="csp",
+        legs=[csp_leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, assignment_acceptable=True,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+    current_leg_prices = {pos.legs[0].id: 0.50}
+    action = exits._check_credit_profit_take(
+        conn, position=pos, current_leg_prices=current_leg_prices,
+        now_ts=1_700_001_000,
+    )
+    assert action is None
