@@ -583,3 +583,51 @@ def test_check_credit_profit_take_only_applies_to_trade_intent(conn):
         now_ts=1_700_001_000,
     )
     assert action is None
+
+
+def test_post_assignment_plan_bullish_signal_keeps_accumulate_intent():
+    signal = _signal("bullish", confidence=0.7)
+    plan = exits.compute_post_assignment_exit_plan(
+        signal=signal, net_basis=98.0, atr_14=3.0,
+    )
+    assert plan.intent == "accumulate"
+    assert plan.profit_target_price is None
+    assert plan.stop_price == pytest.approx(98.0 - 2 * 3.0)  # 92.0
+    assert plan.time_stop_dte is None
+    assert plan.nearest_leg_expiry_dte is None
+
+
+def test_post_assignment_plan_bearish_signal_flips_to_trade():
+    signal = _signal("bearish", confidence=0.8)
+    plan = exits.compute_post_assignment_exit_plan(
+        signal=signal, net_basis=98.0, atr_14=3.0,
+    )
+    assert plan.intent == "trade"
+    assert plan.profit_target_price is None
+    assert plan.stop_price == pytest.approx(98.0 - 1 * 3.0)  # 95.0
+
+
+def test_post_assignment_plan_chop_signal_stays_accumulate_with_defensive_stop():
+    chop_signal = _signal("chop", confidence=0.9)
+    plan = exits.compute_post_assignment_exit_plan(
+        signal=chop_signal, net_basis=98.0, atr_14=3.0,
+    )
+    assert plan.intent == "accumulate"
+    assert plan.stop_price == pytest.approx(98.0 - 2 * 3.0)
+
+
+def test_post_assignment_plan_low_confidence_bearish_treated_as_chop():
+    weak_bearish = _signal("bearish", confidence=0.3)
+    plan = exits.compute_post_assignment_exit_plan(
+        signal=weak_bearish, net_basis=98.0, atr_14=3.0,
+    )
+    assert plan.intent == "accumulate"
+
+
+def test_post_assignment_plan_low_confidence_bullish_treated_as_chop():
+    weak_bullish = _signal("bullish", confidence=0.3)
+    plan = exits.compute_post_assignment_exit_plan(
+        signal=weak_bullish, net_basis=98.0, atr_14=3.0,
+    )
+    assert plan.intent == "accumulate"
+    assert plan.stop_price == pytest.approx(98.0 - 2 * 3.0)

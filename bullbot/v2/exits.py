@@ -316,3 +316,53 @@ def _check_credit_profit_take(
             f"{CREDIT_PROFIT_TAKE_PCT:.0%} of max credit ${max_credit:.2f}"
         ),
     )
+
+
+ASSIGNMENT_BULLISH_ATR_MULT = 2.0
+ASSIGNMENT_BEARISH_ATR_MULT = 1.0
+ASSIGNMENT_DEFENSIVE_ATR_MULT = 2.0
+
+
+@dataclass(frozen=True)
+class PostAssignmentPlan:
+    """Exit-plan kwargs for a newly-opened linked-shares position born from
+    CSP assignment. Field names match positions.assign_csp_to_shares kwargs."""
+    intent: str
+    profit_target_price: float | None
+    stop_price: float | None
+    time_stop_dte: int | None
+    nearest_leg_expiry_dte: int | None
+
+
+def compute_post_assignment_exit_plan(
+    *,
+    signal: DirectionalSignal,
+    net_basis: float,
+    atr_14: float,
+) -> PostAssignmentPlan:
+    """Derive exit plan for the newly-opened shares position from the current
+    Phase A signal at assignment time. Grok review Tier 2 Finding 8.
+
+    Logic:
+      - bullish + confidence >= 0.5 -> accumulate, soft stop -2 ATR
+      - bearish + confidence >= 0.5 -> trade, hard stop -1 ATR, no profit target
+      - chop / no_edge / low-confidence -> accumulate, defensive stop -2 ATR
+    """
+    is_confident = signal.confidence >= 0.5
+    if signal.direction == "bearish" and is_confident:
+        stop = net_basis - ASSIGNMENT_BEARISH_ATR_MULT * atr_14
+        return PostAssignmentPlan(
+            intent="trade", profit_target_price=None, stop_price=stop,
+            time_stop_dte=None, nearest_leg_expiry_dte=None,
+        )
+    if signal.direction == "bullish" and is_confident:
+        stop = net_basis - ASSIGNMENT_BULLISH_ATR_MULT * atr_14
+        return PostAssignmentPlan(
+            intent="accumulate", profit_target_price=None, stop_price=stop,
+            time_stop_dte=None, nearest_leg_expiry_dte=None,
+        )
+    stop = net_basis - ASSIGNMENT_DEFENSIVE_ATR_MULT * atr_14
+    return PostAssignmentPlan(
+        intent="accumulate", profit_target_price=None, stop_price=stop,
+        time_stop_dte=None, nearest_leg_expiry_dte=None,
+    )
