@@ -40,3 +40,32 @@ class ExitAction:
     def __post_init__(self) -> None:
         if self.kind not in ACTION_KINDS:
             raise ValueError(f"kind must be one of {ACTION_KINDS}; got {self.kind!r}")
+
+
+from bullbot.v2.positions import Position
+
+
+def _position_pnl_pct(*, position: Position, spot: float) -> float:
+    """Net-basis-aware unrealized P&L percent for a share-only position.
+
+    Returns 0.0 for option-only or multi-leg positions — those are handled
+    by the intent-specific exit paths, not by the safety-stop.
+
+    For long shares: (spot - basis) / basis.
+    For short shares: (basis - spot) / basis.
+
+    `basis` is `OptionLeg.effective_basis()` — net_basis when non-None
+    (assigned shares carry net_basis = strike - csp_credit/100), else
+    entry_price (Grok review Tier 1 Finding 1).
+    """
+    share_legs = [leg for leg in position.legs if leg.kind == "share"]
+    if not share_legs or len(position.legs) != 1:
+        return 0.0
+    leg = share_legs[0]
+    basis = leg.effective_basis()
+    if basis <= 0:
+        return 0.0
+    if leg.action == "buy":
+        return (spot - basis) / basis
+    # leg.action == "sell" (short shares)
+    return (basis - spot) / basis

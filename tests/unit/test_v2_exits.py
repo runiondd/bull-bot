@@ -47,3 +47,72 @@ def test_action_kinds_constant_includes_all_trade_and_accumulate_outcomes():
         "expired_worthless",
     }
     assert set(exits.ACTION_KINDS) == expected
+
+
+def _share_position(conn, qty=100, entry_price=100.0, net_basis=None,
+                    intent="trade", structure_kind="long_shares",
+                    profit_target_price=None, stop_price=None,
+                    time_stop_dte=None, nearest_leg_expiry_dte=None,
+                    rationale="", ticker="AAPL"):
+    leg = positions.OptionLeg(
+        action="buy", kind="share", strike=None, expiry=None,
+        qty=qty, entry_price=entry_price, net_basis=net_basis,
+    )
+    return positions.open_position(
+        conn,
+        ticker=ticker, intent=intent, structure_kind=structure_kind,
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=profit_target_price, stop_price=stop_price,
+        time_stop_dte=time_stop_dte,
+        assignment_acceptable=(intent == "accumulate"),
+        nearest_leg_expiry_dte=nearest_leg_expiry_dte,
+        rationale=rationale,
+    )
+
+
+def test_position_pnl_pct_uses_entry_price_when_net_basis_is_none(conn):
+    pos = _share_position(conn, qty=100, entry_price=100.0, net_basis=None)
+    pct = exits._position_pnl_pct(position=pos, spot=95.0)
+    assert pct == pytest.approx(-0.05)
+
+
+def test_position_pnl_pct_uses_net_basis_when_set(conn):
+    """Grok Tier 1 Finding 1: assigned shares carry net_basis (lower than
+    strike). P&L must compute against net_basis, not entry_price."""
+    pos = _share_position(conn, qty=100, entry_price=100.0, net_basis=98.0)
+    pct = exits._position_pnl_pct(position=pos, spot=92.0)
+    assert pct == pytest.approx((92.0 - 98.0) / 98.0)
+
+
+def test_position_pnl_pct_for_short_shares_inverts_sign(conn):
+    leg = positions.OptionLeg(
+        action="sell", kind="share", strike=None, expiry=None,
+        qty=100, entry_price=100.0,
+    )
+    short_pos = positions.open_position(
+        conn,
+        ticker="MSFT", intent="trade", structure_kind="short_shares",
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, assignment_acceptable=False,
+        nearest_leg_expiry_dte=None, rationale="",
+    )
+    pct = exits._position_pnl_pct(position=short_pos, spot=110.0)
+    assert pct == pytest.approx(-0.10)
+
+
+def test_position_pnl_pct_returns_zero_for_non_share_position(conn):
+    leg = positions.OptionLeg(
+        action="buy", kind="call", strike=100.0, expiry="2026-06-19",
+        qty=1, entry_price=2.50,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="trade", structure_kind="long_call",
+        legs=[leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, assignment_acceptable=False,
+        nearest_leg_expiry_dte=30, rationale="",
+    )
+    pct = exits._position_pnl_pct(position=pos, spot=95.0)
+    assert pct == 0.0
