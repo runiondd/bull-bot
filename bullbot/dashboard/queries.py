@@ -6,8 +6,10 @@ Zero external dependencies — stdlib only.
 
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 
@@ -833,3 +835,43 @@ def v2_positions(conn: sqlite3.Connection) -> list[dict]:
             ),
         })
     return out
+
+
+# ---------------------------------------------------------------------------
+# v2_backtest_latest
+# ---------------------------------------------------------------------------
+
+
+def v2_backtest_latest(reports_dir: Path) -> dict | None:
+    """Read the most-recently-modified backtest report from reports_dir.
+
+    Finds subdirs whose name starts with 'backtest_', picks the one with
+    the largest mtime, reads equity_curve.csv + vehicle_attribution.csv.
+    Returns None when no matching subdir exists. Missing CSV files within
+    a valid subdir yield empty lists for those keys.
+    """
+    if not reports_dir.exists() or not reports_dir.is_dir():
+        return None
+    candidates = [
+        d for d in reports_dir.iterdir()
+        if d.is_dir() and d.name.startswith("backtest_")
+    ]
+    if not candidates:
+        return None
+    latest = max(candidates, key=lambda d: d.stat().st_mtime)
+    equity: list[dict] = []
+    attr: list[dict] = []
+    eq_path = latest / "equity_curve.csv"
+    attr_path = latest / "vehicle_attribution.csv"
+    if eq_path.exists():
+        with eq_path.open() as f:
+            equity = list(csv.DictReader(f))
+    if attr_path.exists():
+        with attr_path.open() as f:
+            attr = list(csv.DictReader(f))
+    return {
+        "dir_name": latest.name,
+        "modified_ts": int(latest.stat().st_mtime),
+        "equity_curve": equity,
+        "attribution": attr,
+    }

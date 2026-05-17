@@ -89,3 +89,46 @@ def test_v2_positions_handles_missing_mtm_gracefully(conn):
     rows = queries.v2_positions(conn)
     assert rows[0]["latest_mtm_value"] is None
     assert rows[0]["latest_mtm_source"] is None
+
+
+def test_v2_backtest_latest_returns_none_when_no_reports(tmp_path):
+    assert queries.v2_backtest_latest(tmp_path) is None
+
+
+def test_v2_backtest_latest_returns_none_when_only_non_backtest_subdirs(tmp_path):
+    (tmp_path / "other_dir").mkdir()
+    (tmp_path / "research_health_123").mkdir()
+    assert queries.v2_backtest_latest(tmp_path) is None
+
+
+def test_v2_backtest_latest_returns_most_recent_report(tmp_path):
+    older = tmp_path / "backtest_AAPL_2024_old"
+    newer = tmp_path / "backtest_AAPL_2024_new"
+    older.mkdir()
+    newer.mkdir()
+    for d in (older, newer):
+        (d / "equity_curve.csv").write_text("asof_ts,asof_date,nav\n1700000000,2023-11-14,50000.0\n")
+        (d / "vehicle_attribution.csv").write_text(
+            "structure_kind,trade_count,wins,losses,win_rate,total_pnl,avg_pnl\n"
+            "long_call,3,2,1,0.6667,250.0,83.33\n"
+        )
+    import os
+    os.utime(older, (1_700_000_000, 1_700_000_000))
+    os.utime(newer, (1_700_100_000, 1_700_100_000))
+    result = queries.v2_backtest_latest(tmp_path)
+    assert result is not None
+    assert result["dir_name"] == "backtest_AAPL_2024_new"
+    assert len(result["equity_curve"]) == 1
+    assert result["equity_curve"][0]["nav"] == "50000.0"
+    assert len(result["attribution"]) == 1
+    assert result["attribution"][0]["structure_kind"] == "long_call"
+
+
+def test_v2_backtest_latest_handles_missing_csv_files(tmp_path):
+    """Subdir exists but is empty / missing CSVs → returns dict with empty lists."""
+    d = tmp_path / "backtest_AAPL_2024"
+    d.mkdir()
+    result = queries.v2_backtest_latest(tmp_path)
+    assert result is not None
+    assert result["equity_curve"] == []
+    assert result["attribution"] == []
