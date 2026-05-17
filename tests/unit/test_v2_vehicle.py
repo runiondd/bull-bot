@@ -528,3 +528,73 @@ def test_sanity_bear_put_spread_rejects_inverted_strikes():
         today=date(2026, 5, 17),
     )
     assert result.ok is False
+
+
+# ---------------------------------------------------------------------------
+# Tasks 6+7 reviewer findings — I-1 (None handling) + I-2 (qty_ratio gap)
+# ---------------------------------------------------------------------------
+
+def test_sanity_helpers_reject_none_strike_without_raising():
+    """Pre-existing _check_moneyness used to TypeError on None strike."""
+    legs = [_spec("buy", "call", None, "2026-06-19")]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="long_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+    assert "strike" in result.reason.lower()
+
+
+def test_sanity_helpers_reject_none_expiry_without_raising():
+    legs = [_spec("buy", "call", 100.0, None)]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="long_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+    assert "expiry" in result.reason.lower()
+
+
+def test_sanity_helpers_reject_malformed_expiry_string():
+    legs = [_spec("buy", "call", 100.0, "next-friday")]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="long_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+    assert "iso" in result.reason.lower() or "expiry" in result.reason.lower()
+
+
+def test_sanity_helpers_reject_invalid_spot():
+    legs = [_spec("buy", "call", 100.0, "2026-06-19")]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=0.0, structure_kind="long_call",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+
+
+def test_sanity_bull_call_spread_rejects_non_1_to_1_qty_ratio():
+    """Plan says verticals must be 1:1 qty_ratio."""
+    legs = [
+        _spec("buy", "call", 100.0, "2026-06-19", qty_ratio=2),
+        _spec("sell", "call", 105.0, "2026-06-19", qty_ratio=1),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="bull_call_spread",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False
+    assert "1:1" in result.reason or "qty_ratio" in result.reason
+
+
+def test_sanity_bear_put_spread_rejects_non_1_to_1_qty_ratio():
+    legs = [
+        _spec("buy", "put", 100.0, "2026-06-19", qty_ratio=2),
+        _spec("sell", "put", 95.0, "2026-06-19", qty_ratio=1),
+    ]
+    result = vehicle.validate_structure_sanity(
+        legs=legs, spot=100.0, structure_kind="bear_put_spread",
+        today=date(2026, 5, 17),
+    )
+    assert result.ok is False

@@ -306,13 +306,22 @@ MAX_STRIKE_DEVIATION_PCT = 0.25
 
 
 def _check_expiry_min_dte(expiry: str, today: _date) -> SanityResult | None:
-    exp = _date.fromisoformat(expiry)
+    if expiry is None:
+        return SanityResult(ok=False, reason="expiry is required")
+    try:
+        exp = _date.fromisoformat(expiry)
+    except (TypeError, ValueError):
+        return SanityResult(ok=False, reason=f"expiry {expiry!r} not ISO YYYY-MM-DD")
     if (exp - today).days < MIN_DTE:
         return SanityResult(ok=False, reason=f"expiry {expiry} too soon (< {MIN_DTE} DTE)")
     return None
 
 
 def _check_moneyness(strike: float, spot: float) -> SanityResult | None:
+    if strike is None:
+        return SanityResult(ok=False, reason="strike is required")
+    if spot <= 0:
+        return SanityResult(ok=False, reason=f"invalid spot {spot}")
     if abs(strike - spot) / spot > MAX_STRIKE_DEVIATION_PCT:
         return SanityResult(
             ok=False,
@@ -373,6 +382,8 @@ def validate_structure_sanity(
     if structure_kind == "bull_call_spread":
         if len(legs) != 2:
             return SanityResult(ok=False, reason="bull_call_spread requires 2 legs")
+        if any(leg.qty_ratio != 1 for leg in legs):
+            return SanityResult(ok=False, reason="bull_call_spread requires qty_ratio 1:1")
         if any(leg.kind != "call" for leg in legs):
             return SanityResult(ok=False, reason="bull_call_spread requires both legs to be calls")
         if {leg.action for leg in legs} != {"buy", "sell"}:
@@ -396,6 +407,8 @@ def validate_structure_sanity(
     if structure_kind == "bear_put_spread":
         if len(legs) != 2:
             return SanityResult(ok=False, reason="bear_put_spread requires 2 legs")
+        if any(leg.qty_ratio != 1 for leg in legs):
+            return SanityResult(ok=False, reason="bear_put_spread requires qty_ratio 1:1")
         if any(leg.kind != "put" for leg in legs):
             return SanityResult(ok=False, reason="bear_put_spread requires both legs to be puts")
         if {leg.action for leg in legs} != {"buy", "sell"}:
