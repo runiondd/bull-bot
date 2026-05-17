@@ -39,3 +39,39 @@ def _cache_put(conn: sqlite3.Connection, *, key: str, response: str) -> None:
         (key, response),
     )
     conn.commit()
+
+
+from dataclasses import dataclass
+from datetime import date as _date
+
+INTENTS = ("trade", "accumulate")
+
+
+@dataclass(frozen=True)
+class BacktestTrade:
+    ticker: str
+    structure_kind: str
+    intent: str
+    opened_ts: int
+    closed_ts: int
+    close_reason: str
+    realized_pnl: float
+    rationale: str
+
+    def __post_init__(self) -> None:
+        if self.intent not in INTENTS:
+            raise ValueError(f"intent must be one of {INTENTS}; got {self.intent!r}")
+
+
+@dataclass
+class BacktestResult:
+    ticker: str
+    start_date: _date
+    end_date: _date
+    starting_nav: float
+    ending_nav: float
+    trades: list[BacktestTrade]
+    daily_mtm: list[tuple[int, float]]  # (asof_ts, nav)
+
+    def total_realized_pnl(self) -> float:
+        return sum(t.realized_pnl for t in self.trades)

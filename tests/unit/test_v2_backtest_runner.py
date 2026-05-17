@@ -76,3 +76,53 @@ def test_cache_put_is_idempotent_on_collision(conn):
     runner._cache_put(conn, key=key, response="first")
     runner._cache_put(conn, key=key, response="second")
     assert runner._cache_get(conn, key=key) == "second"
+
+
+from datetime import date
+
+
+def test_backtest_trade_rejects_unknown_intent():
+    with pytest.raises(ValueError, match="intent must be one of"):
+        runner.BacktestTrade(
+            ticker="AAPL", structure_kind="long_call", intent="speculate",
+            opened_ts=1_700_000_000, closed_ts=1_700_100_000,
+            close_reason="profit_target", realized_pnl=50.0, rationale="",
+        )
+
+
+def test_backtest_trade_realized_pnl_can_be_negative():
+    trade = runner.BacktestTrade(
+        ticker="AAPL", structure_kind="long_call", intent="trade",
+        opened_ts=1_700_000_000, closed_ts=1_700_100_000,
+        close_reason="stop", realized_pnl=-150.0, rationale="",
+    )
+    assert trade.realized_pnl == -150.0
+
+
+def test_backtest_result_total_realized_pnl_sums_trades():
+    result = runner.BacktestResult(
+        ticker="AAPL", start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+        starting_nav=50_000.0, ending_nav=52_000.0,
+        trades=[
+            runner.BacktestTrade(
+                ticker="AAPL", structure_kind="long_call", intent="trade",
+                opened_ts=1, closed_ts=2, close_reason="profit_target",
+                realized_pnl=300.0, rationale="",
+            ),
+            runner.BacktestTrade(
+                ticker="AAPL", structure_kind="csp", intent="accumulate",
+                opened_ts=3, closed_ts=4, close_reason="expired_worthless",
+                realized_pnl=200.0, rationale="",
+            ),
+        ],
+        daily_mtm=[],
+    )
+    assert result.total_realized_pnl() == 500.0
+
+
+def test_backtest_result_total_realized_pnl_returns_zero_for_no_trades():
+    result = runner.BacktestResult(
+        ticker="AAPL", start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+        starting_nav=50_000.0, ending_nav=50_000.0, trades=[], daily_mtm=[],
+    )
+    assert result.total_realized_pnl() == 0.0
