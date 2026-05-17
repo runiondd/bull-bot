@@ -17,6 +17,9 @@ import sqlite3
 from dataclasses import dataclass, field
 from statistics import median
 
+from bullbot.v2.positions import Position
+from bullbot.v2.signals import DirectionalSignal
+
 DECISIONS = ("open", "pass")
 INTENTS = ("trade", "accumulate")
 
@@ -206,8 +209,94 @@ def _near_atm_liquidity(
     }
 
 
-from bullbot.v2.positions import Position
-from bullbot.v2.signals import DirectionalSignal
+def _atr_14(bars: list) -> float:
+    """Average True Range over the trailing 14 bars. Returns 0.0 when <15 bars."""
+    if len(bars) < ATR_WINDOW + 1:
+        return 0.0
+    recent = bars[-(ATR_WINDOW + 1):]
+    trs: list[float] = []
+    for i, b in enumerate(recent):
+        if i == 0:
+            continue
+        prev_close = recent[i - 1].close
+        trs.append(max(
+            b.high - b.low,
+            abs(b.high - prev_close),
+            abs(b.low - prev_close),
+        ))
+    return sum(trs) / ATR_WINDOW
+
+
+def _rsi_14(bars: list) -> float:
+    """Relative Strength Index (14-period, simple moving average of gains/losses).
+    Returns 50.0 (neutral) when fewer than 15 bars exist."""
+    if len(bars) < 15:
+        return 50.0
+    closes = [b.close for b in bars[-15:]]
+    gains = []
+    losses = []
+    for i in range(1, len(closes)):
+        delta = closes[i] - closes[i - 1]
+        if delta > 0:
+            gains.append(delta)
+            losses.append(0.0)
+        else:
+            gains.append(0.0)
+            losses.append(-delta)
+    avg_gain = sum(gains) / 14
+    avg_loss = sum(losses) / 14
+    if avg_loss == 0:
+        return 100.0 if avg_gain > 0 else 50.0
+    rs = avg_gain / avg_loss
+    return 100.0 - (100.0 / (1.0 + rs))
+
+
+def _dist_from_20sma_pct(bars: list, *, spot: float) -> float:
+    """(spot - SMA_20) / SMA_20. Returns 0.0 when fewer than 20 bars exist
+    or when SMA_20 is non-positive."""
+    if len(bars) < 20:
+        return 0.0
+    sma_20 = sum(b.close for b in bars[-20:]) / 20
+    if sma_20 <= 0:
+        return 0.0
+    return (spot - sma_20) / sma_20
+
+
+LEVELS_BAND_PCT = 0.05
+
+
+def _structure_levels_for_llm(levels: list, *, spot: float) -> dict:
+    """Restructure flat list of Level objects into the design-spec shape:
+    {nearest_resistance, nearest_support, all_levels_within_5pct}.
+
+    nearest_resistance = level with smallest (price - spot) where price > spot.
+    nearest_support    = level with smallest (spot - price) where price < spot.
+    all_levels_within_5pct = filtered list of dicts (price/kind/strength).
+
+    Any of the three can be None / [] when there's no qualifying level.
+    """
+    above = [lvl for lvl in levels if lvl.price > spot]
+    below = [lvl for lvl in levels if lvl.price < spot]
+    nearest_resistance = min(above, key=lambda l: l.price - spot) if above else None
+    nearest_support = max(below, key=lambda l: l.price) if below else None
+    in_band = [
+        {"price": lvl.price, "kind": lvl.kind, "strength": lvl.strength}
+        for lvl in levels
+        if abs(lvl.price - spot) / spot <= LEVELS_BAND_PCT
+    ]
+    return {
+        "nearest_resistance": (
+            {"price": nearest_resistance.price, "kind": nearest_resistance.kind,
+             "strength": nearest_resistance.strength}
+            if nearest_resistance else None
+        ),
+        "nearest_support": (
+            {"price": nearest_support.price, "kind": nearest_support.kind,
+             "strength": nearest_support.strength}
+            if nearest_support else None
+        ),
+        "all_levels_within_5pct": in_band,
+    }
 
 
 def build_llm_context(
@@ -223,21 +312,24 @@ def build_llm_context(
     iv_rank: float,
     budget_per_trade_usd: float,
     asof_ts: int,
-    nav: float,
     per_ticker_concentration_pct: float,
     open_positions_count: int,
     current_position: Position | None = None,
 ) -> dict:
     """Assemble the rich JSON input the LLM sees on a flat-ticker pick call.
-    Pure composition — no I/O beyond reading v2_chain_snapshots via
-    _near_atm_liquidity (caller already pre-fetched bars, levels, iv_rank,
-    days_to_earnings, earnings_window_active)."""
+    Composes from caller-supplied bars / levels / scalars. Issues one SQL
+    read via `_near_atm_liquidity`; otherwise no I/O. Computes ATR-14,
+    RSI-14, and distance-from-20SMA inline from bars so the LLM gets the
+    full design-spec indicator set."""
     current_pos_repr = None
     if current_position is not None:
         current_pos_repr = {
             "structure_kind": current_position.structure_kind,
             "intent": current_position.intent,
             "days_held": (asof_ts - current_position.opened_ts) // 86400,
+            "nearest_leg_expiry_dte": current_position.nearest_leg_expiry_dte,
+            "profit_target_price": current_position.profit_target_price,
+            "stop_price": current_position.stop_price,
         }
     return {
         "ticker": ticker,
@@ -249,10 +341,10 @@ def build_llm_context(
         },
         "iv_rank": iv_rank,
         "iv_percentile": iv_rank,  # placeholder: separate calc may diverge later
-        "levels": [
-            {"price": lvl.price, "kind": lvl.kind, "strength": lvl.strength}
-            for lvl in levels
-        ],
+        "atr_14": _atr_14(bars),
+        "rsi_14": _rsi_14(bars),
+        "dist_from_20sma_pct": _dist_from_20sma_pct(bars, spot=spot),
+        "levels": _structure_levels_for_llm(levels, spot=spot),
         "days_to_earnings": days_to_earnings,
         "earnings_window_active": earnings_window_active,
         "large_move_count_90d": _large_move_count_90d(bars),

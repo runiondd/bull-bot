@@ -274,19 +274,29 @@ def _sample_signal():
     )
 
 
+def _sample_level(price, kind="swing_high", strength=0.5):
+    """Build a Level-shaped namespace for tests. Avoids depending on
+    bullbot.v2.levels.Level construction details."""
+    return SimpleNamespace(price=price, kind=kind, strength=strength)
+
+
 def test_build_llm_context_assembles_full_input_json(conn):
     bars = [_bar(close=185.0 + (i * 0.05)) for i in range(60)]
     signal = _sample_signal()
+    levels = [
+        _sample_level(price=190.0, kind="swing_high", strength=0.8),  # resistance
+        _sample_level(price=180.0, kind="sma_50", strength=0.6),       # support
+    ]
     ctx = vehicle.build_llm_context(
         conn,
         ticker="AAPL", spot=185.42, signal=signal,
-        bars=bars, levels=[], days_to_earnings=23,
+        bars=bars, levels=levels, days_to_earnings=23,
         earnings_window_active=False, iv_rank=0.34,
         budget_per_trade_usd=1500.0, asof_ts=1_700_000_000,
-        nav=50_000.0,
         per_ticker_concentration_pct=0.0,
         open_positions_count=7,
     )
+    # Scalar fields
     assert ctx["ticker"] == "AAPL"
     assert ctx["spot"] == 185.42
     assert ctx["signal"]["direction"] == "bullish"
@@ -298,9 +308,19 @@ def test_build_llm_context_assembles_full_input_json(conn):
     assert ctx["current_position"] is None
     assert ctx["portfolio_state"]["open_positions"] == 7
     assert ctx["portfolio_state"]["ticker_concentration_pct"] == 0.0
-    # large_move + liquidity stats included (computed inline)
+    # Indicator fields computed from bars
+    assert "atr_14" in ctx
+    assert ctx["atr_14"] >= 0.0
+    assert "rsi_14" in ctx
+    assert 0.0 <= ctx["rsi_14"] <= 100.0
+    assert "dist_from_20sma_pct" in ctx
+    # Composite fields
     assert "large_move_count_90d" in ctx
     assert "near_atm_liquidity" in ctx
+    # Restructured levels
+    assert ctx["levels"]["nearest_resistance"]["price"] == 190.0
+    assert ctx["levels"]["nearest_support"]["price"] == 180.0
+    assert "all_levels_within_5pct" in ctx["levels"]
 
 
 def test_build_llm_context_includes_current_position_when_held(conn):
@@ -323,7 +343,6 @@ def test_build_llm_context_includes_current_position_when_held(conn):
         bars=bars, levels=[], days_to_earnings=23,
         earnings_window_active=False, iv_rank=0.34,
         budget_per_trade_usd=1500.0, asof_ts=1_700_000_000,
-        nav=50_000.0,
         per_ticker_concentration_pct=0.02,
         open_positions_count=8,
         current_position=pos,
@@ -331,3 +350,6 @@ def test_build_llm_context_includes_current_position_when_held(conn):
     assert ctx["current_position"] is not None
     assert ctx["current_position"]["structure_kind"] == "long_call"
     assert ctx["current_position"]["intent"] == "trade"
+    assert ctx["current_position"]["nearest_leg_expiry_dte"] == 30
+    assert ctx["current_position"]["profit_target_price"] == 200.0
+    assert ctx["current_position"]["stop_price"] == 180.0
