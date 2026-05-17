@@ -168,3 +168,66 @@ def test_days_to_print_returns_sentinel_when_yfinance_fails():
         client=raising_client,
     )
     assert n == earnings.DAYS_TO_PRINT_NONE_SENTINEL
+
+
+def test_earnings_window_active_true_when_within_14_days():
+    df = _earnings_df("2026-05-25")  # 8 days away from 2026-05-17
+    fake = _FakeYFTicker(df)
+    assert earnings.earnings_window_active(
+        ticker="AAPL", today=date(2026, 5, 17), iv_rank=0.30,
+        client=lambda symbol: fake,
+    ) is True
+
+
+def test_earnings_window_active_false_when_outside_14_days_and_low_iv():
+    df = _earnings_df("2026-06-15")  # 29 days away
+    fake = _FakeYFTicker(df)
+    assert earnings.earnings_window_active(
+        ticker="AAPL", today=date(2026, 5, 17), iv_rank=0.30,
+        client=lambda symbol: fake,
+    ) is False
+
+
+def test_earnings_window_active_true_when_iv_rank_above_75pct():
+    """Grok Tier 2 Finding 7: high IV alone should trigger the window even
+    if earnings are far out (catches non-earnings vol spikes)."""
+    df = _earnings_df("2026-09-01")  # 107 days away
+    fake = _FakeYFTicker(df)
+    assert earnings.earnings_window_active(
+        ticker="AAPL", today=date(2026, 5, 17), iv_rank=0.80,
+        client=lambda symbol: fake,
+    ) is True
+
+
+def test_earnings_window_active_false_when_iv_rank_at_75pct_threshold():
+    """Trigger is STRICTLY > 0.75, not >=. iv_rank=0.75 exactly is not active."""
+    df = _earnings_df("2026-09-01")
+    fake = _FakeYFTicker(df)
+    assert earnings.earnings_window_active(
+        ticker="AAPL", today=date(2026, 5, 17), iv_rank=0.75,
+        client=lambda symbol: fake,
+    ) is False
+
+
+def test_earnings_window_active_true_at_14_day_boundary_inclusive():
+    """Days <= 14 is inclusive — earnings exactly 14 days out is in the window."""
+    df = _earnings_df("2026-05-31")  # exactly 14 days from 2026-05-17
+    fake = _FakeYFTicker(df)
+    assert earnings.earnings_window_active(
+        ticker="AAPL", today=date(2026, 5, 17), iv_rank=0.30,
+        client=lambda symbol: fake,
+    ) is True
+
+
+def test_earnings_window_active_when_no_earnings_found_falls_back_to_iv_rank_only():
+    """No upcoming earnings (sentinel returned) means the days check is
+    effectively False. Then the iv_rank trigger decides."""
+    fake = _FakeYFTicker(None)  # ETF / no earnings
+    assert earnings.earnings_window_active(
+        ticker="SPY", today=date(2026, 5, 17), iv_rank=0.20,
+        client=lambda symbol: fake,
+    ) is False
+    assert earnings.earnings_window_active(
+        ticker="SPY", today=date(2026, 5, 17), iv_rank=0.90,
+        client=lambda symbol: fake,
+    ) is True

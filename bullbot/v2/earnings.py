@@ -108,3 +108,26 @@ def days_to_print(
     if ev is None:
         return DAYS_TO_PRINT_NONE_SENTINEL
     return ev.days_until(today=today)
+
+
+EARNINGS_WINDOW_DAYS = 14
+HIGH_IV_RANK_THRESHOLD = 0.75
+
+
+def earnings_window_active(
+    *,
+    ticker: str,
+    today: date,
+    iv_rank: float,
+    client: Callable[[str], object] | None = None,
+) -> bool:
+    """True when the ticker is in its earnings / high-IV window:
+        days_to_earnings <= EARNINGS_WINDOW_DAYS (14)
+        OR iv_rank > HIGH_IV_RANK_THRESHOLD (0.75)
+
+    Grok review Tier 2 Finding 7 — the IV-rank branch catches non-earnings
+    vol spikes where long-premium has poor expectancy regardless of an
+    upcoming print.
+    """
+    days = days_to_print(ticker=ticker, today=today, client=client)
+    return days <= EARNINGS_WINDOW_DAYS or iv_rank > HIGH_IV_RANK_THRESHOLD
