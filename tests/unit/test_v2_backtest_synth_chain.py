@@ -129,3 +129,48 @@ def test_synth_iv_clamps_to_iv_proxy_max():
     underlying[-1] = _bar(close=130.0, high=132.0, low=125.0)  # event today too
     synth = synth_chain._synth_iv(underlying_bars=underlying, vix_bars=vix_bars)
     assert synth == chains.IV_PROXY_MAX  # 3.0
+
+
+def test_strikes_in_band_keeps_within_10pct_of_spot():
+    spot = 100.0
+    strikes = [85.0, 90.0, 95.0, 100.0, 105.0, 110.0, 115.0]
+    out = synth_chain._strikes_in_band(strikes=strikes, spot=spot)
+    # ±10% = [90, 110] inclusive
+    assert out == [90.0, 95.0, 100.0, 105.0, 110.0]
+
+
+def test_strikes_in_band_rejects_zero_or_negative_spot():
+    assert synth_chain._strikes_in_band(strikes=[100.0], spot=0.0) == []
+    assert synth_chain._strikes_in_band(strikes=[100.0], spot=-1.0) == []
+
+
+def test_strikes_in_band_returns_empty_when_input_empty():
+    assert synth_chain._strikes_in_band(strikes=[], spot=100.0) == []
+
+
+def test_dtes_in_band_keeps_21_to_365():
+    today = date(2026, 5, 17)
+    expiries = [
+        "2026-05-25",  # 8 DTE — too short
+        "2026-06-19",  # 33 DTE — in band
+        "2026-09-19",  # 125 DTE — in band
+        "2027-05-21",  # 369 DTE — too long
+    ]
+    out = synth_chain._dtes_in_band(expiries=expiries, today=today)
+    assert out == ["2026-06-19", "2026-09-19"]
+
+
+def test_dtes_in_band_includes_boundary_values_inclusive():
+    today = date(2026, 5, 17)
+    # 21 DTE = today + 21 days = 2026-06-07
+    # 365 DTE = today + 365 days = 2027-05-17
+    expiries = ["2026-06-07", "2027-05-17"]
+    out = synth_chain._dtes_in_band(expiries=expiries, today=today)
+    assert out == ["2026-06-07", "2027-05-17"]
+
+
+def test_dtes_in_band_handles_malformed_expiry_gracefully():
+    today = date(2026, 5, 17)
+    expiries = ["2026-06-19", "not-a-date", "2026-09-19"]
+    out = synth_chain._dtes_in_band(expiries=expiries, today=today)
+    assert out == ["2026-06-19", "2026-09-19"]

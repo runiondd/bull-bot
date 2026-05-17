@@ -87,3 +87,35 @@ def _synth_iv(*, underlying_bars: list, vix_bars: list) -> float:
     baseline = _iv_proxy(underlying_bars=underlying_bars, vix_bars=vix_bars)
     multiplier = _event_day_iv_multiplier(bars=underlying_bars)
     return max(IV_PROXY_MIN, min(IV_PROXY_MAX, baseline * multiplier))
+
+
+from datetime import date as _date
+
+BACKTEST_STRIKE_BAND_PCT = 0.10
+BACKTEST_MIN_DTE = 21
+BACKTEST_MAX_DTE = 365
+
+
+def _strikes_in_band(*, strikes: list[float], spot: float) -> list[float]:
+    """Keep strikes within BACKTEST_STRIKE_BAND_PCT (10%) of spot.
+    Returns empty list for non-positive spot."""
+    if spot <= 0:
+        return []
+    lo = spot * (1 - BACKTEST_STRIKE_BAND_PCT)
+    hi = spot * (1 + BACKTEST_STRIKE_BAND_PCT)
+    return [s for s in strikes if lo <= s <= hi]
+
+
+def _dtes_in_band(*, expiries: list[str], today: _date) -> list[str]:
+    """Keep expiries whose DTE from today is in [21, 365]. Malformed
+    expiry strings are silently dropped (synth chain skips them)."""
+    out: list[str] = []
+    for expiry in expiries:
+        try:
+            exp = _date.fromisoformat(expiry)
+        except (TypeError, ValueError):
+            continue
+        dte = (exp - today).days
+        if BACKTEST_MIN_DTE <= dte <= BACKTEST_MAX_DTE:
+            out.append(expiry)
+    return out
