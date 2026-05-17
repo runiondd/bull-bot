@@ -24,7 +24,7 @@ from typing import Callable
 
 from bullbot.v2 import exits, positions, vehicle
 from bullbot.v2.backtest import synth_chain
-from bullbot.v2.signals import DirectionalSignal
+from bullbot.v2.vehicle import INTENTS
 
 _log = logging.getLogger(__name__)
 
@@ -53,9 +53,6 @@ def _cache_put(conn: sqlite3.Connection, *, key: str, response: str) -> None:
         (key, response),
     )
     conn.commit()
-
-
-INTENTS = ("trade", "accumulate")
 
 
 @dataclass(frozen=True)
@@ -124,13 +121,15 @@ def _atr_14_simple(bars: list) -> float:
     return sum(trs) / 14
 
 
-def _compute_position_mtm(*, position, current_chain) -> float:
+def _compute_position_mtm(*, position, current_chain, spot: float) -> float:
     """Sum per-leg mid prices × qty for a position using the current chain.
-    Share legs use entry_price as a placeholder; caller refines if needed."""
+    Share legs marked to current spot with action-sign applied (long buys = +1,
+    short sells = -1)."""
     total = 0.0
     for leg in position.legs:
         if leg.kind == "share":
-            total += leg.entry_price * leg.qty  # placeholder: caller refines
+            sign = 1.0 if leg.action == "buy" else -1.0
+            total += sign * spot * leg.qty
             continue
         quote = current_chain.find_quote(expiry=leg.expiry, strike=leg.strike, kind=leg.kind)
         if quote is None or quote.mid_price() is None:
@@ -197,7 +196,7 @@ def _replay_one_day(
             # Materialize a BacktestTrade from the closed position
             closed = positions.load_position(conn, open_pos.id)
             realized = sum(
-                ((leg.exit_price or 0) - leg.entry_price) * leg.qty *
+                ((leg.exit_price or 0) - leg.effective_basis()) * leg.qty *
                 (100 if leg.kind != "share" else 1) *
                 (1 if leg.action == "buy" else -1)
                 for leg in closed.legs
@@ -213,6 +212,8 @@ def _replay_one_day(
     # 2. Vehicle pick on flat tickers
     if positions.open_for_ticker(conn, ticker) is None:
         # Build prompt once, check cache, only call LLM on miss
+        # Backtest doesn't have a historical earnings table; hard-coded gap per
+        # Phase C.4b plan. Re-wire when earnings calendar lands.
         ctx = vehicle.build_llm_context(
             conn, ticker=ticker, spot=spot, signal=signal,
             bars=underlying_bars, levels=[],
@@ -268,6 +269,8 @@ def _replay_one_day(
                         ticker, spec.kind, spec.strike, spec.expiry,
                     )
                     entry_prices[idx] = 0.0
+            # Phase C invariant: at most one position per ticker, so the open-position's
+            # concentration is fully captured by the validator's qty sizing.
             validation = vehicle.validate(
                 decision=decision, spot=spot, today=today,
                 nav=starting_nav_today, per_trade_pct=0.02, per_ticker_pct=0.15,
@@ -299,7 +302,7 @@ def _replay_one_day(
     mtm_total = 0.0
     open_now = positions.open_for_ticker(conn, ticker)
     if open_now is not None:
-        mtm_total = _compute_position_mtm(position=open_now, current_chain=chain)
+        mtm_total = _compute_position_mtm(position=open_now, current_chain=chain, spot=spot)
 
     return {
         "action_taken": action_taken,
