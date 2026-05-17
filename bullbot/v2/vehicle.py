@@ -531,6 +531,128 @@ def validate_structure_sanity(
     return SanityResult(ok=False, reason=f"sanity for {structure_kind} not yet implemented")
 
 
+from bullbot.v2 import risk
+from bullbot.v2.positions import OptionLeg
+
+EARNINGS_WHITELIST = {
+    "bull_call_spread", "bear_put_spread", "iron_condor",
+    "butterfly", "csp", "covered_call",
+}
+ACCUMULATE_WHITELIST = {"csp", "long_shares", "covered_call"}
+
+
+def _spec_to_leg(spec: LegSpec, *, qty: int, entry_price: float) -> OptionLeg:
+    """Materialize a LegSpec (LLM output) into an OptionLeg (DB-bound) with
+    the actual qty (= spec.qty_ratio × unit_count) and a known entry_price."""
+    return OptionLeg(
+        action=spec.action, kind=spec.kind,
+        strike=spec.strike, expiry=spec.expiry,
+        qty=qty, entry_price=entry_price,
+    )
+
+
+def _compute_qty_from_ratios(
+    *, legs: list[LegSpec], entry_prices: dict[int, float],
+    spot: float, nav: float, per_trade_pct: float,
+) -> int:
+    """Compute the unit-count multiplier such that the total max-loss of the
+    structure (legs scaled by qty_ratio × unit_count) fits the per-trade cap.
+
+    Returns 0 if even a single-unit structure exceeds the cap.
+    """
+    import math
+    unit_legs = []
+    for idx, spec in enumerate(legs):
+        ep = entry_prices.get(idx, 0.0)
+        unit_legs.append(_spec_to_leg(spec, qty=spec.qty_ratio, entry_price=ep))
+    unit_loss = risk.compute_max_loss(unit_legs, spot=spot)
+    if math.isinf(unit_loss) or unit_loss <= 0:
+        return 0
+    cap_dollars = nav * per_trade_pct
+    return int(cap_dollars // unit_loss)
+
+
+def validate(
+    *,
+    decision: VehicleDecision,
+    spot: float,
+    today: _date,
+    nav: float,
+    per_trade_pct: float,
+    per_ticker_pct: float,
+    max_open_positions: int,
+    current_ticker_concentration_dollars: float,
+    current_open_positions: int,
+    earnings_window_active: bool,
+    entry_prices: dict[int, float],
+) -> ValidationResult:
+    """Full validation pipeline. Per design §4.6:
+      1. structure sanity
+      2. earnings/IV window (vehicle whitelist)
+      3. intent <-> structure match
+      4. qty sizing via per-trade cap
+      5. ticker concentration cap
+      6. max open positions cap
+
+    Returns ValidationResult(ok=True, sized_legs=[...]) on success;
+    ValidationResult(ok=False, reason="...") on first failure.
+    """
+    # 1. structure sanity
+    sanity = validate_structure_sanity(
+        legs=decision.legs, spot=spot,
+        structure_kind=decision.structure, today=today,
+    )
+    if not sanity.ok:
+        return ValidationResult(ok=False, reason=f"sanity: {sanity.reason}")
+
+    # 2. earnings / IV window
+    if earnings_window_active and decision.structure not in EARNINGS_WHITELIST:
+        return ValidationResult(
+            ok=False,
+            reason=f"earnings_window_active + structure '{decision.structure}' not in whitelist",
+        )
+
+    # 3. intent <-> structure match
+    if decision.intent == "accumulate" and decision.structure not in ACCUMULATE_WHITELIST:
+        return ValidationResult(
+            ok=False,
+            reason=f"intent=accumulate + structure '{decision.structure}' mismatch",
+        )
+
+    # 4. qty sizing via risk caps
+    unit_count = _compute_qty_from_ratios(
+        legs=decision.legs, entry_prices=entry_prices,
+        spot=spot, nav=nav, per_trade_pct=per_trade_pct,
+    )
+    if unit_count <= 0:
+        return ValidationResult(
+            ok=False,
+            reason="per-trade max-loss cap exceeded (qty rounds to 0)",
+        )
+    sized_legs = [
+        _spec_to_leg(spec, qty=spec.qty_ratio * unit_count, entry_price=entry_prices.get(idx, 0.0))
+        for idx, spec in enumerate(decision.legs)
+    ]
+
+    # 5. ticker concentration cap
+    proposed_loss = risk.compute_max_loss(sized_legs, spot=spot)
+    new_concentration = current_ticker_concentration_dollars + proposed_loss
+    if new_concentration > nav * per_ticker_pct:
+        return ValidationResult(
+            ok=False,
+            reason=f"ticker concentration ${new_concentration:.0f} > cap ${nav * per_ticker_pct:.0f}",
+        )
+
+    # 6. max open positions cap
+    if current_open_positions + 1 > max_open_positions:
+        return ValidationResult(
+            ok=False,
+            reason=f"max open positions {max_open_positions} reached",
+        )
+
+    return ValidationResult(ok=True, reason=None, sized_legs=sized_legs)
+
+
 def build_llm_context(
     conn: sqlite3.Connection,
     *,

@@ -767,3 +767,119 @@ def test_sanity_covered_call_rejects_wrong_share_qty_ratio():
         today=date(2026, 5, 17),
     )
     assert result.ok is False
+
+
+# ---------------------------------------------------------------------------
+# Task 10 — validate() full pipeline + _compute_qty_from_ratios
+# ---------------------------------------------------------------------------
+
+def test_validate_full_pipeline_happy_path(conn):
+    decision = vehicle.VehicleDecision(
+        decision="open", intent="trade", structure="long_call",
+        legs=[vehicle.LegSpec(
+            action="buy", kind="call", strike=100.0, expiry="2026-06-19",
+            qty_ratio=1,
+        )],
+        exit_plan={"profit_target_price": 110.0, "stop_price": 95.0,
+                   "time_stop_dte": 21, "assignment_acceptable": False},
+        rationale="bullish breakout",
+    )
+    result = vehicle.validate(
+        decision=decision,
+        spot=100.0, today=date(2026, 5, 17),
+        nav=50_000.0, per_trade_pct=0.02, per_ticker_pct=0.15,
+        max_open_positions=12, current_ticker_concentration_dollars=0.0,
+        current_open_positions=5, earnings_window_active=False,
+        entry_prices={0: 2.50},  # 1 contract × $2.50 = $250 risk, under $1000 cap
+    )
+    assert result.ok is True
+    assert len(result.sized_legs) == 1
+    # qty: cap=$1000 / per-contract risk $250 = 4 contracts
+    assert result.sized_legs[0].qty == 4
+
+
+def test_validate_rejects_invalid_structure_sanity(conn):
+    decision = vehicle.VehicleDecision(
+        decision="open", intent="trade", structure="bull_call_spread",
+        legs=[
+            vehicle.LegSpec(action="buy", kind="call", strike=105.0,
+                            expiry="2026-06-19", qty_ratio=1),
+            vehicle.LegSpec(action="sell", kind="call", strike=100.0,
+                            expiry="2026-06-19", qty_ratio=1),
+        ],  # inverted strikes
+        exit_plan={}, rationale="",
+    )
+    result = vehicle.validate(
+        decision=decision,
+        spot=100.0, today=date(2026, 5, 17),
+        nav=50_000.0, per_trade_pct=0.02, per_ticker_pct=0.15,
+        max_open_positions=12, current_ticker_concentration_dollars=0.0,
+        current_open_positions=5, earnings_window_active=False,
+        entry_prices={0: 4.0, 1: 1.5},
+    )
+    assert result.ok is False
+    assert "strike" in result.reason.lower()
+
+
+def test_validate_rejects_when_earnings_window_blocks_long_premium(conn):
+    decision = vehicle.VehicleDecision(
+        decision="open", intent="trade", structure="long_call",
+        legs=[vehicle.LegSpec(
+            action="buy", kind="call", strike=100.0, expiry="2026-06-19",
+            qty_ratio=1,
+        )],
+        exit_plan={}, rationale="",
+    )
+    result = vehicle.validate(
+        decision=decision,
+        spot=100.0, today=date(2026, 5, 17),
+        nav=50_000.0, per_trade_pct=0.02, per_ticker_pct=0.15,
+        max_open_positions=12, current_ticker_concentration_dollars=0.0,
+        current_open_positions=5, earnings_window_active=True,
+        entry_prices={0: 2.50},
+    )
+    assert result.ok is False
+    assert "earnings" in result.reason.lower() or "iv" in result.reason.lower()
+
+
+def test_validate_rejects_when_intent_accumulate_structure_mismatch(conn):
+    """intent='accumulate' on a long_call should be rejected by whitelist."""
+    decision = vehicle.VehicleDecision(
+        decision="open", intent="accumulate", structure="long_call",
+        legs=[vehicle.LegSpec(
+            action="buy", kind="call", strike=100.0, expiry="2026-06-19",
+            qty_ratio=1,
+        )],
+        exit_plan={}, rationale="",
+    )
+    result = vehicle.validate(
+        decision=decision,
+        spot=100.0, today=date(2026, 5, 17),
+        nav=50_000.0, per_trade_pct=0.02, per_ticker_pct=0.15,
+        max_open_positions=12, current_ticker_concentration_dollars=0.0,
+        current_open_positions=5, earnings_window_active=False,
+        entry_prices={0: 2.50},
+    )
+    assert result.ok is False
+    assert "intent" in result.reason.lower() or "accumulate" in result.reason.lower()
+
+
+def test_validate_rejects_when_per_trade_cap_exceeded(conn):
+    decision = vehicle.VehicleDecision(
+        decision="open", intent="trade", structure="long_call",
+        legs=[vehicle.LegSpec(
+            action="buy", kind="call", strike=100.0, expiry="2026-06-19",
+            qty_ratio=1,
+        )],
+        exit_plan={}, rationale="",
+    )
+    result = vehicle.validate(
+        decision=decision,
+        spot=100.0, today=date(2026, 5, 17),
+        nav=50_000.0, per_trade_pct=0.02, per_ticker_pct=0.15,
+        max_open_positions=12, current_ticker_concentration_dollars=0.0,
+        current_open_positions=5, earnings_window_active=False,
+        entry_prices={0: 15.0},  # $1500 per contract > $1000 cap, qty=0 -> reject
+    )
+    assert result.ok is False
+    assert "loss" in result.reason.lower() or "cap" in result.reason.lower()
