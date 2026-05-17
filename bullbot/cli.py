@@ -109,8 +109,10 @@ def cmd_run_daily(args):
 
 
 def cmd_run_v2_daily(args):
-    """v2 daily entry point — emit DirectionalSignal per UNIVERSE ticker."""
-    from bullbot.v2 import runner
+    """v2 daily entry point — emit DirectionalSignal per UNIVERSE ticker
+    (Phase A), then dispatch the Phase C agent loop (vehicle pick → validate
+    → open → MtM)."""
+    from bullbot.v2 import runner, runner_c
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     log = logging.getLogger("bullbot.cli.run_v2_daily")
@@ -119,6 +121,13 @@ def cmd_run_v2_daily(args):
     n = runner.run_once(conn)
     log.info("run-v2-daily: wrote %d signals", n)
     conn.commit()
+
+    try:
+        counts = runner_c.run_once_phase_c(conn=conn, asof_ts=int(time.time()))
+        log.info("run-v2-daily: phase C counts %s", counts)
+    except Exception:
+        log.exception("run-v2-daily: phase C dispatcher failed (Phase A already persisted)")
+
     return 0
 
 
