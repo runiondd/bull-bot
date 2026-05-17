@@ -366,3 +366,139 @@ def compute_post_assignment_exit_plan(
         intent="accumulate", profit_target_price=None, stop_price=stop,
         time_stop_dte=None, nearest_leg_expiry_dte=None,
     )
+
+
+def _check_accumulate_at_expiry(
+    conn: sqlite3.Connection, *, position: Position, signal: DirectionalSignal,
+    spot: float, atr_14: float, today: _date, now_ts: int,
+) -> ExitAction:
+    """Route accumulate-intent positions at the nearest leg's expiry.
+
+    Caller (evaluate) is responsible for confirming nearest_leg_expiry == today.
+    Returns one of: assigned_to_shares, called_away, exercised_to_shares,
+    expired_worthless. Always advances state — either via positions.assign_csp_to_shares,
+    record_event + close_position, or close_position alone.
+    """
+    # CSP ITM at expiry -> assignment
+    short_puts = [
+        leg for leg in position.legs
+        if leg.kind == "put" and leg.action == "sell"
+        and _date.fromisoformat(leg.expiry) == today
+        and spot < leg.strike
+    ]
+    if short_puts:
+        csp_leg = short_puts[0]
+        original_credit = csp_leg.entry_price * 100.0  # per-contract dollars
+        net_basis = csp_leg.strike - (original_credit / 100.0)
+        plan = compute_post_assignment_exit_plan(
+            signal=signal, net_basis=net_basis, atr_14=atr_14,
+        )
+        shares_pos = positions.assign_csp_to_shares(
+            conn,
+            csp_position=position,
+            csp_leg_id=csp_leg.id,
+            original_credit_per_contract=original_credit,
+            occurred_ts=now_ts,
+            intent=plan.intent,
+            profit_target_price=plan.profit_target_price,
+            stop_price=plan.stop_price,
+            time_stop_dte=plan.time_stop_dte,
+            nearest_leg_expiry_dte=plan.nearest_leg_expiry_dte,
+            rationale=f"post-assignment, signal={signal.direction} confidence={signal.confidence:.2f}",
+        )
+        return ExitAction(
+            kind="assigned_to_shares",
+            reason=f"CSP @ {csp_leg.strike} assigned, net_basis ${net_basis:.2f}",
+            linked_position_id=shares_pos.id,
+        )
+
+    # Short call ITM (covered call called away)
+    short_calls = [
+        leg for leg in position.legs
+        if leg.kind == "call" and leg.action == "sell"
+        and _date.fromisoformat(leg.expiry) == today
+        and spot > leg.strike
+    ]
+    if short_calls:
+        cc_leg = short_calls[0]
+        positions.record_event(
+            conn,
+            position_id=position.id,
+            event_kind="called_away",
+            occurred_ts=now_ts,
+            source_leg_id=cc_leg.id,
+            linked_position_id=None,
+            original_credit_per_contract=None,
+            notes=f"spot {spot} > strike {cc_leg.strike}",
+        )
+        positions.close_position(
+            conn,
+            position_id=position.id,
+            closed_ts=now_ts,
+            close_reason="called_away",
+            leg_exit_prices={
+                cc_leg.id: 0.0,
+                **{leg.id: cc_leg.strike for leg in position.legs if leg.kind == "share"},
+            },
+        )
+        return ExitAction(
+            kind="called_away",
+            reason=f"CC @ {cc_leg.strike} assigned, shares sold at strike",
+        )
+
+    # Long call ITM (accumulate intent — exercise into shares)
+    long_calls_itm = [
+        leg for leg in position.legs
+        if leg.kind == "call" and leg.action == "buy"
+        and _date.fromisoformat(leg.expiry) == today
+        and spot > leg.strike
+    ]
+    if long_calls_itm:
+        call_leg = long_calls_itm[0]
+        share_qty = call_leg.qty * 100
+        net_basis = call_leg.strike + call_leg.entry_price  # paid premium per share
+        share_leg = positions.OptionLeg(
+            action="buy", kind="share", strike=None, expiry=None,
+            qty=share_qty, entry_price=call_leg.strike, net_basis=net_basis,
+        )
+        linked = positions.open_position(
+            conn,
+            ticker=position.ticker, intent="accumulate", structure_kind="long_shares",
+            legs=[share_leg], opened_ts=now_ts,
+            profit_target_price=None, stop_price=None, time_stop_dte=None,
+            assignment_acceptable=False, nearest_leg_expiry_dte=None,
+            rationale=f"exercised from long_call @ {call_leg.strike}",
+            linked_position_id=position.id,
+        )
+        positions.record_event(
+            conn,
+            position_id=position.id,
+            event_kind="exercised",
+            occurred_ts=now_ts,
+            source_leg_id=call_leg.id,
+            linked_position_id=linked.id,
+            original_credit_per_contract=None,
+            notes=f"exercised at strike {call_leg.strike}",
+        )
+        positions.close_position(
+            conn,
+            position_id=position.id,
+            closed_ts=now_ts,
+            close_reason="exercised",
+            leg_exit_prices={call_leg.id: 0.0},
+        )
+        return ExitAction(
+            kind="exercised_to_shares",
+            reason=f"long call @ {call_leg.strike} exercised, net_basis ${net_basis:.2f}",
+            linked_position_id=linked.id,
+        )
+
+    # Anything else expiring today (OTM, etc.) -> worthless
+    positions.close_position(
+        conn,
+        position_id=position.id,
+        closed_ts=now_ts,
+        close_reason="expired_worthless",
+        leg_exit_prices={leg.id: 0.0 for leg in position.legs},
+    )
+    return ExitAction(kind="expired_worthless", reason="OTM at expiry")

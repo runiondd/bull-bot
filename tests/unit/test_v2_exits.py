@@ -631,3 +631,124 @@ def test_post_assignment_plan_low_confidence_bullish_treated_as_chop():
     )
     assert plan.intent == "accumulate"
     assert plan.stop_price == pytest.approx(98.0 - 2 * 3.0)
+
+
+def test_accumulate_at_expiry_csp_itm_assigns_to_shares(conn):
+    csp_leg = positions.OptionLeg(
+        action="sell", kind="put", strike=100.0, expiry="2026-05-17",
+        qty=1, entry_price=2.00,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="accumulate", structure_kind="csp",
+        legs=[csp_leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, assignment_acceptable=True,
+        nearest_leg_expiry_dte=0, rationale="",
+    )
+    signal = _signal("bullish", confidence=0.7)
+    action = exits._check_accumulate_at_expiry(
+        conn, position=pos, signal=signal, spot=96.0, atr_14=3.0,
+        today=date(2026, 5, 17), now_ts=1_700_500_000,
+    )
+    assert action.kind == "assigned_to_shares"
+    assert action.linked_position_id is not None
+    linked = positions.load_position(conn, action.linked_position_id)
+    assert linked.structure_kind == "long_shares"
+    assert linked.legs[0].net_basis == pytest.approx(98.0)
+
+
+def test_accumulate_at_expiry_csp_otm_expires_worthless(conn):
+    csp_leg = positions.OptionLeg(
+        action="sell", kind="put", strike=100.0, expiry="2026-05-17",
+        qty=1, entry_price=2.00,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="accumulate", structure_kind="csp",
+        legs=[csp_leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, assignment_acceptable=True,
+        nearest_leg_expiry_dte=0, rationale="",
+    )
+    signal = _signal("bullish", confidence=0.7)
+    action = exits._check_accumulate_at_expiry(
+        conn, position=pos, signal=signal, spot=105.0, atr_14=3.0,
+        today=date(2026, 5, 17), now_ts=1_700_500_000,
+    )
+    assert action.kind == "expired_worthless"
+    reloaded = positions.load_position(conn, pos.id)
+    assert reloaded.close_reason == "expired_worthless"
+
+
+def test_accumulate_at_expiry_covered_call_itm_called_away(conn):
+    share_leg = positions.OptionLeg(
+        action="buy", kind="share", strike=None, expiry=None,
+        qty=100, entry_price=100.0, net_basis=98.0,
+    )
+    call_leg = positions.OptionLeg(
+        action="sell", kind="call", strike=105.0, expiry="2026-05-17",
+        qty=1, entry_price=1.50,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="accumulate", structure_kind="covered_call",
+        legs=[share_leg, call_leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, assignment_acceptable=True,
+        nearest_leg_expiry_dte=0, rationale="",
+    )
+    signal = _signal("bullish", confidence=0.7)
+    action = exits._check_accumulate_at_expiry(
+        conn, position=pos, signal=signal, spot=108.0, atr_14=3.0,
+        today=date(2026, 5, 17), now_ts=1_700_500_000,
+    )
+    assert action.kind == "called_away"
+    reloaded = positions.load_position(conn, pos.id)
+    assert reloaded.close_reason == "called_away"
+
+
+def test_accumulate_at_expiry_long_call_itm_exercises(conn):
+    call_leg = positions.OptionLeg(
+        action="buy", kind="call", strike=100.0, expiry="2026-05-17",
+        qty=1, entry_price=5.00,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="accumulate", structure_kind="long_call",
+        legs=[call_leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, assignment_acceptable=True,
+        nearest_leg_expiry_dte=0, rationale="",
+    )
+    signal = _signal("bullish", confidence=0.7)
+    action = exits._check_accumulate_at_expiry(
+        conn, position=pos, signal=signal, spot=115.0, atr_14=3.0,
+        today=date(2026, 5, 17), now_ts=1_700_500_000,
+    )
+    assert action.kind == "exercised_to_shares"
+    linked = positions.load_position(conn, action.linked_position_id)
+    assert linked.structure_kind == "long_shares"
+    assert linked.legs[0].entry_price == 100.0
+    assert linked.legs[0].net_basis == pytest.approx(105.0)
+
+
+def test_accumulate_at_expiry_long_call_otm_expires_worthless(conn):
+    call_leg = positions.OptionLeg(
+        action="buy", kind="call", strike=100.0, expiry="2026-05-17",
+        qty=1, entry_price=5.00,
+    )
+    pos = positions.open_position(
+        conn,
+        ticker="AAPL", intent="accumulate", structure_kind="long_call",
+        legs=[call_leg], opened_ts=1_700_000_000,
+        profit_target_price=None, stop_price=None,
+        time_stop_dte=None, assignment_acceptable=True,
+        nearest_leg_expiry_dte=0, rationale="",
+    )
+    signal = _signal("bullish", confidence=0.7)
+    action = exits._check_accumulate_at_expiry(
+        conn, position=pos, signal=signal, spot=95.0, atr_14=3.0,
+        today=date(2026, 5, 17), now_ts=1_700_500_000,
+    )
+    assert action.kind == "expired_worthless"
