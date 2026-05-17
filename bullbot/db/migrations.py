@@ -195,6 +195,15 @@ def _apply_column_migrations(conn: sqlite3.Connection) -> None:
         );
     """)
 
+    # Phase C.4b — Backtest LLM response cache. Keys on sha256 of the
+    # prompt; reruns hit the cache and pay zero Anthropic cost.
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS backtest_llm_cache (
+            prompt_sha TEXT PRIMARY KEY,
+            response_text TEXT NOT NULL
+        );
+    """)
+
     # leaderboard view — added 2026-05-14 for strategy-search-engine
     # Phase C. Ranks proposals by score_a (annualized return on BP held),
     # gated by passed_gate=1 and trade_count >= 5 (statistical noise floor).
