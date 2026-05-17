@@ -109,3 +109,39 @@ def _sma_levels(bars: list) -> list[Level]:
         strength = min(1.0, w / 200.0)
         out.append(Level(price=sma_value, kind=f"sma_{w}", strength=strength))
     return out
+
+
+ROUND_NUMBER_BAND_PCT = 0.02
+ROUND_NUMBER_STRENGTH = 0.3
+
+
+def _round_step(spot: float) -> float:
+    """Step size for round-number candidates, scaled by spot magnitude."""
+    if spot < 50.0:
+        return 1.0
+    if spot < 200.0:
+        return 5.0
+    if spot < 1000.0:
+        return 10.0
+    return 50.0
+
+
+def _round_number_levels(*, spot: float) -> list[Level]:
+    """Emit Levels at round-number prices within ROUND_NUMBER_BAND_PCT (2%) of spot.
+    Step size scales with spot magnitude (see _round_step)."""
+    if spot <= 0:
+        return []
+    step = _round_step(spot)
+    band = spot * ROUND_NUMBER_BAND_PCT
+    # Find the nearest multiple of `step` at or below spot
+    floor_mult = (spot // step) * step
+    out: list[Level] = []
+    # Walk ±2 steps and keep anything inside the band
+    for k in (-2, -1, 0, 1, 2):
+        candidate = floor_mult + k * step
+        if candidate <= 0:
+            continue
+        if abs(candidate - spot) <= band:
+            out.append(Level(price=candidate, kind="round_number",
+                             strength=ROUND_NUMBER_STRENGTH))
+    return out

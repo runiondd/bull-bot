@@ -137,3 +137,52 @@ def test_sma_levels_window_200_has_higher_strength_than_window_20():
 
 def test_sma_levels_returns_empty_for_no_bars():
     assert levels._sma_levels([]) == []
+
+
+def test_round_number_levels_for_spot_under_50_uses_dollar_step():
+    """spot=23, 2% band = ±$0.46 -> only $23 is within 2%."""
+    rn = levels._round_number_levels(spot=23.0)
+    prices = sorted(lvl.price for lvl in rn)
+    assert prices == [23.0]
+
+
+def test_round_number_levels_for_mid_priced_stock_uses_five_dollar_step():
+    """spot=103, step=$5, 2% band = ±$2.06 -> only $105 is within 2% (above)
+    and $100 is just outside ($3 away, > 2%)."""
+    rn = levels._round_number_levels(spot=103.0)
+    prices = sorted(lvl.price for lvl in rn)
+    assert prices == [105.0]
+
+
+def test_round_number_levels_for_mid_priced_stock_captures_both_sides_when_close():
+    """spot=101.0 -> $100 ($1 away, in)."""
+    rn = levels._round_number_levels(spot=101.0)
+    prices = sorted(lvl.price for lvl in rn)
+    assert prices == [100.0]
+
+
+def test_round_number_levels_for_expensive_stock_uses_ten_dollar_step():
+    """spot=237.50, step=$10, 2% band = ±$4.75 -> $240 is $2.50 away (in),
+    $230 is $7.50 away (out)."""
+    rn = levels._round_number_levels(spot=237.50)
+    prices = sorted(lvl.price for lvl in rn)
+    assert prices == [240.0]
+
+
+def test_round_number_levels_for_high_priced_stock_uses_fifty_dollar_step():
+    """spot=1010, step=$50, 2% band = ±$20.20 -> $1000 ($10 away, in),
+    $1050 ($40 away, out)."""
+    rn = levels._round_number_levels(spot=1010.0)
+    prices = sorted(lvl.price for lvl in rn)
+    assert prices == [1000.0]
+
+
+def test_round_number_levels_all_have_kind_round_number_and_fixed_strength():
+    rn = levels._round_number_levels(spot=100.5)
+    assert all(lvl.kind == "round_number" for lvl in rn)
+    assert all(lvl.strength == 0.3 for lvl in rn)
+
+
+def test_round_number_levels_for_zero_or_negative_spot_returns_empty():
+    assert levels._round_number_levels(spot=0.0) == []
+    assert levels._round_number_levels(spot=-5.0) == []
