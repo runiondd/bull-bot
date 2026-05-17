@@ -851,3 +851,76 @@ def inventory_tab(data: dict) -> str:
     </tbody>
   </table>
 </div>"""
+
+
+# ---- v2 Positions tab -------------------------------------------------------
+
+def v2_positions_tab(data: dict) -> str:
+    """V2 Positions tab: currently-open Phase C positions with MtM + exit plan.
+
+    Reads ``data['v2_positions']`` from queries.v2_positions. Renders an
+    empty-state card when no positions are open."""
+    entries = data.get("v2_positions", [])
+    if not entries:
+        return ('<div class="card"><div class="card-body" '
+                'style="color: var(--fg-2); font-size: 12px; padding: 14px">'
+                'No open positions (v2).'
+                '</div></div>')
+
+    def _row(p: dict) -> str:
+        ticker = html.escape(str(p.get("ticker", "")))
+        intent = html.escape(str(p.get("intent", "")))
+        structure = html.escape(str(p.get("structure_kind", "")))
+        legs = html.escape(str(p.get("legs_summary", "")))
+        opened = html.escape(str(p.get("opened_date", "")))
+        days = p.get("days_held", 0)
+        target = p.get("profit_target_price")
+        stop = p.get("stop_price")
+        tsd = p.get("time_stop_dte")
+        mtm = p.get("latest_mtm_value")
+        mtm_src = p.get("latest_mtm_source")
+        mtm_asof = p.get("latest_mtm_asof_date")
+        rationale = html.escape(str(p.get("rationale", "")))
+
+        target_cell = f"${target:.2f}" if target is not None else "—"
+        stop_cell = f"${stop:.2f}" if stop is not None else "—"
+        tsd_cell = f"{tsd}d" if tsd is not None else "—"
+        if mtm is not None:
+            mtm_cls = "pos" if mtm > 0 else ("neg" if mtm < 0 else "muted")
+            mtm_cell = (f'<span class="{mtm_cls}">${mtm:+,.2f}</span>'
+                        f' <span class="muted" style="font-size:10.5px">'
+                        f'({html.escape(str(mtm_src))} @ {html.escape(str(mtm_asof))})</span>')
+        else:
+            mtm_cell = '<span class="muted">—</span>'
+
+        return f"""<tr>
+  <td><strong>{ticker}</strong></td>
+  <td>{intent}</td>
+  <td>{structure}</td>
+  <td style="font-size:11.5px">{legs}</td>
+  <td>{opened}</td>
+  <td class="num t-right">{days}d</td>
+  <td class="num t-right">{target_cell}</td>
+  <td class="num t-right">{stop_cell}</td>
+  <td class="num t-right">{tsd_cell}</td>
+  <td class="num t-right">{mtm_cell}</td>
+  <td style="font-size:11.5px">{rationale}</td>
+</tr>"""
+
+    rows = "".join(_row(p) for p in entries)
+    return f"""<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Ticker</th><th>Intent</th><th>Structure</th><th>Legs</th>
+        <th>Opened</th><th class="t-right">Days</th>
+        <th class="t-right">Target</th><th class="t-right">Stop</th>
+        <th class="t-right">Time Stop</th><th class="t-right">MtM</th>
+        <th>Rationale</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows}
+    </tbody>
+  </table>
+</div>"""

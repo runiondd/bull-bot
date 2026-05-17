@@ -132,3 +132,42 @@ def test_v2_backtest_latest_handles_missing_csv_files(tmp_path):
     assert result is not None
     assert result["equity_curve"] == []
     assert result["attribution"] == []
+
+
+def test_v2_positions_tab_renders_empty_state_for_no_positions():
+    html = tabs.v2_positions_tab({"v2_positions": []})
+    assert "no open positions" in html.lower() or "no v2 positions" in html.lower()
+
+
+def test_v2_positions_tab_renders_ticker_and_structure():
+    data = {"v2_positions": [{
+        "ticker": "AAPL", "intent": "trade", "structure_kind": "long_call",
+        "opened_date": "2026-05-10", "days_held": 5,
+        "legs_summary": "buy call 100 2026-06-15 x1",
+        "profit_target_price": 110.0, "stop_price": 95.0, "time_stop_dte": 21,
+        "rationale": "bullish",
+        "latest_mtm_value": 425.50, "latest_mtm_source": "bs",
+        "latest_mtm_asof_date": "2026-05-14",
+    }]}
+    html = tabs.v2_positions_tab(data)
+    assert "AAPL" in html
+    assert "long_call" in html
+    assert "buy call 100" in html
+    assert "425" in html
+    assert "bullish" in html
+
+
+def test_v2_positions_tab_handles_missing_mtm():
+    data = {"v2_positions": [{
+        "ticker": "MSFT", "intent": "accumulate", "structure_kind": "csp",
+        "opened_date": "2026-05-12", "days_held": 3,
+        "legs_summary": "sell put 400 2026-06-15 x1",
+        "profit_target_price": None, "stop_price": None, "time_stop_dte": None,
+        "rationale": "willing to own at 400",
+        "latest_mtm_value": None, "latest_mtm_source": None,
+        "latest_mtm_asof_date": None,
+    }]}
+    html = tabs.v2_positions_tab(data)
+    assert "MSFT" in html
+    assert "csp" in html
+    assert "—" in html  # em-dash for missing MtM
